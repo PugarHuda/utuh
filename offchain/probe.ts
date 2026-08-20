@@ -1,0 +1,104 @@
+import { Contract, JsonRpcProvider } from 'ethers';
+import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
+import blockProverAbi from '@gluwa/usc-sdk/dist/block-prover/block_prover.json';
+import 'dotenv/config';
+import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, PROVER_URL, USDC, TRANSFER_SIG, source } from './config';
+import { scopeFor, scanScope, Metric } from './lib/scope';
+import { Prover, planBatches } from './lib/proofs';
+
+const BLOCK_PROVER = '0x0000000000000000000000000000000000000FD2';
+const CHAIN_INFO = '0x0000000000000000000000000000000000000fD3';
+
+/// Both `verify` overloads take five arguments, so ethers cannot pick one by arity — the batch
+/// form has to be named by its full signature.
+const BATCH_VERIFY = 'verify(uint64,uint64[],bytes[],(bytes32,(bytes32,bool)[])[],(bytes32,bytes32[]))';
+
+/// Read-only validation of the proving path, before any CTC is spent.
+///
+/// The Block Prover exposes a `view` twin of `verifyAndEmit`, so the whole verification can be
+/// exercised through `eth_call` against the live testnet with no gas and no funded account.
+///
+/// What this settles, and no local test could: the batch entrypoint takes one continuity proof
+/// spanning a range of blocks and verifies every query against it. Handing that same shared proof
+/// to the single-query entrypoint fails with "Merkle root mismatch" for any query outside the
+/// first block — which is why UtuhRegistry.appendBatch calls the array form.
+async function main() {
+  const cc3 = new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
+  const ck = CHAIN_KEY.mainnet;
+
+  const chainInfo = new Contract(CHAIN_INFO, chainInfoAbi as any, cc3);
+  const frontier = Number((await chainInfo.get_latest_attestation_height_and_hash(ck))[0]);
+
+  const toBlock = frontier - 30;
+  const fromBlock = toBlock - 60;
+  const eth = source(ck);
+
+  const raw = await eth.getLogs({ address: USDC, topics: [TRANSFER_SIG], fromBlock, toBlock });
+  const bySender = new Map<string, number>();
+  for (const l of raw) {
+    const s = '0x' + l.topics[1].slice(26);
+    bySender.set(s, (bySender.get(s) ?? 0) + 1);
+  }
+  const [subject] = [...bySender.entries()].sort((a, b) => b[1] - a[1])[0];
+
+  console.log(`Ethereum mainnet attested on Creditcoin to block ${frontier}`);
+  console.log(`sweeping ${fromBlock}..${toBlock}`);
+  console.log(`busiest USDC sender in range: ${subject} (${bySender.get(subject)} transfers)`);
+
+  const scope = scopeFor({
+    chainKey: ck,
+    emitter: USDC,
+    eventSig: TRANSFER_SIG,
+    subject,
+    subjectTopic: 1,
+    metric: Metric.DATA_WORD,
+    metricArg: 0,
+  });
+
+  const events = (await scanScope(eth, scope, fromBlock, toBlock)).slice(0, 24);
+  const batches = planBatches(events);
+  console.log(`${events.length} events -> ${batches.length} batches of ${batches.map((b) => b.length).join(', ')}`);
+
+  const prover = new Prover(ck, PROVER_URL, 60000);
+  await prover.waitAttested(toBlock);
+
+  const bp = new Contract(BLOCK_PROVER, blockProverAbi as any, cc3);
+  const batchVerify = bp.getFunction(BATCH_VERIFY);
+
+  let checked = 0;
+  for (const [i, batch] of batches.entries()) {
+    const { proofs, continuity } = await prover.proveBatch(batch);
+    const heights = proofs.map((p) => p.blockHeight);
+    const merkleProofs = proofs.map((p) => ({ root: p.merkleRoot, siblings: p.siblings }));
+    const blocks = new Set(heights).size;
+    const txCount = new Set(batch.map((e) => e.txHash)).size;
+
+    const ok = await batchVerify.staticCall(
+      ck,
+      heights,
+      proofs.map((p) => p.encodedTransaction),
+      merkleProofs,
+      continuity,
+    );
+    console.log(
+      `\nbatch ${i + 1}: ${proofs.length} queries across ${txCount} tx and ${blocks} block(s), ` +
+        `${continuity.roots.length} shared continuity roots -> verify=${ok}`,
+    );
+    if (!ok) throw new Error('batch verification returned false');
+
+    for (let j = 0; j < proofs.length; j++) {
+      const txIndex = await bp.calculateTxIndex(merkleProofs[j]);
+      const key = (BigInt(heights[j]) << 96n) | (BigInt(txIndex) << 32n) | BigInt(proofs[j].logIndex);
+      console.log(`  block ${heights[j]} tx#${txIndex} log#${proofs[j].logIndex}  key=${key}`);
+      checked++;
+    }
+  }
+
+  console.log(`\n${checked} Ethereum mainnet events verified by the precompile at ${BLOCK_PROVER}.`);
+  console.log('No CTC spent — every call above was an eth_call against the live CC3 testnet.');
+}
+
+main().catch((e) => {
+  console.error('ERR', e.shortMessage ?? e.message);
+  process.exit(1);
+});

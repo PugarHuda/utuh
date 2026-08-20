@@ -1,0 +1,82 @@
+import { readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { Contract, ContractFactory, Wallet, JsonRpcProvider } from 'ethers';
+
+const ROOT = join(__dirname, '..', '..');
+const OUT = join(ROOT, 'out');
+const DEPLOYMENTS = join(ROOT, 'deployments.json');
+
+export interface Artifact {
+  abi: any[];
+  bytecode: { object: string; linkReferences?: Record<string, Record<string, { start: number; length: number }[]>> };
+}
+
+export function artifact(file: string, name: string): Artifact {
+  const path = join(OUT, file, `${name}.json`);
+  if (!existsSync(path)) throw new Error(`missing artifact ${path} — run: forge build`);
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+/// EvmV1Decoder exposes `public` library functions, so it is a deployed library reached by
+/// delegatecall rather than inlined code. Its address has to be patched into the consumer's
+/// bytecode at the offsets the compiler recorded.
+export function link(art: Artifact, libraries: Record<string, string>): string {
+  let hex = art.bytecode.object;
+  const refs = art.bytecode.linkReferences ?? {};
+  for (const [, byName] of Object.entries(refs)) {
+    for (const [libName, spots] of Object.entries(byName)) {
+      const addr = libraries[libName];
+      if (!addr) throw new Error(`no address supplied for library ${libName}`);
+      const clean = addr.toLowerCase().replace(/^0x/, '');
+      for (const spot of spots) {
+        const start = 2 + spot.start * 2;
+        hex = hex.slice(0, start) + clean + hex.slice(start + spot.length * 2);
+      }
+    }
+  }
+  if (hex.includes('__$')) throw new Error('bytecode still has unresolved library placeholders');
+  return hex;
+}
+
+export async function deploy(
+  wallet: Wallet,
+  art: Artifact,
+  args: any[] = [],
+  libraries: Record<string, string> = {},
+): Promise<Contract> {
+  const bytecode = link(art, libraries);
+  const factory = new ContractFactory(art.abi, bytecode, wallet);
+  const contract = await factory.deploy(...args);
+  await contract.waitForDeployment();
+  return contract as unknown as Contract;
+}
+
+export function signer(rpc: string, chainId: number, privateKey: string): Wallet {
+  const provider = new JsonRpcProvider(rpc, chainId, { staticNetwork: true });
+  return new Wallet(privateKey, provider);
+}
+
+export interface Deployments {
+  decoder?: string;
+  registry?: string;
+  credit?: string;
+  chainId?: number;
+  deployer?: string;
+}
+
+export function readDeployments(): Deployments {
+  if (!existsSync(DEPLOYMENTS)) return {};
+  return JSON.parse(readFileSync(DEPLOYMENTS, 'utf8'));
+}
+
+export function writeDeployments(d: Deployments): void {
+  writeFileSync(DEPLOYMENTS, JSON.stringify(d, null, 2) + '\n');
+}
+
+export function registryAt(address: string, wallet: Wallet): Contract {
+  return new Contract(address, artifact('UtuhRegistry.sol', 'UtuhRegistry').abi, wallet);
+}
+
+export function creditAt(address: string, wallet: Wallet): Contract {
+  return new Contract(address, artifact('UtuhCredit.sol', 'UtuhCredit').abi, wallet);
+}
