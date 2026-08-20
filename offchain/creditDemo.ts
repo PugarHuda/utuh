@@ -1,4 +1,4 @@
-import { Contract, formatEther, formatUnits, parseEther, getAddress } from 'ethers';
+import { Contract, formatEther, formatUnits, parseEther, getAddress, zeroPadValue } from 'ethers';
 import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
 import 'dotenv/config';
 import {
@@ -7,6 +7,7 @@ import {
   CHAIN_KEY,
   PROVER_URL,
   AAVE_V3_POOL,
+  USDC,
   AAVE_REPAY_SIG,
   AAVE_LIQUIDATION_SIG,
   source,
@@ -49,9 +50,11 @@ async function main() {
   // watcher to check one.
   // ------------------------------------------------------------------
   console.log('sweeping Aave V3 Pool over the window...');
+  // Only the USDC reserve. Repay carries `amount` in the reserve asset's own decimals, so summing
+  // across reserves would add WETH's 18 decimals to USDC's 6 and call the result a credit history.
   const allRepays = await eth.getLogs({
     address: AAVE_V3_POOL,
-    topics: [AAVE_REPAY_SIG],
+    topics: [AAVE_REPAY_SIG, zeroPadValue(USDC, 32)],
     fromBlock,
     toBlock,
   });
@@ -61,7 +64,7 @@ async function main() {
     fromBlock,
     toBlock,
   });
-  console.log(`  ${allRepays.length} Repay events, ${allLiquidations.length} LiquidationCall events`);
+  console.log(`  ${allRepays.length} USDC Repay events, ${allLiquidations.length} LiquidationCall events`);
 
   const liquidatedUsers = new Set(allLiquidations.map((l) => getAddress('0x' + l.topics[3].slice(26))));
   const repayCount = new Map<string, number>();
@@ -87,6 +90,7 @@ async function main() {
       eventSig: AAVE_REPAY_SIG,
       subject,
       subjectTopic: 2,
+      pin: { topic: 1, value: USDC },
       metric: Metric.DATA_WORD,
       metricArg: 0,
     });
@@ -104,9 +108,9 @@ async function main() {
   console.log('\n=== 1. underwriting a real borrower ===');
   const volumeEvents = await scanScope(eth, volumeScope(goodBorrower), fromBlock, toBlock, HISTORY_BLOCKS);
   const cleanEvents = await scanScope(eth, cleanScope(goodBorrower), fromBlock, toBlock, HISTORY_BLOCKS);
-  console.log(`  volume: ${volumeEvents.length} proven Aave repayments`);
+  console.log(`  volume: ${volumeEvents.length} proven Aave USDC repayments`);
   for (const e of volumeEvents) {
-    console.log(`    block ${e.blockNumber}  ${formatUnits(e.value, 6)} (asset units, 6dp assumed)`);
+    console.log(`    block ${e.blockNumber}  ${formatUnits(e.value, 6)} USDC`);
   }
   console.log(`  clean:  ${cleanEvents.length} liquidations — the claim asserts this set is empty`);
 
@@ -167,17 +171,25 @@ async function main() {
     const tx = await registry.finalize(id);
     await tx.wait();
     const c = await registry.claim(id);
-    console.log(`  ${name} claim ${id}: ${statusName(c.status)}  aggregate ${c.aggregate}`);
+    const shown = name === 'volume' ? `${formatUnits(c.aggregate, 6)} USDC` : `${c.aggregate}`;
+    console.log(`  ${name} claim ${id}: ${statusName(c.status)}  aggregate ${shown}`);
   }
 
   // ------------------------------------------------------------------
   console.log('\n=== 4. opening the credit line ===');
+  const volumeAggregate: bigint = (await registry.claim(volumeClaim.claimId)).aggregate;
+  const cleanBond: bigint = (await registry.claim(cleanClaim.claimId)).bondPosted;
   const openTx = await credit.openLine(goodBorrower, volumeClaim.claimId, cleanClaim.claimId);
   const openReceipt = await openTx.wait();
   const lineId = readLineId(credit, openReceipt);
   const line = await credit.line(lineId);
   console.log(`  line ${lineId} for ${goodBorrower}`);
-  console.log(`  limit ${formatEther(line.limit)} CTC, from 20% of proven repayment volume, capped at 10x the clean bond`);
+  const rate = await credit.VOLUME_UNIT_IN_CTC();
+  const uncapped = (volumeAggregate * BigInt(rate) * 2000n) / 10_000n;
+  console.log(`  proven volume ${formatUnits(volumeAggregate, 6)} USDC at ${rate} wei/unit`);
+  console.log(`  20% of that = ${formatEther(uncapped)} CTC`);
+  console.log(`  bond cap    = ${formatEther(cleanBond * 10n)} CTC  (10x the clean claim's bond)`);
+  console.log(`  limit ${formatEther(line.limit)} CTC`);
 
   const fundAmount = line.limit;
   const bal = await wallet.provider!.getBalance(wallet.address);

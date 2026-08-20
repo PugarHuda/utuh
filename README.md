@@ -101,16 +101,28 @@ makes the pair sound:
 
 | Claim | Assertion | Who benefits from a lie | Defence |
 |---|---|---|---|
-| **Volume** | proven Aave repayments | inflating it | every member verified by `0x0FD2` on append |
+| **Volume** | proven Aave USDC repayments | inflating it | every member verified by `0x0FD2` on append |
 | **Clean** | complete set of liquidations, normally empty | omitting one | bond, refutable by one liquidation proof |
 
 ```
-limit = min( 20% of proven repayment volume , 10 × the bond behind the clean claim )
+limit = min( 20% of proven volume × the lender's rate , 10 × the bond behind the clean claim )
 ```
 
 The second term is the consumer half of the mechanism. The registry cannot size a bond, because it
 does not know what the claim will be used for — only the party about to lend knows its own
 exposure. A line never risks more than a liar stood to lose.
+
+### Two places where units have to be taken seriously
+
+Aave's `Repay` carries `amount` in the reserve asset's own decimals. Scoping a volume claim to the
+event alone would sum WETH's 18 decimals into USDC's 6 and call the total a credit history. So the
+volume scope **pins the reserve** — `Repay` puts it in topic 1 — and a claim is denominated in
+exactly one asset.
+
+That leaves a second gap: the claim aggregates USDC at 1e6, a line is CTC at 1e18, and crossing
+between them is a price. This contract has no oracle and does not pretend to: the lender fixes
+`VOLUME_UNIT_IN_CTC` at deployment, in the open, where anyone can judge it. A lender wanting a live
+price puts a feed in front of this contract rather than having the protocol invent one.
 
 ### Default without proving a negative
 
@@ -118,6 +130,16 @@ A drawn line is settled by the borrower proving repayment landed at the lender's
 If no finalized claim arrives before the deadline, the line defaults. The contract never
 establishes that a payment was missed — the burden sits with the only party who could discharge
 it. Silence is the default condition, not an inference.
+
+## Deployed on CC3 Testnet (chain id 102031)
+
+| Contract | Address |
+|---|---|
+| `UtuhRegistry` | `0x2dE6FD16009A101Fd1142f95F912583Fe3cf7cc1` |
+| `UtuhCredit` | `0x10cf64da2692fc2d691d7F3F1f8955b04Ec2373C` |
+| `EvmV1Decoder` | `0x8Ba1e39592d2fE9E33a9224aE66cb87C4521082C` |
+
+Both demos below were run against these, on Ethereum mainnet data.
 
 ## Layout
 
@@ -170,6 +192,8 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `PROVER_URL` | `https://prover.cc3-testnet.creditcoin.network` | hosted Proof Builder |
 | `MAINNET_RPC` | `https://gateway.tenderly.co/public/mainnet` | see below |
 | `MIN_CHALLENGE_WINDOW` | `25` | Creditcoin blocks, deploy-time floor |
+| `VOLUME_UNIT_IN_CTC` | `15000000000000` | CTC wei per USDC unit; the lender's stated rate |
+| `LENDER_MAINNET` | Binance hot wallet | where repayment must land on Ethereum |
 
 A watcher's whole job is sweeping a claim's range independently, so the source-chain RPC has to
 serve a wide `eth_getLogs`. Most free endpoints cap the range at 50–1000 blocks; Tenderly's public

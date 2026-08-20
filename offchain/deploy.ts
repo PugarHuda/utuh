@@ -21,6 +21,13 @@ const Metric = { COUNT: 0, DATA_WORD: 1 } as const;
 /// would have.
 const MIN_CHALLENGE_WINDOW = Number(process.env.MIN_CHALLENGE_WINDOW ?? 25);
 
+/// CTC wei credited per one unit of the volume reserve asset (USDC, 6 decimals).
+///
+/// A volume claim aggregates USDC in 1e6 units; a credit line is CTC in 1e18 wei. The conversion
+/// is a price, and this contract deliberately has no oracle — so the lender states its rate here,
+/// in the open. The default treats 1 USDC as 15 CTC: 15e18 / 1e6 = 1.5e13 wei per USDC unit.
+const VOLUME_UNIT_IN_CTC = BigInt(process.env.VOLUME_UNIT_IN_CTC ?? '15000000000000');
+
 /// The lender's Ethereum mainnet address — where borrowers send repayment.
 const LENDER_MAINNET = process.env.LENDER_MAINNET ?? '0x28C6c06298d514Db089934071355E5743bf21d60';
 
@@ -47,14 +54,18 @@ async function main() {
   console.log(`UtuhRegistry  ${registryAddress}  (min challenge window ${MIN_CHALLENGE_WINDOW} blocks)`);
 
   // Aave V3 Repay(address indexed reserve, address indexed user, address indexed repayer,
-  //               uint256 amount, bool useATokens) -> subject is topic 2, amount is data word 0.
+  //               uint256 amount, bool useATokens) -> user is topic 2, amount is data word 0.
+  //
+  // The reserve is pinned to USDC. Without that the aggregate would sum raw `amount` values
+  // across every reserve at once, adding WETH's 18 decimals to USDC's 6 and producing a number
+  // that means nothing. A volume claim is denominated in exactly one asset.
   const volumeSpec = {
     chainKey: CHAIN_KEY.mainnet,
     emitter: AAVE_V3_POOL,
     eventSig: AAVE_REPAY_SIG,
     subjectTopic: 2,
-    counterpartyTopic: 0,
-    counterparty: ZeroAddress,
+    counterpartyTopic: 1,
+    counterparty: USDC,
     metric: Metric.DATA_WORD,
     metricArg: 0,
   };
@@ -87,6 +98,7 @@ async function main() {
 
   const credit = await deploy(wallet, artifact('UtuhCredit.sol', 'UtuhCredit'), [
     registryAddress,
+    VOLUME_UNIT_IN_CTC,
     volumeSpec,
     cleanSpec,
     repaySpec,
@@ -94,6 +106,7 @@ async function main() {
   const creditAddress = await credit.getAddress();
   console.log(`UtuhCredit    ${creditAddress}`);
   console.log(`  repayment must land at ${LENDER_MAINNET} on Ethereum mainnet`);
+  console.log(`  lender's stated rate: ${VOLUME_UNIT_IN_CTC} CTC wei per USDC unit`);
 
   writeDeployments({
     chainId: CC3_CHAIN_ID,

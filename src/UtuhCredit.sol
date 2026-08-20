@@ -41,6 +41,15 @@ contract UtuhCredit {
     /// @notice Fraction of proven repayment volume extended as credit, in basis points.
     uint256 public constant LTV_BPS = 2000; // 20%
 
+    /// @notice CTC wei credited per one unit of the volume claim's reserve asset.
+    /// @dev A volume claim aggregates `amount` in the source asset's own decimals — 1e6 for USDC —
+    ///      while a line is denominated in CTC wei at 1e18. Something has to bridge the two, and
+    ///      it is a price. There is no oracle here and none is faked: the lender fixes the rate
+    ///      when it deploys, and it is visible on-chain for anyone to judge. A lender who wants a
+    ///      live price puts a feed in front of this contract rather than pretending the protocol
+    ///      knows one.
+    uint256 public immutable VOLUME_UNIT_IN_CTC;
+
     /// @notice Credit extended per unit of bond behind the clean claim.
     /// @dev This is the consumer half of the bond mechanism. The registry cannot know what a
     ///      claim will be used for, so it cannot size the bond; only the party about to lend
@@ -135,7 +144,15 @@ contract UtuhCredit {
     error BadSubjectTopic(uint8 topic);
     error TransferFailed();
 
-    constructor(UtuhRegistry registry, HistorySpec memory volume, HistorySpec memory clean, HistorySpec memory repay) {
+    constructor(
+        UtuhRegistry registry,
+        uint256 volumeUnitInCtc,
+        HistorySpec memory volume,
+        HistorySpec memory clean,
+        HistorySpec memory repay
+    ) {
+        if (volumeUnitInCtc == 0) revert NoCredit();
+        VOLUME_UNIT_IN_CTC = volumeUnitInCtc;
         REGISTRY = registry;
         CHAIN_INFO = ChainInfoLib.getChainInfo();
         LENDER = msg.sender;
@@ -220,7 +237,7 @@ contract UtuhCredit {
         // what the bond was posted against.
         if (cln.aggregate != 0) revert NotClean(cln.aggregate);
 
-        uint256 limit = (vol.aggregate * LTV_BPS) / 10_000;
+        uint256 limit = (vol.aggregate * VOLUME_UNIT_IN_CTC * LTV_BPS) / 10_000;
         uint256 bondCap = cln.bondPosted * BOND_MULTIPLE;
         if (limit > bondCap) limit = bondCap;
         if (limit == 0) revert NoCredit();

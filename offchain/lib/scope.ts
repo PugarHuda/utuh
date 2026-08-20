@@ -19,12 +19,17 @@ export interface Scope {
 }
 
 /// Build a scope that matches `eventSig` from `emitter` where an indexed topic equals `subject`.
+///
+/// `pin` fixes a second indexed topic. Aave's Repay carries the reserve asset in topic 1, and
+/// pinning it is what keeps an aggregate denominated in one asset instead of summing WETH's 18
+/// decimals into USDC's 6.
 export function scopeFor(opts: {
   chainKey: number;
   emitter: string;
   eventSig: string;
   subject?: string;
   subjectTopic?: 1 | 2 | 3;
+  pin?: { topic: 1 | 2 | 3; value: string };
   metric?: Metric;
   metricArg?: number;
 }): Scope {
@@ -34,6 +39,10 @@ export function scopeFor(opts: {
     const t = opts.subjectTopic ?? 1;
     topics[t - 1] = zeroPadValue(getAddress(opts.subject), 32);
     topicMask = 1 << (t - 1);
+  }
+  if (opts.pin) {
+    topics[opts.pin.topic - 1] = zeroPadValue(getAddress(opts.pin.value), 32);
+    topicMask |= 1 << (opts.pin.topic - 1);
   }
   return {
     chainKey: opts.chainKey,
