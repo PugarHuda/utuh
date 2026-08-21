@@ -86,6 +86,14 @@ contract UtuhCredit {
     uint64 public immutable MAX_STALENESS_BLOCKS;
     uint64 public constant RECOMMENDED_STALENESS_BLOCKS = 50_400;
 
+    /// @notice What a draw must repay, in basis points of what it paid out.
+    /// @dev 10_000 is principal only; anything above it is the lender's spread. Terms belong to
+    ///      whoever is lending, which is the whole reason this is not a parameter of {draw}.
+    uint64 public immutable REPAYMENT_BPS;
+
+    /// @notice How long a borrower has to prove repayment, in Creditcoin blocks.
+    uint64 public immutable REPAY_WINDOW_BLOCKS;
+
     /// @notice Describes a class of source-chain events about a subject address.
     /// @dev Set once by the deployer for each of the two roles. Underwriting rebuilds the exact
     ///      scope a claim must carry from this template plus the borrower's own address, then
@@ -191,6 +199,7 @@ contract UtuhCredit {
     error ClaimAlreadySpent(uint256 claimId);
     error WindowTooShort(uint64 window, uint64 required);
     error NothingToWithdraw();
+    error BadTerms();
 
     /// @notice Thresholds the lender chooses, gathered so the constructor stays legible.
     struct Policy {
@@ -198,6 +207,8 @@ contract UtuhCredit {
         uint64 minUnderwritingWindow;
         uint64 minHistoryBlocks;
         uint64 maxStalenessBlocks;
+        uint64 repaymentBps; // what must come back, in basis points of what went out
+        uint64 repayWindowBlocks; // how long the borrower has
     }
 
     constructor(
@@ -214,6 +225,9 @@ contract UtuhCredit {
             revert WindowTooShort(minUnderwritingWindow, registry.ABSOLUTE_MIN_CHALLENGE_WINDOW());
         }
         if (policy.minHistoryBlocks == 0 || policy.maxStalenessBlocks == 0) revert NoCredit();
+        if (policy.repaymentBps < 10_000 || policy.repayWindowBlocks == 0) revert BadTerms();
+        REPAYMENT_BPS = policy.repaymentBps;
+        REPAY_WINDOW_BLOCKS = policy.repayWindowBlocks;
         MIN_UNDERWRITING_WINDOW = minUnderwritingWindow;
         MIN_HISTORY_BLOCKS = policy.minHistoryBlocks;
         MAX_STALENESS_BLOCKS = policy.maxStalenessBlocks;
@@ -400,9 +414,12 @@ contract UtuhCredit {
         uint64 frontier = CHAIN_INFO.get_latest_attestation_height_and_hash(vol.scope.chainKey).height;
         if (frontier > vol.toBlock + MAX_STALENESS_BLOCKS) revert UnderwritingStale(vol.toBlock, frontier);
 
-        // Any proven liquidation in the window disqualifies. The claim being empty is precisely
-        // what the bond was posted against.
-        if (cln.aggregate != 0) revert NotClean(cln.aggregate);
+        // Any proven liquidation in the window disqualifies. Counting members rather than reading
+        // the aggregate keeps this true whatever metric the clean scope carries: a DATA_WORD scope
+        // over an adverse event that happened to carry a zero amount would sum to nothing while
+        // the liquidation sat right there in the set.
+        uint256 adverse = REGISTRY.memberCount(cleanClaimId);
+        if (adverse != 0) revert NotClean(adverse);
 
         uint256 limit = (vol.aggregate * VOLUME_UNIT_IN_CTC * LTV_BPS) / 10_000;
         uint256 bondCap = cln.bondPosted * BOND_MULTIPLE;
@@ -438,29 +455,50 @@ contract UtuhCredit {
     // Drawing and settlement
     // ------------------------------------------------------------------
 
-    /// @param repayRequired Amount the borrower must prove on the source chain, in that chain's
-    ///        units. Set by the lender at draw time; no price feed is consulted, so there is no
-    ///        oracle to corrupt and none to pretend exists.
-    function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repayWindow) external {
+    /// @notice Draw against an open line.
+    /// @dev The borrower chooses how much to take and nothing else. What must come back, and by
+    ///      when, are both computed from lender policy — an earlier version took them as
+    ///      arguments to this borrower-only function, which meant a borrower could draw the full
+    ///      limit and owe one wei of it. The conversion from CTC back to source units runs at the
+    ///      same {VOLUME_UNIT_IN_CTC} that produced the limit, so the two sides stay consistent,
+    ///      and it rounds up so that no draw is ever small enough to owe nothing.
+    function draw(uint256 lineId, uint256 amount) external returns (uint256 due) {
         Line storage l = _lines[lineId];
         if (l.borrower != msg.sender) revert NotBorrower();
         if (l.status != LineStatus.Active) revert WrongLineStatus(LineStatus.Active, l.status);
+        if (amount == 0) revert NoCredit();
 
         uint256 remaining = l.limit - l.drawn;
         if (amount > remaining) revert ExceedsLimit(amount, remaining);
         if (amount > available) revert InsufficientLiquidity(amount, available);
 
+        due = _repaymentFor(amount);
+
         l.drawn += amount;
-        l.repayRequired += repayRequired;
+        l.repayRequired += due;
         available -= amount;
 
         // The deadline is set by the first draw and never moves. Letting a later draw reset it
         // would hand a borrower who owes money an unlimited extension for the price of drawing
         // one more wei.
-        if (l.dueBlock == 0) l.dueBlock = uint64(block.number) + repayWindow;
+        if (l.dueBlock == 0) l.dueBlock = uint64(block.number) + REPAY_WINDOW_BLOCKS;
 
         emit Drawn(lineId, amount, l.dueBlock, l.repayRequired);
         _pay(msg.sender, amount);
+    }
+
+    /// @notice What drawing `amount` obliges the borrower to prove on the source chain.
+    function _repaymentFor(uint256 amount) private view returns (uint256) {
+        uint256 sourceUnits = _ceilDiv(amount, VOLUME_UNIT_IN_CTC);
+        return _ceilDiv(sourceUnits * REPAYMENT_BPS, 10_000);
+    }
+
+    function repaymentFor(uint256 amount) external view returns (uint256) {
+        return _repaymentFor(amount);
+    }
+
+    function _ceilDiv(uint256 a, uint256 b) private pure returns (uint256) {
+        return a == 0 ? 0 : (a - 1) / b + 1;
     }
 
     /// @notice Settle a drawn line with a finalized claim proving repayment on the source chain.

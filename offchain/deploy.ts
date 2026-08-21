@@ -34,6 +34,11 @@ const VOLUME_UNIT_IN_CTC = BigInt(process.env.VOLUME_UNIT_IN_CTC ?? '15000000000
 const MIN_HISTORY_BLOCKS = Number(process.env.MIN_HISTORY_BLOCKS ?? 216_000);
 const MAX_STALENESS_BLOCKS = Number(process.env.MAX_STALENESS_BLOCKS ?? 50_400);
 
+/// The lender's terms: what a draw must repay, and how long the borrower has. Both belong to the
+/// lender, which is why `draw` takes neither of them from the borrower.
+const REPAYMENT_BPS = Number(process.env.REPAYMENT_BPS ?? 10_500); // 105%
+const REPAY_WINDOW_BLOCKS = Number(process.env.REPAY_WINDOW_BLOCKS ?? 5_760); // ~24h
+
 /// The lender's Ethereum mainnet address — where borrowers send repayment.
 const LENDER_MAINNET = process.env.LENDER_MAINNET ?? '0x28C6c06298d514Db089934071355E5743bf21d60';
 
@@ -109,6 +114,8 @@ async function main() {
       minUnderwritingWindow: MIN_CHALLENGE_WINDOW,
       minHistoryBlocks: MIN_HISTORY_BLOCKS,
       maxStalenessBlocks: MAX_STALENESS_BLOCKS,
+      repaymentBps: REPAYMENT_BPS,
+      repayWindowBlocks: REPAY_WINDOW_BLOCKS,
     },
     volumeSpec,
     cleanSpec,
@@ -119,6 +126,7 @@ async function main() {
   console.log(`  repayment must land at ${LENDER_MAINNET} on Ethereum mainnet`);
   console.log(`  lender's stated rate: ${VOLUME_UNIT_IN_CTC} CTC wei per USDC unit`);
   console.log(`  accepts underwriting claims with a window of ${MIN_CHALLENGE_WINDOW}+ blocks`);
+  console.log(`  terms: repay ${REPAYMENT_BPS / 100}% within ${REPAY_WINDOW_BLOCKS} CC3 blocks`);
 
   writeDeployments({
     chainId: CC3_CHAIN_ID,

@@ -86,7 +86,6 @@ contract UtuhRegistry {
         uint256 bondPosted; // what was at stake during the window; never rewritten
         uint256 aggregate; // sum of EventScope.value over the set
         uint256 lastKey; // ordering cursor while Open
-        bytes32 setDigest; // running commitment to the set's contents
         EventScope.Scope scope;
     }
 
@@ -123,9 +122,7 @@ contract UtuhRegistry {
         uint256 bond
     );
     event EventAppended(uint256 indexed claimId, uint256 key, bytes32 leaf, uint256 value);
-    event ClaimSealed(
-        uint256 indexed claimId, bytes32 setDigest, uint256 memberCount, uint256 aggregate, uint64 challengeUntil
-    );
+    event ClaimSealed(uint256 indexed claimId, uint256 memberCount, uint256 aggregate, uint64 challengeUntil);
     event ClaimFinalized(uint256 indexed claimId, uint256 aggregate, uint256 memberCount);
     event ClaimRefuted(uint256 indexed claimId, address indexed refuter, uint256 omittedKey, uint256 reward);
     event ClaimAbandoned(uint256 indexed claimId);
@@ -267,15 +264,13 @@ contract UtuhRegistry {
 
         if (_keys[claimId].length > 0 && k <= c.lastKey) revert KeysOutOfOrder(c.lastKey, k);
 
-        bytes32 leaf = EventScope.leaf(k, log);
         uint256 v = c.scope.value(log);
 
         c.lastKey = k;
         c.aggregate += v;
-        c.setDigest = keccak256(abi.encode(c.setDigest, leaf));
         _keys[claimId].push(k);
 
-        emit EventAppended(claimId, k, leaf, v);
+        emit EventAppended(claimId, k, EventScope.leaf(k, log), v);
     }
 
     /// @notice Publish the claim and start its challenge window.
@@ -290,9 +285,7 @@ contract UtuhRegistry {
         c.status = Status.Sealed;
         c.sealedAt = uint64(block.number);
 
-        emit ClaimSealed(
-            claimId, c.setDigest, _keys[claimId].length, c.aggregate, c.sealedAt + c.challengeWindow
-        );
+        emit ClaimSealed(claimId, _keys[claimId].length, c.aggregate, c.sealedAt + c.challengeWindow);
     }
 
     /// @notice Withdraw an unpublished claim and recover its bond.
@@ -313,6 +306,12 @@ contract UtuhRegistry {
     /// @notice Break a sealed claim by proving one in-scope event it left out.
     /// @dev The refuter needs no bond of their own: a refutation that does not hold up simply
     ///      reverts, so griefing costs gas and returns nothing.
+    ///
+    ///      Known limit: a claimant watching the mempool can front-run an incoming refutation with
+    ///      their own, keeping half the bond and denying the watcher their reward. The burn still
+    ///      makes lying costly, but it does erode the incentive to watch. Closing it properly
+    ///      means committing to a refutation before revealing it, which is a round trip this does
+    ///      not yet have.
     function refute(uint256 claimId, EventProof calldata p, IBlockProver.ContinuityProof calldata continuity)
         external
     {
@@ -326,7 +325,16 @@ contract UtuhRegistry {
             revert BlockOutOfRange(p.blockHeight, c.fromBlock, c.toBlock);
         }
 
-        (uint256 k,) = _verifyOne(c.scope, p, continuity);
+        (uint256 k, EvmV1Decoder.LogEntry memory log) = _verifyOne(c.scope, p, continuity);
+
+        // A refutation must name an event the claimant could actually have appended. `value` is
+        // the only step in an append that can reject an in-scope event — a metric reading past the
+        // end of a log's data reverts — so it runs here too. Without this, a scope whose emitter
+        // varies its payload length could produce events that are impossible to include and
+        // sufficient to slash, and an honest claimant would be punished for an omission they had
+        // no way to avoid.
+        c.scope.value(log);
+
         if (_contains(claimId, k)) revert EventAlreadyInSet(k);
 
         uint256 bond = c.bond;

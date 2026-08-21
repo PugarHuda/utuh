@@ -35,7 +35,6 @@ const SETTLED_SIG = id('Settled(address,address,uint256)');
 const ADVERSE_SIG = id('Adverse(address,uint256)');
 
 const SETTLEMENT = parseEther('0.001');
-const REPAYMENT = parseEther('0.0012');
 const BORROWER_SEPOLIA = parseEther('0.012');
 const BORROWER_CTC = parseEther('12');
 const DEFAULTER_CTC = parseEther('4');
@@ -138,6 +137,8 @@ async function main() {
         minUnderwritingWindow: CHALLENGE_WINDOW,
         minHistoryBlocks: 5,
         maxStalenessBlocks: 5000,
+        repaymentBps: 10_500, // 105% — principal plus the lender's spread
+        repayWindowBlocks: 400,
       },
       volumeSpec,
       cleanSpec,
@@ -265,8 +266,11 @@ async function main() {
   await (await credit.fund({ value: line.limit })).wait();
   console.log(`  lender funded ${formatEther(line.limit)} CTC`);
 
+  const owed: bigint = await credit.repaymentFor(line.limit);
+  console.log(`  drawing ${formatEther(line.limit)} CTC obliges ${formatEther(owed)} ETH back, at the lender's terms`);
+
   const before = await cc3.getBalance(borrower.address);
-  await (await creditAsBorrower.draw(lineId, line.limit, REPAYMENT, 400)).wait();
+  await (await creditAsBorrower.draw(lineId, line.limit)).wait();
   line = await credit.line(lineId);
   const after = await cc3.getBalance(borrower.address);
   console.log(`  borrower drew ${formatEther(line.drawn)} CTC  (${formatEther(before)} -> ${formatEther(after)})`);
@@ -274,9 +278,9 @@ async function main() {
 
   // ------------------------------------------------------------------
   console.log('\n=== 8. repayment, proven back ===');
-  const repayTx = await asBorrower.settle(lender.address, { value: REPAYMENT });
+  const repayTx = await asBorrower.settle(lender.address, { value: line.repayRequired });
   const repayReceipt = await repayTx.wait();
-  console.log(`  paid ${formatEther(REPAYMENT)} ETH to the lender, Sepolia block ${repayReceipt.blockNumber}`);
+  console.log(`  paid ${formatEther(line.repayRequired)} ETH to the lender, Sepolia block ${repayReceipt.blockNumber}`);
 
   const repayFrom = Number(line.repayFrom);
   const repayTo = repayReceipt.blockNumber + 2;

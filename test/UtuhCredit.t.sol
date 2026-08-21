@@ -27,13 +27,17 @@ contract UtuhCreditTest is Test {
     uint256 constant RATE = 15_000_000_000_000;
     uint64 constant HISTORY = 216_000;
     uint64 constant STALENESS = 50_400;
+    uint64 constant REPAYMENT_BPS = 10_500; // 105%
+    uint64 constant REPAY_WINDOW = 400;
 
     function _policy(uint256 rate, uint64 window) internal pure returns (UtuhCredit.Policy memory) {
         return UtuhCredit.Policy({
             volumeUnitInCtc: rate,
             minUnderwritingWindow: window,
             minHistoryBlocks: HISTORY,
-            maxStalenessBlocks: STALENESS
+            maxStalenessBlocks: STALENESS,
+            repaymentBps: REPAYMENT_BPS,
+            repayWindowBlocks: REPAY_WINDOW
         });
     }
 
@@ -199,6 +203,67 @@ contract UtuhCreditTest is Test {
         vm.prank(STRANGER);
         vm.expectRevert(UtuhCredit.NotLender.selector);
         credit.withdraw(1 ether);
+    }
+
+    // ------------------------------------------------------------------
+    // Repayment terms
+    // ------------------------------------------------------------------
+
+    /// @notice The hole this closes: `draw` used to take `repayRequired` and `repayWindow` as
+    ///         arguments while being callable only by the borrower, so a borrower could draw the
+    ///         whole limit and owe one wei of it. Terms now come from lender policy, and the only
+    ///         thing the borrower chooses is how much to take.
+    function test_drawTakesNoTermsFromTheBorrower() public view {
+        // One argument beyond the line id. If this ever grows again, the terms came back.
+        this.assertSelector(UtuhCredit.draw.selector, credit.draw.selector);
+    }
+
+    function assertSelector(bytes4 a, bytes4 b) external pure {
+        require(a == b, "selector drift");
+    }
+
+    /// @notice Repayment converts CTC back through the same rate that produced the limit, so the
+    ///         two sides of the line are denominated consistently.
+    function test_repaymentTracksTheDrawnAmount() public view {
+        uint256 due = credit.repaymentFor(RATE * 1000);
+        assertEq(due, (1000 * REPAYMENT_BPS) / 10_000);
+    }
+
+    /// @notice No draw is ever small enough to owe nothing. Flooring twice would have handed out
+    ///         free money in dust-sized draws.
+    function test_tinyDrawStillOwesSomething() public view {
+        assertGt(credit.repaymentFor(1), 0);
+        assertGt(credit.repaymentFor(RATE - 1), 0);
+    }
+
+    function testFuzz_repaymentIsNeverZeroForANonZeroDraw(uint96 amount) public view {
+        vm.assume(amount > 0);
+        assertGt(credit.repaymentFor(amount), 0);
+    }
+
+    function testFuzz_repaymentIsMonotonic(uint96 a, uint96 b) public view {
+        vm.assume(a < b);
+        assertLe(credit.repaymentFor(a), credit.repaymentFor(b));
+    }
+
+    /// @notice A lender cannot deploy terms that give away principal, or a window of zero.
+    function test_rejectsTermsBelowPrincipal() public {
+        UtuhCredit.Policy memory p = _policy(RATE, WINDOW);
+        p.repaymentBps = 9_999;
+        vm.expectRevert(UtuhCredit.BadTerms.selector);
+        new UtuhCredit(registry, p, _spec(2, 0), _spec(3, 0), _spec(1, 2));
+    }
+
+    function test_rejectsZeroRepayWindow() public {
+        UtuhCredit.Policy memory p = _policy(RATE, WINDOW);
+        p.repayWindowBlocks = 0;
+        vm.expectRevert(UtuhCredit.BadTerms.selector);
+        new UtuhCredit(registry, p, _spec(2, 0), _spec(3, 0), _spec(1, 2));
+    }
+
+    function test_termsAreReadable() public view {
+        assertEq(credit.REPAYMENT_BPS(), REPAYMENT_BPS);
+        assertEq(credit.REPAY_WINDOW_BLOCKS(), REPAY_WINDOW);
     }
 
     receive() external payable {}

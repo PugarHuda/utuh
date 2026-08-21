@@ -149,6 +149,10 @@ and naming the account inside it stops anyone replaying someone else's commitmen
 Any supported source chain will do: an EOA address derives from its public key and is identical on
 all of them, so Sepolia gas proves exactly as much as mainnet gas.
 
+The terms of a draw are the lender's, never the borrower's. `draw` takes an amount and nothing
+else; what must come back and by when are computed from policy, converting CTC back through the
+same rate that produced the limit and rounding up so no draw is small enough to owe nothing.
+
 Two smaller rules close the same class of hole. A finalized claim is **spent** when it opens a
 line, so one underwriting funds one line and the bond cap bounds aggregate exposure rather than
 each line separately. And a line's deadline is fixed by its first draw and never moves — otherwise
@@ -213,7 +217,7 @@ src/
   interfaces/IChainInfo.sol     0x0FD3 — attestation frontier and coverage
 test/
   EventScope.t.sol          the matcher, ordering key, metrics and leaf identity
-  UtuhCredit.t.sol          deployment floors, control binding, scope identity, liquidity
+  UtuhCredit.t.sol          deployment floors, control binding, scope identity, terms, liquidity
 offchain/
   deploy.ts                 deploy decoder, registry, credit
   e2e.ts                    honest claim finalized; dishonest claim refuted and slashed
@@ -266,6 +270,8 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `CONTROL_CHAIN_KEY` | `1` (Sepolia) | which source chain to send the control commitment on |
 | `MIN_HISTORY_BLOCKS` | `216000` | lender policy: how much history an underwriting must cover |
 | `MAX_STALENESS_BLOCKS` | `50400` | lender policy: how recently it must end |
+| `REPAYMENT_BPS` | `10500` | lender policy: what a draw must repay, in basis points |
+| `REPAY_WINDOW_BLOCKS` | `5760` | lender policy: how long the borrower has |
 | `LENDER_MAINNET` | Binance hot wallet | where repayment must land on Ethereum |
 
 A watcher's whole job is sweeping a claim's range independently, so the source-chain RPC has to
@@ -279,7 +285,7 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-38 tests over the half that can run in a plain EVM: ordering and scope matching in
+46 tests over the half that can run in a plain EVM: ordering and scope matching in
 `EventScope.t.sol`, and in `UtuhCredit.t.sol` the guards that decide whose history a line may be
 opened against — deployment floors, the control commitment's layout, scope identity, and the
 lender's liquidity. Neither contract's constructor touches a precompile, so both deploy locally;
@@ -346,6 +352,10 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
   messaging.
 - Completeness here is economic, not cryptographic. A bond makes lying expensive; it does not make
   it impossible.
+- A claimant watching the mempool can front-run an incoming refutation with their own, keeping half
+  the bond and denying the watcher their reward. The burn still makes lying costly, but it erodes
+  the incentive to watch. Closing it properly means committing to a refutation before revealing it
+  — a round trip this does not yet have.
 - Binding an address costs the borrower one source-chain transaction. That is a real onboarding
   step, and there is no way around it that does not reintroduce the hole it closes. `npm run credit`
   therefore stops at `SubjectNotControlled` when pointed at a stranger's history — the refusal is
