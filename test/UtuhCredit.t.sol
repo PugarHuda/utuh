@@ -25,10 +25,21 @@ contract UtuhCreditTest is Test {
 
     uint64 constant WINDOW = 25;
     uint256 constant RATE = 15_000_000_000_000;
+    uint64 constant HISTORY = 216_000;
+    uint64 constant STALENESS = 50_400;
+
+    function _policy(uint256 rate, uint64 window) internal pure returns (UtuhCredit.Policy memory) {
+        return UtuhCredit.Policy({
+            volumeUnitInCtc: rate,
+            minUnderwritingWindow: window,
+            minHistoryBlocks: HISTORY,
+            maxStalenessBlocks: STALENESS
+        });
+    }
 
     function setUp() public {
         registry = new UtuhRegistry(WINDOW);
-        credit = new UtuhCredit(registry, RATE, WINDOW, _spec(2, 0), _spec(3, 0), _spec(1, 2));
+        credit = new UtuhCredit(registry, _policy(RATE, WINDOW), _spec(2, 0), _spec(3, 0), _spec(1, 2));
     }
 
     function _spec(uint8 subjectTopic, uint8 counterpartyTopic)
@@ -62,7 +73,7 @@ contract UtuhCreditTest is Test {
     function test_creditRejectsWindowBelowRegistryFloor() public {
         uint64 floor = registry.ABSOLUTE_MIN_CHALLENGE_WINDOW();
         vm.expectRevert(abi.encodeWithSelector(UtuhCredit.WindowTooShort.selector, floor - 1, floor));
-        new UtuhCredit(registry, RATE, floor - 1, _spec(2, 0), _spec(3, 0), _spec(1, 2));
+        new UtuhCredit(registry, _policy(RATE, floor - 1), _spec(2, 0), _spec(3, 0), _spec(1, 2));
     }
 
     /// @notice A volume aggregate is in the reserve asset's units; a line is in CTC wei. Crossing
@@ -70,13 +81,13 @@ contract UtuhCreditTest is Test {
     ///         credit at all rather than silently extending dust.
     function test_creditRejectsZeroRate() public {
         vm.expectRevert(UtuhCredit.NoCredit.selector);
-        new UtuhCredit(registry, 0, WINDOW, _spec(2, 0), _spec(3, 0), _spec(1, 2));
+        new UtuhCredit(registry, _policy(0, WINDOW), _spec(2, 0), _spec(3, 0), _spec(1, 2));
     }
 
     function test_creditRejectsSpecWithSameSubjectAndCounterpartyTopic() public {
         UtuhCredit.HistorySpec memory bad = _spec(1, 1);
         vm.expectRevert(abi.encodeWithSelector(UtuhCredit.BadSubjectTopic.selector, uint8(1)));
-        new UtuhCredit(registry, RATE, WINDOW, bad, _spec(3, 0), _spec(1, 2));
+        new UtuhCredit(registry, _policy(RATE, WINDOW), bad, _spec(3, 0), _spec(1, 2));
     }
 
     // ------------------------------------------------------------------

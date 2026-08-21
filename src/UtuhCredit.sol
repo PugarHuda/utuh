@@ -60,9 +60,11 @@ contract UtuhCredit {
     uint256 public constant BOND_MULTIPLE = 10;
 
     /// @notice Minimum span of source-chain history an underwriting must cover.
-    /// @dev ~30 days of Ethereum blocks. A clean claim over a short window is cheap to keep
-    ///      clean and says almost nothing.
-    uint64 public constant MIN_HISTORY_BLOCKS = 216_000;
+    /// @dev A clean claim over a short window is cheap to keep clean and says almost nothing. How
+    ///      much history is enough is a credit policy rather than a property of the protocol, so
+    ///      the lender sets it. {RECOMMENDED_HISTORY_BLOCKS} is about 30 days of Ethereum blocks.
+    uint64 public immutable MIN_HISTORY_BLOCKS;
+    uint64 public constant RECOMMENDED_HISTORY_BLOCKS = 216_000;
 
     /// @notice Shortest challenge window an underwriting claim may have carried.
     /// @dev The registry lets each claimant pick a window above its floor, so a lender that only
@@ -78,9 +80,11 @@ contract UtuhCredit {
     bytes12 public constant CONTROL_TAG = bytes12("utuh:control");
 
     /// @notice How far behind the attestation frontier an underwriting range may end.
-    /// @dev ~7 days. Otherwise a borrower could underwrite on a spotless year that ended right
-    ///      before the liquidation that ruined them.
-    uint64 public constant MAX_STALENESS_BLOCKS = 50_400;
+    /// @dev Otherwise a borrower could underwrite on a spotless year that ended the day before the
+    ///      liquidation that ruined them. Lender policy as well;
+    ///      {RECOMMENDED_STALENESS_BLOCKS} is about 7 days.
+    uint64 public immutable MAX_STALENESS_BLOCKS;
+    uint64 public constant RECOMMENDED_STALENESS_BLOCKS = 50_400;
 
     /// @notice Describes a class of source-chain events about a subject address.
     /// @dev Set once by the deployer for each of the two roles. Underwriting rebuilds the exact
@@ -188,19 +192,31 @@ contract UtuhCredit {
     error WindowTooShort(uint64 window, uint64 required);
     error NothingToWithdraw();
 
+    /// @notice Thresholds the lender chooses, gathered so the constructor stays legible.
+    struct Policy {
+        uint256 volumeUnitInCtc;
+        uint64 minUnderwritingWindow;
+        uint64 minHistoryBlocks;
+        uint64 maxStalenessBlocks;
+    }
+
     constructor(
         UtuhRegistry registry,
-        uint256 volumeUnitInCtc,
-        uint64 minUnderwritingWindow,
+        Policy memory policy,
         HistorySpec memory volume,
         HistorySpec memory clean,
         HistorySpec memory repay
     ) {
+        uint256 volumeUnitInCtc = policy.volumeUnitInCtc;
+        uint64 minUnderwritingWindow = policy.minUnderwritingWindow;
         if (volumeUnitInCtc == 0) revert NoCredit();
         if (minUnderwritingWindow < registry.ABSOLUTE_MIN_CHALLENGE_WINDOW()) {
             revert WindowTooShort(minUnderwritingWindow, registry.ABSOLUTE_MIN_CHALLENGE_WINDOW());
         }
+        if (policy.minHistoryBlocks == 0 || policy.maxStalenessBlocks == 0) revert NoCredit();
         MIN_UNDERWRITING_WINDOW = minUnderwritingWindow;
+        MIN_HISTORY_BLOCKS = policy.minHistoryBlocks;
+        MAX_STALENESS_BLOCKS = policy.maxStalenessBlocks;
         VOLUME_UNIT_IN_CTC = volumeUnitInCtc;
         REGISTRY = registry;
         CHAIN_INFO = ChainInfoLib.getChainInfo();

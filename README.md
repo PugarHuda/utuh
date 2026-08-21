@@ -90,6 +90,11 @@ The mainnet frontier tracks within roughly a hundred blocks of the real chain he
 on a free testnet can be underwritten on real Aave positions, real USDC flows, and real borrowers,
 with no capital at risk and nothing simulated.
 
+Budget for the attestation lag when running anything live: a freshly mined block takes on the
+order of ten minutes to become provable on either chain. Historical blocks are immediate, and a
+proof for one 210,000 blocks back still resolves in about seven seconds — it is only the tip that
+you wait on.
+
 Every number in the demos comes from Ethereum mainnet.
 
 ## UtuhCredit
@@ -158,19 +163,50 @@ it. Silence is the default condition, not an inference.
 
 ## Deployed on CC3 Testnet (chain id 102031)
 
+### Mainnet-sourced deployment
+
 | Contract | Address |
 |---|---|
 | `UtuhRegistry` | `0x7E7cB18E7AB6712e3EEc4698B8bc6b69d4Bb2AB2` |
 | `UtuhCredit` | `0xcf463ab392C2c6Aea5c7B85DCd5896205CF086A9` |
 | `EvmV1Decoder` | `0x0F7e78a4a34af477882AF9124a6559485a3E91aa` |
 
-Both demos below were run against these, on Ethereum mainnet data.
+`npm run credit` runs against these, on Ethereum mainnet data.
+
+### Sepolia-sourced deployment — the completed loop
+
+| Contract | Address |
+|---|---|
+| `UtuhRegistry` | `0x382b0Bb3CbC09B08Be8190bd746DA9A275Ab7B25` |
+| `UtuhCredit` | `0x407a775B986E600FBFBE336158F106c4c3038B38` |
+| `SettlementLedger` (Sepolia) | `0xA551228235a00B5e01bcb223590746Ef93c2C4b2` |
+
+Claim 1 volume finalized at 0.003 ETH over three payments, claim 2 clean finalized empty, claim 3
+refuted, claim 4 repayment finalized at 0.0012 ETH — and line 1 `Settled`.
+
+## Two demonstrations, and why there are two
+
+`npm run credit` reads **Ethereum mainnet**: real Aave positions, real liquidations, real
+borrowers. It underwrites them, refutes a genuinely liquidated address that claims it was never
+liquidated — and then stops, because nobody can prove control of a stranger's address. That
+refusal is the honest end of that flow.
+
+`npm run full` closes the loop instead. A borrower we control acts on **Sepolia**: they pay a
+lender through `SettlementLedger`, bind their address with a control commitment, get underwritten
+on what they actually did, draw CTC on Creditcoin, repay on Sepolia, and settle. Two parties, both
+transacting for themselves.
+
+The source-chain contract is not a stand-in for anything under test. The payments are real
+transfers, the events are real logs in real blocks, and Creditcoin attests them exactly as it
+attests Aave's. A scope is a scope — the registry cannot tell the difference, and does not need
+to.
 
 ## Layout
 
 ```
 src/
   UtuhRegistry.sol          the completeness layer
+  source/SettlementLedger.sol   deployed on the *source* chain: payments and adverse events
   UtuhCredit.sol            undercollateralized credit built on it
   lib/EventScope.sol        which events a claim covers, and how each one counts
   interfaces/IBlockProver.sol   0x0FD2 — Merkle + continuity verification
@@ -182,6 +218,8 @@ offchain/
   deploy.ts                 deploy decoder, registry, credit
   e2e.ts                    honest claim finalized; dishonest claim refuted and slashed
   creditDemo.ts             underwrite a real Aave borrower; refute a real liquidated one
+  fullFlow.ts               the whole loop on Sepolia, borrower and lender both acting
+  finishLine.ts             resume an interrupted run — the state lives on-chain, not in the script
   proveControl.ts           bind a source-chain address to a Creditcoin account
   balance.ts                wallet, chain and attestation status
   lib/scope.ts              independent source-chain sweep
@@ -203,6 +241,8 @@ npm run deploy
 npm run e2e                 # the registry, both outcomes
 npm run credit              # the credit line, on a real Aave borrower
 npm run control             # bind your own address (needs a little source-chain gas)
+npm run full                # the entire loop, two parties, on Sepolia
+npm run finish -- <registry> <credit> <claimId> <lineId>   # resume an interrupted run
 
 npm run demo                # all three in sequence, for recording
 ```
@@ -224,6 +264,8 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `MIN_CHALLENGE_WINDOW` | `25` | Creditcoin blocks, deploy-time floor |
 | `VOLUME_UNIT_IN_CTC` | `15000000000000` | CTC wei per USDC unit; the lender's stated rate |
 | `CONTROL_CHAIN_KEY` | `1` (Sepolia) | which source chain to send the control commitment on |
+| `MIN_HISTORY_BLOCKS` | `216000` | lender policy: how much history an underwriting must cover |
+| `MAX_STALENESS_BLOCKS` | `50400` | lender policy: how recently it must end |
 | `LENDER_MAINNET` | Binance hot wallet | where repayment must land on Ethereum |
 
 A watcher's whole job is sweeping a claim's range independently, so the source-chain RPC has to

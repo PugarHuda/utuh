@@ -13,7 +13,9 @@
     "test": "forge test",
     "probe": "tsx offchain/probe.ts",
     "demo": "npm run deploy && npm run e2e && npm run credit",
-    "control": "tsx offchain/proveControl.ts"
+    "control": "tsx offchain/proveControl.ts",
+    "full": "tsx offchain/fullFlow.ts",
+    "finish": "tsx offchain/finishLine.ts"
   },
   "keywords": [],
   "author": "",

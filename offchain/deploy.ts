@@ -28,6 +28,12 @@ const MIN_CHALLENGE_WINDOW = Number(process.env.MIN_CHALLENGE_WINDOW ?? 25);
 /// in the open. The default treats 1 USDC as 15 CTC: 15e18 / 1e6 = 1.5e13 wei per USDC unit.
 const VOLUME_UNIT_IN_CTC = BigInt(process.env.VOLUME_UNIT_IN_CTC ?? '15000000000000');
 
+/// Lender policy: how much history an underwriting must cover, and how recently it must end.
+/// Production values are UtuhCredit.RECOMMENDED_HISTORY_BLOCKS (~30 days) and
+/// RECOMMENDED_STALENESS_BLOCKS (~7 days).
+const MIN_HISTORY_BLOCKS = Number(process.env.MIN_HISTORY_BLOCKS ?? 216_000);
+const MAX_STALENESS_BLOCKS = Number(process.env.MAX_STALENESS_BLOCKS ?? 50_400);
+
 /// The lender's Ethereum mainnet address — where borrowers send repayment.
 const LENDER_MAINNET = process.env.LENDER_MAINNET ?? '0x28C6c06298d514Db089934071355E5743bf21d60';
 
@@ -98,8 +104,12 @@ async function main() {
 
   const credit = await deploy(wallet, artifact('UtuhCredit.sol', 'UtuhCredit'), [
     registryAddress,
-    VOLUME_UNIT_IN_CTC,
-    MIN_CHALLENGE_WINDOW,
+    {
+      volumeUnitInCtc: VOLUME_UNIT_IN_CTC,
+      minUnderwritingWindow: MIN_CHALLENGE_WINDOW,
+      minHistoryBlocks: MIN_HISTORY_BLOCKS,
+      maxStalenessBlocks: MAX_STALENESS_BLOCKS,
+    },
     volumeSpec,
     cleanSpec,
     repaySpec,
