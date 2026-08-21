@@ -99,14 +99,16 @@ async function main() {
   const credit = await deploy(wallet, artifact('UtuhCredit.sol', 'UtuhCredit'), [
     registryAddress,
     VOLUME_UNIT_IN_CTC,
+    MIN_CHALLENGE_WINDOW,
     volumeSpec,
     cleanSpec,
     repaySpec,
-  ]);
+  ], { EvmV1Decoder: decoderAddress });
   const creditAddress = await credit.getAddress();
   console.log(`UtuhCredit    ${creditAddress}`);
   console.log(`  repayment must land at ${LENDER_MAINNET} on Ethereum mainnet`);
   console.log(`  lender's stated rate: ${VOLUME_UNIT_IN_CTC} CTC wei per USDC unit`);
+  console.log(`  accepts underwriting claims with a window of ${MIN_CHALLENGE_WINDOW}+ blocks`);
 
   writeDeployments({
     chainId: CC3_CHAIN_ID,

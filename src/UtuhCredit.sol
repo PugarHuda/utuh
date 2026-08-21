@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import {EvmV1Decoder} from "@gluwa/usc-contracts/contracts/decoding/EvmV1Decoder.sol";
 import {UtuhRegistry} from "./UtuhRegistry.sol";
 import {EventScope} from "./lib/EventScope.sol";
+import {IBlockProver, BlockProverLib} from "./interfaces/IBlockProver.sol";
 import {IChainInfo, ChainInfoLib} from "./interfaces/IChainInfo.sol";
 
 /// @title UtuhCredit — undercollateralized credit on Creditcoin, underwritten on Ethereum
@@ -62,6 +64,19 @@ contract UtuhCredit {
     ///      clean and says almost nothing.
     uint64 public constant MIN_HISTORY_BLOCKS = 216_000;
 
+    /// @notice Shortest challenge window an underwriting claim may have carried.
+    /// @dev The registry lets each claimant pick a window above its floor, so a lender that only
+    ///      checks the bond would happily rely on a claim that was exposed for a handful of
+    ///      blocks. Exposure is a function of both how much was staked and how long anyone had to
+    ///      take it, and only the lender can say which pairs it will accept — so this is set per
+    ///      deployment, like the registry's own floor. The production value is
+    ///      {RECOMMENDED_UNDERWRITING_WINDOW}.
+    uint64 public immutable MIN_UNDERWRITING_WINDOW;
+    uint64 public constant RECOMMENDED_UNDERWRITING_WINDOW = 5760; // ~24h
+
+    /// @notice Tag that distinguishes a control commitment from ordinary calldata.
+    bytes12 public constant CONTROL_TAG = bytes12("utuh:control");
+
     /// @notice How far behind the attestation frontier an underwriting range may end.
     /// @dev ~7 days. Otherwise a borrower could underwrite on a spotless year that ended right
     ///      before the liquidation that ruined them.
@@ -90,6 +105,15 @@ contract UtuhCredit {
         Defaulted
     }
 
+    /// @notice A source-chain transaction offered as proof that its sender controls that address.
+    struct ControlProof {
+        uint64 chainKey;
+        uint64 blockHeight;
+        bytes encodedTransaction;
+        bytes32 merkleRoot;
+        IBlockProver.MerkleProofEntry[] siblings;
+    }
+
     struct Line {
         address borrower;
         LineStatus status;
@@ -107,8 +131,18 @@ contract UtuhCredit {
 
     address public immutable LENDER;
 
+    IBlockProver public immutable PROVER;
+
     uint256 public nextLineId = 1;
     mapping(uint256 => Line) private _lines;
+
+    /// @notice Creditcoin account each source-chain address has bound itself to.
+    mapping(address => address) public controllerOf;
+
+    /// @notice Claims already spent on a line, so one underwriting funds one line.
+    /// @dev Without this the same finalized pair could open lines without limit, and the bond cap
+    ///      would bound each line while bounding nothing in aggregate.
+    mapping(uint256 => bool) public claimSpent;
 
     /// @notice CTC deposited by the lender and not yet drawn.
     uint256 public available;
@@ -125,6 +159,8 @@ contract UtuhCredit {
     event Settled(uint256 indexed lineId, uint256 repayClaimId, uint256 proven);
     event Defaulted(uint256 indexed lineId, uint256 outstanding);
     event Funded(uint256 amount);
+    event Withdrawn(uint256 amount);
+    event ControlProven(address indexed subject, address indexed account, uint64 blockHeight);
 
     error NotLender();
     error ClaimNotUsable(uint256 claimId, uint256 requiredBond);
@@ -143,18 +179,32 @@ contract UtuhCredit {
     error RepaymentShort(uint256 proven, uint256 required);
     error BadSubjectTopic(uint8 topic);
     error TransferFailed();
+    error ProofRejected();
+    error TransactionFailedOnSource(uint8 receiptStatus);
+    error UnsupportedTransactionType(uint8 txType);
+    error NotAControlCommitment();
+    error SubjectNotControlled(address subject, address caller);
+    error ClaimAlreadySpent(uint256 claimId);
+    error WindowTooShort(uint64 window, uint64 required);
+    error NothingToWithdraw();
 
     constructor(
         UtuhRegistry registry,
         uint256 volumeUnitInCtc,
+        uint64 minUnderwritingWindow,
         HistorySpec memory volume,
         HistorySpec memory clean,
         HistorySpec memory repay
     ) {
         if (volumeUnitInCtc == 0) revert NoCredit();
+        if (minUnderwritingWindow < registry.ABSOLUTE_MIN_CHALLENGE_WINDOW()) {
+            revert WindowTooShort(minUnderwritingWindow, registry.ABSOLUTE_MIN_CHALLENGE_WINDOW());
+        }
+        MIN_UNDERWRITING_WINDOW = minUnderwritingWindow;
         VOLUME_UNIT_IN_CTC = volumeUnitInCtc;
         REGISTRY = registry;
         CHAIN_INFO = ChainInfoLib.getChainInfo();
+        PROVER = BlockProverLib.getProver();
         LENDER = msg.sender;
         _requireSpec(volume);
         _requireSpec(clean);
@@ -182,6 +232,89 @@ contract UtuhCredit {
         if (msg.sender != LENDER) revert NotLender();
         available += msg.value;
         emit Funded(msg.value);
+    }
+
+    /// @notice Take back liquidity that has not been drawn.
+    function withdraw(uint256 amount) external {
+        if (msg.sender != LENDER) revert NotLender();
+        if (amount == 0 || amount > available) revert NothingToWithdraw();
+        available -= amount;
+        emit Withdrawn(amount);
+        _pay(msg.sender, amount);
+    }
+
+    // ------------------------------------------------------------------
+    // Proving control of a source-chain address
+    // ------------------------------------------------------------------
+
+    /// @notice Bind a source-chain address to a Creditcoin account by proving a transaction the
+    ///         source address itself sent.
+    ///
+    /// @dev Underwriting reads someone's Ethereum history. Without this step, reading it would be
+    ///      enough to borrow against it — anyone could point at a stranger's spotless record and
+    ///      draw on it. The history is public; the key that wrote it is not.
+    ///
+    ///      The commitment is an ordinary Ethereum transaction from `subject` whose calldata is
+    ///      exactly {CONTROL_TAG} followed by the Creditcoin account being bound. Nothing but the
+    ///      subject key can produce it, and the tag keeps it from colliding with real calldata.
+    ///      The `from` field comes out of bytes the Block Prover has already verified.
+    ///
+    ///      Any supported source chain will do, because an EOA address is derived from its public
+    ///      key and is the same on all of them. Sepolia gas is cheaper than mainnet gas and proves
+    ///      exactly as much.
+    function proveControl(ControlProof calldata p, IBlockProver.ContinuityProof calldata continuity)
+        external
+        returns (address subject, address account)
+    {
+        if (
+            !PROVER.verifyAndEmit(
+                p.chainKey,
+                p.blockHeight,
+                p.encodedTransaction,
+                IBlockProver.MerkleProof({root: p.merkleRoot, siblings: p.siblings}),
+                continuity
+            )
+        ) revert ProofRejected();
+
+        (subject, account) = _readControlTx(p.encodedTransaction);
+        controllerOf[subject] = account;
+
+        emit ControlProven(subject, account, p.blockHeight);
+    }
+
+    /// @dev Everything here is read out of bytes the prover has already vouched for.
+    function _readControlTx(bytes calldata encodedTransaction)
+        private
+        pure
+        returns (address subject, address account)
+    {
+        uint8 txType = EvmV1Decoder.getTransactionType(encodedTransaction);
+        if (!EvmV1Decoder.isValidTransactionType(txType)) revert UnsupportedTransactionType(txType);
+
+        EvmV1Decoder.ReceiptFields memory receipt = EvmV1Decoder.decodeReceiptFields(encodedTransaction);
+        if (receipt.receiptStatus != 1) revert TransactionFailedOnSource(receipt.receiptStatus);
+
+        EvmV1Decoder.CommonTxFields memory fields = EvmV1Decoder.decodeCommonTxFields(encodedTransaction);
+        (bool ok, address bound) = _readCommitment(fields.data);
+        if (!ok) revert NotAControlCommitment();
+
+        return (fields.from, bound);
+    }
+
+    /// @dev calldata is CONTROL_TAG (12 bytes) followed by a 20-byte address.
+    function _readCommitment(bytes memory data) private pure returns (bool ok, address account) {
+        if (data.length != 32) return (false, address(0));
+        bytes32 word;
+        assembly {
+            word := mload(add(data, 0x20))
+        }
+        if (bytes12(word) != CONTROL_TAG) return (false, address(0));
+        return (true, address(uint160(uint256(word))));
+    }
+
+    /// @notice The calldata a subject must send on the source chain to bind `account`.
+    function controlCommitment(address account) external pure returns (bytes memory) {
+        return abi.encodePacked(CONTROL_TAG, account);
     }
 
     // ------------------------------------------------------------------
@@ -219,8 +352,26 @@ contract UtuhCredit {
         external
         returns (uint256 lineId)
     {
+        // Reading a history is not the same as owning it.
+        if (controllerOf[subject] != msg.sender) revert SubjectNotControlled(subject, msg.sender);
+
+        // One underwriting funds one line. Otherwise the bond cap would bound each line while
+        // bounding nothing in aggregate.
+        if (claimSpent[volumeClaimId]) revert ClaimAlreadySpent(volumeClaimId);
+        if (claimSpent[cleanClaimId]) revert ClaimAlreadySpent(cleanClaimId);
+        claimSpent[volumeClaimId] = true;
+        claimSpent[cleanClaimId] = true;
+
         UtuhRegistry.Claim memory vol = REGISTRY.claim(volumeClaimId);
         UtuhRegistry.Claim memory cln = REGISTRY.claim(cleanClaimId);
+
+        // A bond is only a deterrent for as long as someone could still take it.
+        if (vol.challengeWindow < MIN_UNDERWRITING_WINDOW) {
+            revert WindowTooShort(vol.challengeWindow, MIN_UNDERWRITING_WINDOW);
+        }
+        if (cln.challengeWindow < MIN_UNDERWRITING_WINDOW) {
+            revert WindowTooShort(cln.challengeWindow, MIN_UNDERWRITING_WINDOW);
+        }
 
         _requireScope(volumeSpec, subject, vol.scope);
         _requireScope(cleanSpec, subject, cln.scope);
@@ -285,8 +436,12 @@ contract UtuhCredit {
 
         l.drawn += amount;
         l.repayRequired += repayRequired;
-        l.dueBlock = uint64(block.number) + repayWindow;
         available -= amount;
+
+        // The deadline is set by the first draw and never moves. Letting a later draw reset it
+        // would hand a borrower who owes money an unlimited extension for the price of drawing
+        // one more wei.
+        if (l.dueBlock == 0) l.dueBlock = uint64(block.number) + repayWindow;
 
         emit Drawn(lineId, amount, l.dueBlock, l.repayRequired);
         _pay(msg.sender, amount);
@@ -306,6 +461,9 @@ contract UtuhCredit {
         bytes32 got = EventScope.id(rc.scope);
         if (got != l.repayScopeId) revert ScopeMismatch(l.repayScopeId, got);
         if (rc.fromBlock < l.repayFrom) revert RangeMismatch();
+
+        if (claimSpent[repayClaimId]) revert ClaimAlreadySpent(repayClaimId);
+        claimSpent[repayClaimId] = true;
 
         _requireUsable(repayClaimId, l.drawn / BOND_MULTIPLE);
 

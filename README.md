@@ -126,6 +126,29 @@ between them is a price. This contract has no oracle and does not pretend to: th
 `VOLUME_UNIT_IN_CTC` at deployment, in the open, where anyone can judge it. A lender wanting a live
 price puts a feed in front of this contract rather than having the protocol invent one.
 
+### Reading a history is not the same as owning it
+
+Underwriting reads a public chain. Nothing about reading it proves the reader holds the key that
+wrote it, so before a line opens the borrower must bind their Ethereum address to their Creditcoin
+account:
+
+```
+calldata = bytes12("utuh:control") || <creditcoin account>
+```
+
+One ordinary transaction from the subject address carrying exactly that. `proveControl` verifies
+it through the Block Prover and reads the sender out of the decoded transaction — no signature
+scheme of our own, no trusted relayer. The tag stops the commitment colliding with real calldata,
+and naming the account inside it stops anyone replaying someone else's commitment.
+
+Any supported source chain will do: an EOA address derives from its public key and is identical on
+all of them, so Sepolia gas proves exactly as much as mainnet gas.
+
+Two smaller rules close the same class of hole. A finalized claim is **spent** when it opens a
+line, so one underwriting funds one line and the bond cap bounds aggregate exposure rather than
+each line separately. And a line's deadline is fixed by its first draw and never moves — otherwise
+a borrower who owes money could buy an unlimited extension by drawing one more wei.
+
 ### Default without proving a negative
 
 A drawn line is settled by the borrower proving repayment landed at the lender's Ethereum address.
@@ -137,9 +160,9 @@ it. Silence is the default condition, not an inference.
 
 | Contract | Address |
 |---|---|
-| `UtuhRegistry` | `0x2dE6FD16009A101Fd1142f95F912583Fe3cf7cc1` |
-| `UtuhCredit` | `0x10cf64da2692fc2d691d7F3F1f8955b04Ec2373C` |
-| `EvmV1Decoder` | `0x8Ba1e39592d2fE9E33a9224aE66cb87C4521082C` |
+| `UtuhRegistry` | `0x7E7cB18E7AB6712e3EEc4698B8bc6b69d4Bb2AB2` |
+| `UtuhCredit` | `0xcf463ab392C2c6Aea5c7B85DCd5896205CF086A9` |
+| `EvmV1Decoder` | `0x0F7e78a4a34af477882AF9124a6559485a3E91aa` |
 
 Both demos below were run against these, on Ethereum mainnet data.
 
@@ -153,11 +176,13 @@ src/
   interfaces/IBlockProver.sol   0x0FD2 — Merkle + continuity verification
   interfaces/IChainInfo.sol     0x0FD3 — attestation frontier and coverage
 test/
-  EventScope.t.sol          21 tests over the matcher, ordering key and leaf identity
+  EventScope.t.sol          the matcher, ordering key, metrics and leaf identity
+  UtuhCredit.t.sol          deployment floors, control binding, scope identity, liquidity
 offchain/
   deploy.ts                 deploy decoder, registry, credit
   e2e.ts                    honest claim finalized; dishonest claim refuted and slashed
   creditDemo.ts             underwrite a real Aave borrower; refute a real liquidated one
+  proveControl.ts           bind a source-chain address to a Creditcoin account
   balance.ts                wallet, chain and attestation status
   lib/scope.ts              independent source-chain sweep
   lib/proofs.ts             Proof Builder batching within Attestcoin's limits
@@ -177,6 +202,7 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 npm run deploy
 npm run e2e                 # the registry, both outcomes
 npm run credit              # the credit line, on a real Aave borrower
+npm run control             # bind your own address (needs a little source-chain gas)
 
 npm run demo                # all three in sequence, for recording
 ```
@@ -197,6 +223,7 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `MAINNET_RPC` | `https://gateway.tenderly.co/public/mainnet` | see below |
 | `MIN_CHALLENGE_WINDOW` | `25` | Creditcoin blocks, deploy-time floor |
 | `VOLUME_UNIT_IN_CTC` | `15000000000000` | CTC wei per USDC unit; the lender's stated rate |
+| `CONTROL_CHAIN_KEY` | `1` (Sepolia) | which source chain to send the control commitment on |
 | `LENDER_MAINNET` | Binance hot wallet | where repayment must land on Ethereum |
 
 A watcher's whole job is sweeping a claim's range independently, so the source-chain RPC has to
@@ -210,8 +237,11 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-`test/EventScope.t.sol` covers the pure half: ordering, scope matching, metrics, scope and leaf
-identity, plus two fuzz properties on the key.
+38 tests over the half that can run in a plain EVM: ordering and scope matching in
+`EventScope.t.sol`, and in `UtuhCredit.t.sol` the guards that decide whose history a line may be
+opened against — deployment floors, the control commitment's layout, scope identity, and the
+lender's liquidity. Neither contract's constructor touches a precompile, so both deploy locally;
+what cannot run locally is anything that reaches one.
 
 The proving half is **not** unit tested, deliberately. The Attestcoin precompiles at `0x0FD2` and
 `0x0FD3` are Creditcoin runtime natives — `eth_getCode` returns `0x` for both:
@@ -256,6 +286,8 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 | `calculateTxIndex` on `0x0FD2` | ordering key, taken from the proof rather than the caller |
 | `EvmV1Decoder` receipt + log decoding | scope matching against verified bytes |
 | receipt status check | inclusion is not success; a reverted transaction is still in its block |
+| Single `verifyAndEmit` on `0x0FD2` | `proveControl` — binding an address to an account |
+| `decodeCommonTxFields` | reading a control commitment's sender and calldata |
 | `is_height_attested` on `0x0FD3` | the gate that makes challenge windows sound |
 | `get_latest_attestation_height_and_hash` | underwriting staleness bound |
 | `get_attestation_genesis_height` | lower bound on claimable ranges |
@@ -272,6 +304,10 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
   messaging.
 - Completeness here is economic, not cryptographic. A bond makes lying expensive; it does not make
   it impossible.
+- Binding an address costs the borrower one source-chain transaction. That is a real onboarding
+  step, and there is no way around it that does not reintroduce the hole it closes. `npm run credit`
+  therefore stops at `SubjectNotControlled` when pointed at a stranger's history — the refusal is
+  the demonstration.
 
 ## License
 

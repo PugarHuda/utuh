@@ -176,36 +176,33 @@ async function main() {
   }
 
   // ------------------------------------------------------------------
-  console.log('\n=== 4. opening the credit line ===');
+  console.log('\n=== 4. the line is refused, and that is the point ===');
   const volumeAggregate: bigint = (await registry.claim(volumeClaim.claimId)).aggregate;
   const cleanBond: bigint = (await registry.claim(cleanClaim.claimId)).bondPosted;
-  const openTx = await credit.openLine(goodBorrower, volumeClaim.claimId, cleanClaim.claimId);
-  const openReceipt = await openTx.wait();
-  const lineId = readLineId(credit, openReceipt);
-  const line = await credit.line(lineId);
-  console.log(`  line ${lineId} for ${goodBorrower}`);
-  const rate = await credit.VOLUME_UNIT_IN_CTC();
-  const uncapped = (volumeAggregate * BigInt(rate) * 2000n) / 10_000n;
+  const rate: bigint = await credit.VOLUME_UNIT_IN_CTC();
+
   console.log(`  proven volume ${formatUnits(volumeAggregate, 6)} USDC at ${rate} wei/unit`);
-  console.log(`  20% of that = ${formatEther(uncapped)} CTC`);
+  console.log(`  20% of that = ${formatEther((volumeAggregate * rate * 2000n) / 10_000n)} CTC`);
   console.log(`  bond cap    = ${formatEther(cleanBond * 10n)} CTC  (10x the clean claim's bond)`);
-  console.log(`  limit ${formatEther(line.limit)} CTC`);
 
-  const fundAmount = line.limit;
-  const bal = await wallet.provider!.getBalance(wallet.address);
-  if (bal > fundAmount + parseEther('1')) {
-    await (await credit.fund({ value: fundAmount })).wait();
-    console.log(`  lender funded ${formatEther(fundAmount)} CTC`);
-
-    const drawTx = await credit.draw(lineId, fundAmount, 1_000_000n, 30);
-    await drawTx.wait();
-    const drawn = await credit.line(lineId);
-    console.log(`  borrower drew ${formatEther(drawn.drawn)} CTC on Creditcoin`);
-    console.log(`  must prove 1.0 USDC repaid to the lender on Ethereum by CC3 block ${drawn.dueBlock}`);
-    console.log('  no proof by then and the line defaults — the contract never has to show a payment was missed');
-  } else {
-    console.log('  skipping draw: not enough CTC left to fund the line');
+  // Everything above was read off a public chain. Reading a history is not the same as holding
+  // the key that wrote it, so the line must not open for whoever happens to ask.
+  try {
+    await credit.openLine.staticCall(goodBorrower, volumeClaim.claimId, cleanClaim.claimId);
+    throw new Error('openLine should have refused: control of the subject was never proven');
+  } catch (e: any) {
+    const named = String(e.revert?.name ?? e.shortMessage ?? e.message);
+    if (!named.includes('SubjectNotControlled')) throw e;
+    console.log('  openLine reverted: SubjectNotControlled');
+    console.log(`    subject ${goodBorrower}`);
+    console.log(`    caller  ${wallet.address}`);
   }
+
+  const commitment: string = await credit.controlCommitment(wallet.address);
+  console.log('\n  to finish the loop the borrower sends one Ethereum transaction from their own');
+  console.log('  address, carrying exactly this calldata:');
+  console.log(`    ${commitment}`);
+  console.log('  then calls proveControl() with its Attestcoin proof — see npm run control.');
 
   console.log('\nDone.');
 }
@@ -215,18 +212,6 @@ function pickBorrower(repayCount: Map<string, number>, liquidated: Set<string>):
     if (n >= 2 && n <= 6 && !liquidated.has(user)) return user;
   }
   return null;
-}
-
-function readLineId(credit: Contract, receipt: any): bigint {
-  for (const rawLog of receipt.logs) {
-    try {
-      const parsed = credit.interface.parseLog(rawLog);
-      if (parsed?.name === 'LineOpened') return parsed.args[0] as bigint;
-    } catch {
-      /* not ours */
-    }
-  }
-  throw new Error('LineOpened not found');
 }
 
 function statusName(s: bigint | number): string {

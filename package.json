@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "forge test",
     "probe": "tsx offchain/probe.ts",
-    "demo": "npm run deploy && npm run e2e && npm run credit"
+    "demo": "npm run deploy && npm run e2e && npm run credit",
+    "control": "tsx offchain/proveControl.ts"
   },
   "keywords": [],
   "author": "",
