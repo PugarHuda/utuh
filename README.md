@@ -6,6 +6,8 @@
 
 Built for BUIDL CTC 2026 Fall on Creditcoin.
 
+**Technical brief:** https://claude.ai/code/artifact/2caca05b-c659-463f-b5ca-28e207f95147
+
 ---
 
 ## The problem
@@ -175,6 +177,8 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 npm run deploy
 npm run e2e                 # the registry, both outcomes
 npm run credit              # the credit line, on a real Aave borrower
+
+npm run demo                # all three in sequence, for recording
 ```
 
 CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:

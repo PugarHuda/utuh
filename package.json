@@ -11,7 +11,8 @@
     "balance": "tsx offchain/balance.ts",
     "typecheck": "tsc --noEmit",
     "test": "forge test",
-    "probe": "tsx offchain/probe.ts"
+    "probe": "tsx offchain/probe.ts",
+    "demo": "npm run deploy && npm run e2e && npm run credit"
   },
   "keywords": [],
   "author": "",
