@@ -171,9 +171,9 @@ it. Silence is the default condition, not an inference.
 
 | Contract | Address |
 |---|---|
-| `UtuhRegistry` | `0x7E7cB18E7AB6712e3EEc4698B8bc6b69d4Bb2AB2` |
-| `UtuhCredit` | `0xcf463ab392C2c6Aea5c7B85DCd5896205CF086A9` |
-| `EvmV1Decoder` | `0x0F7e78a4a34af477882AF9124a6559485a3E91aa` |
+| `UtuhRegistry` | `0xc40a9b36fd2070407159f767983EC11Cb1D0428E` |
+| `UtuhCredit` | `0xd978248cbB62F43B75b39A35e5B8990B45e7B167` |
+| `EvmV1Decoder` | `0xF0f348c48E8e590898b915e17Bb8cad8Db590048` |
 
 `npm run credit` runs against these, on Ethereum mainnet data.
 
@@ -181,12 +181,15 @@ it. Silence is the default condition, not an inference.
 
 | Contract | Address |
 |---|---|
-| `UtuhRegistry` | `0x382b0Bb3CbC09B08Be8190bd746DA9A275Ab7B25` |
-| `UtuhCredit` | `0x407a775B986E600FBFBE336158F106c4c3038B38` |
-| `SettlementLedger` (Sepolia) | `0xA551228235a00B5e01bcb223590746Ef93c2C4b2` |
+| `UtuhRegistry` | `0xC86a454B32d44db77E09DAcAd99880Dc6b68687b` |
+| `UtuhCredit` | `0x20D39852003d070a84B05C0931C2f40158e9323C` |
+| `SettlementLedger` (Sepolia) | `0x81e387D59E2112FDC5c89d71DC76fB92041EcF83` |
 
 Claim 1 volume finalized at 0.003 ETH over three payments, claim 2 clean finalized empty, claim 3
-refuted, claim 4 repayment finalized at 0.0012 ETH — and line 1 `Settled`.
+refuted, claim 4 repayment finalized at 0.00063 ETH — and line 1 `Settled`.
+
+That 0.00063 is the point of the last fix: drawing 12 CTC at the lender's stated rate and 105%
+terms obliges exactly that much back, and the borrower had no say in the figure.
 
 ## Two demonstrations, and why there are two
 
