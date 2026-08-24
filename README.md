@@ -185,9 +185,9 @@ it. Silence is the default condition, not an inference.
 
 | Contract | Address |
 |---|---|
-| `UtuhRegistry` | `0xc40a9b36fd2070407159f767983EC11Cb1D0428E` |
-| `UtuhCredit` | `0xd978248cbB62F43B75b39A35e5B8990B45e7B167` |
-| `EvmV1Decoder` | `0xF0f348c48E8e590898b915e17Bb8cad8Db590048` |
+| `UtuhRegistry` | `0x983E285adF23e7542409ac784c6d981058Aa5708` |
+| `UtuhCredit` | `0x1e8fb3a280c0c941016f9ab2Fbe7e2aC44098E0C` |
+| `EvmV1Decoder` | `0xB8eF962325f5602ACE6d1799Cd323D6E56C26775` |
 
 `npm run credit` runs against these, on Ethereum mainnet data.
 
@@ -195,15 +195,18 @@ it. Silence is the default condition, not an inference.
 
 | Contract | Address |
 |---|---|
-| `UtuhRegistry` | `0xC86a454B32d44db77E09DAcAd99880Dc6b68687b` |
-| `UtuhCredit` | `0x20D39852003d070a84B05C0931C2f40158e9323C` |
-| `SettlementLedger` (Sepolia) | `0x81e387D59E2112FDC5c89d71DC76fB92041EcF83` |
+| `UtuhRegistry` | `0xEE2dA77a8d37D8a6f6c36845e049589944e9b1E4` |
+| `UtuhCredit` | `0x970291F83BBC287a5E19b4CC5f806C0Ff06eCc66` |
+| `SettlementLedger` (Sepolia) | `0x1d13924636c59a6a9CC8Ebc3aaa3c988e256A56d` |
 
 Claim 1 volume finalized at 0.003 ETH over three payments, claim 2 clean finalized empty, claim 3
-refuted, claim 4 repayment finalized at 0.00063 ETH — and line 1 `Settled`.
+refuted, claim 4 repayment finalized at 0.000525 ETH — and line 1 `Settled`.
 
-That 0.00063 is the point of the last fix: drawing 12 CTC at the lender's stated rate and 105%
-terms obliges exactly that much back, and the borrower had no say in the figure.
+Two figures in that run are the last two fixes, visible. The limit is **10 CTC**, not the 12 the
+volume would justify: a 2 CTC bond guarantees a 1 CTC loss, and ten times that is the ceiling.
+And 0.000525 ETH is what drawing 10 CTC obliges at the lender's rate and 105% terms — the borrower
+had no say in the figure. Afterwards `settledThrough` for that subject reads 11554020, so the
+payment behind it cannot discharge a second line.
 
 ## Two demonstrations, and why there are two
 
