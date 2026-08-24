@@ -200,9 +200,9 @@ it. Silence is the default condition, not an inference.
 
 | Contract | Address |
 |---|---|
-| `UtuhRegistry` | `0x983E285adF23e7542409ac784c6d981058Aa5708` |
-| `UtuhCredit` | `0x1e8fb3a280c0c941016f9ab2Fbe7e2aC44098E0C` |
-| `EvmV1Decoder` | `0xB8eF962325f5602ACE6d1799Cd323D6E56C26775` |
+| `UtuhRegistry` | `0x3e25268549F4a11A7Dca04c7B56e9c865Ce37710` |
+| `UtuhCredit` | `0x923fD30c312Af140C71c246BBAc19f05C85ee08c` |
+| `EvmV1Decoder` | `0x493182aCD8bae67F76f4e692318b999a65E5D030` |
 
 `npm run credit` runs against these, on Ethereum mainnet data.
 
@@ -210,12 +210,14 @@ it. Silence is the default condition, not an inference.
 
 | Contract | Address |
 |---|---|
-| `UtuhRegistry` | `0xEE2dA77a8d37D8a6f6c36845e049589944e9b1E4` |
-| `UtuhCredit` | `0x970291F83BBC287a5E19b4CC5f806C0Ff06eCc66` |
-| `SettlementLedger` (Sepolia) | `0x1d13924636c59a6a9CC8Ebc3aaa3c988e256A56d` |
+| `UtuhRegistry` | `0x98D1A55dd1C7Eb0BB31BD8D6C5fC850Cdb0467a1` |
+| `UtuhCredit` | `0xAdee7d0ab93978cABAd22b2cb2eB66F6B562eE6e` |
+| `SettlementLedger` (Sepolia) | `0x2f92Bd9E8F97c9e7e2Af0DCB3Bde86A72335B064` |
 
 Claim 1 volume finalized at 0.003 ETH over three payments, claim 2 clean finalized empty, claim 3
-refuted, claim 4 repayment finalized at 0.000525 ETH — and line 1 `Settled`.
+refuted, claim 4 repayment finalized at 0.000525 ETH — and line 1 `Settled`. The borrower's own
+sweep for that run read `publicnode=3  drpc=err  1rpc=3`: two independent endpoints agreeing, one
+down, and the claim built on the union rather than on whichever one answered first.
 
 Two figures in that run are the last two fixes, visible. The limit is **10 CTC**, not the 12 the
 volume would justify: a 2 CTC bond guarantees a 1 CTC loss, and ten times that is the ceiling.
@@ -327,7 +329,7 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-50 tests over the half that can run in a plain EVM: ordering and scope matching in
+54 tests over the half that can run in a plain EVM: ordering and scope matching in
 `EventScope.t.sol`, and in `UtuhCredit.t.sol` the guards that decide whose history a line may be
 opened against — deployment floors, the control commitment's layout, scope identity, and the
 lender's liquidity. Neither contract's constructor touches a precompile, so both deploy locally;
