@@ -399,9 +399,37 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —
   refuting pays only when the claimant fails to defend, so watching is worth less than the reward
   suggests.
-- The watcher in `offchain/watch.ts` is one process sweeping with one RPC. It demonstrates that
-  the role is mechanical and unprivileged, which is the part that matters; it is not a redundant
-  network, and a claim is only as safe as somebody bothering to run something like it.
+- **A watcher's silence is only as good as its sources.** Deciding a claim is complete means
+  trusting some node to have mentioned every log — the protocol's own problem, one layer down.
+  Voting across endpoints would not fix it, since they can be wrong together or captured. What
+  makes it tractable is that a refutation verifies itself: if *any* endpoint surfaces an event the
+  claim omits, the Block Prover settles whether it is real, and a fabricated one just fails to
+  prove. So `watch.ts` sweeps every endpoint it has and takes the union rather than a vote, and no
+  endpoint has to be trusted for the positive case. The negative stays soft, and is reported that
+  way — "no gap found across 3 endpoints", or "inconclusive, 1 answered". Public RPCs tested here
+  error rather than truncate, which is a property of those vendors and not of the design.
+
+- **The mechanism punishes scale.** One omission voids the whole claim, and there is no amend
+  path — by design, since amending after being caught would defeat it. A five-thousand-member
+  claim therefore has five thousand chances to be fatally wrong, and a rational claimant answers
+  by claiming over short windows instead. A completeness guarantee over a short window is worth
+  much less than one over a long one. The cheapness of settling and the fragility of building are
+  the same property seen from two sides.
+
+- **The bond is flat; the harm is not.** Omitting a dust transfer and omitting a liquidation cost
+  a claimant exactly the same, and the bond is fixed at open, before anyone knows what will be
+  left out. Deterrence should scale with what the lie is worth and here it does not.
+
+- **Honest claims pay watchers nothing.** A refutation only earns when someone lied. If the
+  mechanism works, almost nobody does, and a watcher spends RPC quota and gas sweeping claims that
+  turn out fine. The better the deterrent works, the less there is to fund the watching that makes
+  it a deterrent.
+
+- **A claim covers one event signature from one contract.** A real borrower's history is spread
+  across Aave, Compound, Morpho and whatever else, and nothing composes those: you would file one
+  claim per protocol, each with its own bond and its own window, and the registry would not relate
+  them. `EventScope` also cannot match on non-indexed data, which rules out any protocol that
+  keeps the subject out of its topics.
 - Binding an address costs the borrower one source-chain transaction. That is a real onboarding
   step, and there is no way around it that does not reintroduce the hole it closes. `npm run credit`
   therefore stops at `SubjectNotControlled` when pointed at a stranger's history — the refusal is

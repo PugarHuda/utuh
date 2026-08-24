@@ -1,4 +1,4 @@
-import { JsonRpcProvider } from 'ethers';
+import { JsonRpcProvider, FetchRequest } from 'ethers';
 import 'dotenv/config';
 
 /// Creditcoin CC3 Testnet. Chain id verified live: eth_chainId -> 0x18e8f (102031).
@@ -27,6 +27,63 @@ export const SOURCE_RPC: Record<number, string> = {
 
 export const cc3 = () => new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
 export const source = (chainKey: number) => new JsonRpcProvider(SOURCE_RPC[chainKey]);
+
+/// Independent endpoints for the same chain, for anything that needs a second opinion.
+///
+/// A watcher concluding "this claim is complete" is trusting one node to have told it about every
+/// log. That is the protocol's own problem reappearing one layer down, and one endpoint cannot
+/// detect it. Set MAINNET_RPCS / SEPOLIA_RPCS to comma-separated URLs to widen it.
+export const SOURCE_RPCS: Record<number, string[]> = {
+  [CHAIN_KEY.mainnet]: (process.env.MAINNET_RPCS ?? '')
+    .split(',')
+    .map((u) => u.trim())
+    .filter(Boolean)
+    .concat([SOURCE_RPC[CHAIN_KEY.mainnet], 'https://rpc.mevblocker.io', 'https://ethereum-rpc.publicnode.com']),
+  [CHAIN_KEY.sepolia]: (process.env.SEPOLIA_RPCS ?? '')
+    .split(',')
+    .map((u) => u.trim())
+    .filter(Boolean)
+    .concat([SOURCE_RPC[CHAIN_KEY.sepolia], 'https://sepolia.drpc.org', 'https://1rpc.io/sepolia']),
+};
+
+/// Milliseconds an endpoint gets before it is treated as absent.
+/// A watcher is racing a challenge window; a node that never answers has to cost it a timeout,
+/// not the whole sweep.
+export const SOURCE_TIMEOUT_MS = Number(process.env.SOURCE_TIMEOUT_MS ?? 25_000);
+
+/// EVM chain ids for the source chains, so providers never have to go and ask.
+///
+/// Without this ethers probes for the network on first use and, when an endpoint is unreachable,
+/// retries that probe once a second forever — in the background, after the caller has already
+/// given up. The abandoned timer then keeps the process alive and floods stderr, which is how a
+/// watcher ends up unable to exit. Declaring the network removes the probe entirely.
+export const SOURCE_CHAIN_ID: Record<number, number> = {
+  [CHAIN_KEY.mainnet]: 1,
+  [CHAIN_KEY.sepolia]: 11155111,
+};
+
+export const sources = (chainKey: number) =>
+  [...new Set(SOURCE_RPCS[chainKey] ?? [SOURCE_RPC[chainKey]])].map((url) => {
+    const request = new FetchRequest(url);
+    request.timeout = SOURCE_TIMEOUT_MS;
+    return {
+      url,
+      provider: new JsonRpcProvider(request, SOURCE_CHAIN_ID[chainKey], { staticNetwork: true }),
+    };
+  });
+
+/// Give up on `work` after `ms`, so one unresponsive endpoint cannot stall a sweep.
+export async function withDeadline<T>(ms: number, work: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const bell = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([work, bell]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
 
 /// Well-known mainnet fixtures used by the demo flows.
 export const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';

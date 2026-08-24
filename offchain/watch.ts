@@ -1,6 +1,6 @@
 import { Contract, JsonRpcProvider, formatEther } from 'ethers';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, PROVER_URL, source, requirePrivateKey } from './config';
+import { CC3_RPC, CC3_CHAIN_ID, PROVER_URL, sources, withDeadline, SOURCE_TIMEOUT_MS, requirePrivateKey } from './config';
 import { readDeployments, registryAt, signer } from './lib/contracts';
 import { scanScope, eventKey, type Scope, type Metric } from './lib/scope';
 import { Prover } from './lib/proofs';
@@ -99,9 +99,51 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
     metricArg: Number(claim.scope.metricArg),
   };
 
-  const eth = source(scope.chainKey);
-  const events = await scanScope(eth, scope, Number(claim.fromBlock), Number(claim.toBlock), 500);
-  console.log(`  swept the range independently: ${events.length} in-scope event(s) on chain`);
+  // Sweep every endpoint we have, and take the union rather than a vote.
+  //
+  // A watcher that asks one node whether a claim is complete has swapped trusting the claimant for
+  // trusting a node operator — the same problem, one layer down. Voting would not fix it either,
+  // since a majority of endpoints can be wrong together or captured.
+  //
+  // What makes this tractable is that a refutation verifies itself. If any single endpoint
+  // mentions an event the claim omits, the Block Prover settles whether it is real; a fabricated
+  // one simply fails to prove and costs the watcher its gas. So the widest possible set of
+  // candidates is the right input, and no endpoint has to be trusted for the *positive* case.
+  //
+  // The negative case is the one that stays soft. "No gap found" is only ever as strong as the
+  // endpoints that looked, which is why it is reported with its provenance rather than as a fact.
+  const endpoints = sources(scope.chainKey);
+  const byKey = new Map<bigint, any>();
+  const counts: string[] = [];
+  let answered = 0;
+
+  for (const { url, provider } of endpoints) {
+    try {
+      const seen = await withDeadline(
+        SOURCE_TIMEOUT_MS,
+        scanScope(provider, scope, Number(claim.fromBlock), Number(claim.toBlock), 500),
+      );
+      answered++;
+      counts.push(`${host(url)}=${seen.length}`);
+      for (const e of seen) byKey.set(eventKey(e), e);
+    } catch {
+      counts.push(`${host(url)}=err`);
+    } finally {
+      // Release the endpoint's sockets and timers. An abandoned provider keeps retrying on its
+      // own and would stop the process from ever exiting.
+      provider.destroy();
+    }
+  }
+
+  if (answered === 0) {
+    console.log('  no endpoint answered — cannot say anything about this claim');
+    return;
+  }
+
+  const events = [...byKey.values()].sort((a, b) => (eventKey(a) < eventKey(b) ? -1 : 1));
+  const agreed = new Set(counts.filter((c) => !c.endsWith('=err')).map((c) => c.split('=')[1])).size <= 1;
+  console.log(`  swept independently: ${counts.join('  ')}${agreed ? '' : '  <-- endpoints disagree'}`);
+  console.log(`  union: ${events.length} in-scope event(s)`);
 
   const gaps = [];
   for (const e of events) {
@@ -109,7 +151,11 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
   }
 
   if (gaps.length === 0) {
-    console.log('  complete — nothing to refute');
+    if (answered < 2) {
+      console.log(`  no gap found — but only ${answered} endpoint answered, so this is inconclusive`);
+    } else {
+      console.log(`  no gap found across ${answered} independent endpoints`);
+    }
     return;
   }
 
@@ -126,6 +172,14 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
   const { reward, key } = await refuteClaim(registry, prover, claimId, gap);
   console.log(`  refuted with one proof. key ${key}`);
   console.log(`  reward ${formatEther(reward)} CTC`);
+}
+
+function host(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 }
 
 function statusName(s: bigint | number): string {
