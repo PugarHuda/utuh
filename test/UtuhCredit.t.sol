@@ -43,7 +43,19 @@ contract UtuhCreditTest is Test {
 
     function setUp() public {
         registry = new UtuhRegistry(WINDOW);
-        credit = new UtuhCredit(registry, _policy(RATE, WINDOW), _spec(2, 0), _spec(3, 0), _spec(1, 2));
+        credit = new UtuhCredit(registry, _policy(RATE, WINDOW), _spec(2, 0), _cleanSet(), _spec(1, 2));
+    }
+
+    function _cleanSet() internal pure returns (UtuhCredit.HistorySpec[] memory set) {
+        set = new UtuhCredit.HistorySpec[](1);
+        set[0] = _spec(3, 0);
+    }
+
+    /// @notice Two adverse-event classes, as a lender watching more than one protocol would have.
+    function _cleanSet2() internal pure returns (UtuhCredit.HistorySpec[] memory set) {
+        set = new UtuhCredit.HistorySpec[](2);
+        set[0] = _spec(3, 0);
+        set[1] = _spec(2, 0);
     }
 
     function _spec(uint8 subjectTopic, uint8 counterpartyTopic)
@@ -77,7 +89,7 @@ contract UtuhCreditTest is Test {
     function test_creditRejectsWindowBelowRegistryFloor() public {
         uint64 floor = registry.ABSOLUTE_MIN_CHALLENGE_WINDOW();
         vm.expectRevert(abi.encodeWithSelector(UtuhCredit.WindowTooShort.selector, floor - 1, floor));
-        new UtuhCredit(registry, _policy(RATE, floor - 1), _spec(2, 0), _spec(3, 0), _spec(1, 2));
+        new UtuhCredit(registry, _policy(RATE, floor - 1), _spec(2, 0), _cleanSet(), _spec(1, 2));
     }
 
     /// @notice A volume aggregate is in the reserve asset's units; a line is in CTC wei. Crossing
@@ -85,13 +97,13 @@ contract UtuhCreditTest is Test {
     ///         credit at all rather than silently extending dust.
     function test_creditRejectsZeroRate() public {
         vm.expectRevert(UtuhCredit.NoCredit.selector);
-        new UtuhCredit(registry, _policy(0, WINDOW), _spec(2, 0), _spec(3, 0), _spec(1, 2));
+        new UtuhCredit(registry, _policy(0, WINDOW), _spec(2, 0), _cleanSet(), _spec(1, 2));
     }
 
     function test_creditRejectsSpecWithSameSubjectAndCounterpartyTopic() public {
         UtuhCredit.HistorySpec memory bad = _spec(1, 1);
         vm.expectRevert(abi.encodeWithSelector(UtuhCredit.BadSubjectTopic.selector, uint8(1)));
-        new UtuhCredit(registry, _policy(RATE, WINDOW), bad, _spec(3, 0), _spec(1, 2));
+        new UtuhCredit(registry, _policy(RATE, WINDOW), bad, _cleanSet(), _spec(1, 2));
     }
 
     // ------------------------------------------------------------------
@@ -104,7 +116,7 @@ contract UtuhCreditTest is Test {
     function test_openLineRefusesUnprovenSubject() public {
         vm.prank(BOB);
         vm.expectRevert(abi.encodeWithSelector(UtuhCredit.SubjectNotControlled.selector, ALICE, BOB));
-        credit.openLine(ALICE, 1, 2);
+        credit.openLine(ALICE, 1, _ids(2));
     }
 
     /// @notice The refusal is about the caller, not the address — even asking about yourself fails
@@ -112,7 +124,7 @@ contract UtuhCreditTest is Test {
     function test_openLineRefusesEvenForSelf() public {
         vm.prank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(UtuhCredit.SubjectNotControlled.selector, ALICE, ALICE));
-        credit.openLine(ALICE, 1, 2);
+        credit.openLine(ALICE, 1, _ids(2));
     }
 
     function test_controllerStartsUnset() public view {
@@ -251,14 +263,14 @@ contract UtuhCreditTest is Test {
         UtuhCredit.Policy memory p = _policy(RATE, WINDOW);
         p.repaymentBps = 9_999;
         vm.expectRevert(UtuhCredit.BadTerms.selector);
-        new UtuhCredit(registry, p, _spec(2, 0), _spec(3, 0), _spec(1, 2));
+        new UtuhCredit(registry, p, _spec(2, 0), _cleanSet(), _spec(1, 2));
     }
 
     function test_rejectsZeroRepayWindow() public {
         UtuhCredit.Policy memory p = _policy(RATE, WINDOW);
         p.repayWindowBlocks = 0;
         vm.expectRevert(UtuhCredit.BadTerms.selector);
-        new UtuhCredit(registry, p, _spec(2, 0), _spec(3, 0), _spec(1, 2));
+        new UtuhCredit(registry, p, _spec(2, 0), _cleanSet(), _spec(1, 2));
     }
 
     function test_termsAreReadable() public view {
@@ -314,6 +326,55 @@ contract UtuhCreditTest is Test {
     function test_settlementWatermarkStartsUnset() public view {
         assertEq(credit.settledThrough(ALICE), 0);
         assertEq(credit.settledThrough(BOB), 0);
+    }
+
+    function _ids(uint256 a) internal pure returns (uint256[] memory ids) {
+        ids = new uint256[](1);
+        ids[0] = a;
+    }
+
+    // ------------------------------------------------------------------
+    // More than one protocol
+    // ------------------------------------------------------------------
+
+    /// @notice A borrower with a spotless Aave record and a liquidated Compound position is not
+    ///         clean, and a lender that asked about one contract would never find out. So a line
+    ///         needs one empty claim per class the lender configured.
+    function test_cleanSpecsAreListedAndRequiredInFull() public {
+        UtuhCredit two = new UtuhCredit(registry, _policy(RATE, WINDOW), _spec(2, 0), _cleanSet2(), _spec(1, 2));
+        assertEq(two.cleanSpecCount(), 2);
+        assertEq(two.cleanSpecAt(0).subjectTopic, 3);
+        assertEq(two.cleanSpecAt(1).subjectTopic, 2);
+    }
+
+    /// @notice Control is checked first, before the shape of the request. Someone who does not
+    ///         hold the address gets turned away on that, and never learns whether their claim
+    ///         list would have been the right length.
+    function test_controlIsCheckedBeforeTheClaimList() public {
+        UtuhCredit two = new UtuhCredit(registry, _policy(RATE, WINDOW), _spec(2, 0), _cleanSet2(), _spec(1, 2));
+        vm.prank(ALICE);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.SubjectNotControlled.selector, ALICE, ALICE));
+        two.openLine(ALICE, 1, _ids(2));
+    }
+
+    /// @notice A lender must configure at least one adverse-event class.
+    function test_deploymentNeedsAtLeastOneCleanSpec() public {
+        UtuhCredit.HistorySpec[] memory none = new UtuhCredit.HistorySpec[](0);
+        vm.expectRevert(UtuhCredit.NoCleanSpecs.selector);
+        new UtuhCredit(registry, _policy(RATE, WINDOW), _spec(2, 0), none, _spec(1, 2));
+    }
+
+    // ------------------------------------------------------------------
+    // Refunds are pulled, not pushed
+    // ------------------------------------------------------------------
+
+    /// @notice finalize is permissionless and pays the claimant, so pushing would let a claimant
+    ///         that cannot receive ether brick their own claim in Sealed forever — and with it
+    ///         anything waiting on it.
+    function test_withdrawStartsEmptyAndRefusesNothing() public {
+        assertEq(registry.withdrawable(address(this)), 0);
+        vm.expectRevert(UtuhRegistry.NothingToWithdraw.selector);
+        registry.withdraw();
     }
 
     receive() external payable {}

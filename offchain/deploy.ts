@@ -118,7 +118,7 @@ async function main() {
       repayWindowBlocks: REPAY_WINDOW_BLOCKS,
     },
     volumeSpec,
-    cleanSpec,
+    [cleanSpec],
     repaySpec,
   ], { EvmV1Decoder: decoderAddress });
   const creditAddress = await credit.getAddress();
@@ -127,6 +127,7 @@ async function main() {
   console.log(`  lender's stated rate: ${VOLUME_UNIT_IN_CTC} CTC wei per USDC unit`);
   console.log(`  accepts underwriting claims with a window of ${MIN_CHALLENGE_WINDOW}+ blocks`);
   console.log(`  terms: repay ${REPAYMENT_BPS / 100}% within ${REPAY_WINDOW_BLOCKS} CC3 blocks`);
+  console.log('  adverse classes: 1 (Aave V3 LiquidationCall) — add more to require more');
 
   writeDeployments({
     chainId: CC3_CHAIN_ID,

@@ -188,7 +188,7 @@ async function main() {
   // Everything above was read off a public chain. Reading a history is not the same as holding
   // the key that wrote it, so the line must not open for whoever happens to ask.
   try {
-    await credit.openLine.staticCall(goodBorrower, volumeClaim.claimId, cleanClaim.claimId);
+    await credit.openLine.staticCall(goodBorrower, volumeClaim.claimId, [cleanClaim.claimId]);
     throw new Error('openLine should have refused: control of the subject was never proven');
   } catch (e: any) {
     const named = String(e.revert?.name ?? e.shortMessage ?? e.message);

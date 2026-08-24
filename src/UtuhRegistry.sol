@@ -118,6 +118,14 @@ contract UtuhRegistry {
     /// @notice Bond value slashed and permanently locked in this contract.
     uint256 public burned;
 
+    /// @notice Refunds owed but not yet collected.
+    /// @dev Only {finalize} credits this. Every other payment in the registry goes to
+    ///      `msg.sender`, who can always receive it or else reverts their own transaction —
+    ///      but finalize is permissionless and pays the *claimant*, so a claimant that cannot
+    ///      accept ether would brick their own claim in `Sealed` forever, and with it anything
+    ///      waiting on it. Crediting instead of sending removes that.
+    mapping(address => uint256) public withdrawable;
+
     event ClaimOpened(
         uint256 indexed claimId,
         address indexed claimant,
@@ -130,6 +138,7 @@ contract UtuhRegistry {
     event EventAppended(uint256 indexed claimId, uint256 key, bytes32 leaf, uint256 value);
     event ClaimSealed(uint256 indexed claimId, uint256 memberCount, uint256 aggregate, uint64 challengeUntil);
     event ClaimFinalized(uint256 indexed claimId, uint256 aggregate, uint256 memberCount);
+    event Withdrawn(address indexed to, uint256 amount);
     event ClaimRefuted(uint256 indexed claimId, address indexed refuter, uint256 omittedKey, uint256 reward);
     event ClaimAbandoned(uint256 indexed claimId);
 
@@ -153,6 +162,7 @@ contract UtuhRegistry {
     error ChallengeWindowOpen(uint64 nowBlock, uint64 until);
     error EventAlreadyInSet(uint256 key);
     error TransferFailed();
+    error NothingToWithdraw();
 
     error ChallengeWindowFloorTooLow(uint64 given, uint64 floor);
 
@@ -370,9 +380,18 @@ contract UtuhRegistry {
         uint256 bond = c.bond;
         c.bond = 0;
         c.status = Status.Finalized;
+        withdrawable[c.claimant] += bond;
 
         emit ClaimFinalized(claimId, c.aggregate, _keys[claimId].length);
-        _pay(c.claimant, bond);
+    }
+
+    /// @notice Collect refunds credited by {finalize}.
+    function withdraw() external returns (uint256 amount) {
+        amount = withdrawable[msg.sender];
+        if (amount == 0) revert NothingToWithdraw();
+        withdrawable[msg.sender] = 0;
+        emit Withdrawn(msg.sender, amount);
+        _pay(msg.sender, amount);
     }
 
     // ------------------------------------------------------------------

@@ -409,27 +409,28 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
   way — "no gap found across 3 endpoints", or "inconclusive, 1 answered". Public RPCs tested here
   error rather than truncate, which is a property of those vendors and not of the design.
 
-- **The mechanism punishes scale.** One omission voids the whole claim, and there is no amend
-  path — by design, since amending after being caught would defeat it. A five-thousand-member
-  claim therefore has five thousand chances to be fatally wrong, and a rational claimant answers
-  by claiming over short windows instead. A completeness guarantee over a short window is worth
-  much less than one over a long one. The cheapness of settling and the fragility of building are
-  the same property seen from two sides.
+- **The mechanism punishes scale.** One omission voids the whole claim and there is no amend path
+  — by design, since amending after being caught would defeat it. So a five-thousand-member claim
+  has five thousand chances to be fatally wrong. Most of that risk was self-inflicted and is now
+  gone: claimants sweep the union of every endpoint (`sweepForClaim`) rather than betting a bond
+  on one node having mentioned every log, and a single-source sweep warns before it seals. What
+  remains is inherent — settling cheaply and building fragilely are one property seen from two
+  sides — and it still argues for shorter claims than the guarantee deserves.
 
-- **The bond is flat; the harm is not.** Omitting a dust transfer and omitting a liquidation cost
-  a claimant exactly the same, and the bond is fixed at open, before anyone knows what will be
-  left out. Deterrence should scale with what the lie is worth and here it does not.
+- **A claim covers one event signature from one contract.** `EventScope` cannot match on
+  non-indexed data either, which rules out protocols that keep the subject out of their topics.
+  Composition is now handled a level up: a lender configures as many adverse-event classes as it
+  cares about and `openLine` demands one finalized, empty claim for each, capping exposure at the
+  *weakest* of them. A spotless Aave record no longer says anything about Compound unless the
+  lender asked about Compound.
 
-- **Honest claims pay watchers nothing.** A refutation only earns when someone lied. If the
-  mechanism works, almost nobody does, and a watcher spends RPC quota and gas sweeping claims that
-  turn out fine. The better the deterrent works, the less there is to fund the watching that makes
-  it a deterrent.
-
-- **A claim covers one event signature from one contract.** A real borrower's history is spread
-  across Aave, Compound, Morpho and whatever else, and nothing composes those: you would file one
-  claim per protocol, each with its own bond and its own window, and the registry would not relate
-  them. `EventScope` also cannot match on non-indexed data, which rules out any protocol that
-  keeps the subject out of its topics.
+- **Honest claims pay watchers nothing, and there is no fix for that here.** A refutation earns
+  only when someone lied; if the deterrent works, almost nobody does, and a watcher spends RPC
+  quota and gas on claims that turn out fine. Paying watchers out of the burn pool was the obvious
+  patch and it does not work: any bonus large enough to matter is also recoverable by a claimant
+  refuting their own claim from a second address, which is the same front-running that made
+  `enforceableLoss` necessary. Funding a public good is not a problem this layer can solve, and a
+  token mechanism that pretends otherwise would be worse than the honest gap.
 - Binding an address costs the borrower one source-chain transaction. That is a real onboarding
   step, and there is no way around it that does not reintroduce the hole it closes. `npm run credit`
   therefore stops at `SubjectNotControlled` when pointed at a stranger's history — the refusal is

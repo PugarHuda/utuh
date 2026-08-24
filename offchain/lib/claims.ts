@@ -1,6 +1,7 @@
 import { Contract } from 'ethers';
 import type { Scope, ScopedEvent } from './scope';
-import { eventKey } from './scope';
+import { eventKey, scanScopeUnion } from './scope';
+import { sources, withDeadline, SOURCE_TIMEOUT_MS } from '../config';
 import { Prover, planBatches } from './proofs';
 
 export interface BuildOptions {
@@ -10,6 +11,43 @@ export interface BuildOptions {
   /// path can be exercised against a real omission rather than a hypothetical one.
   omit?: Set<bigint>;
   log?: (msg: string) => void;
+}
+
+/// Sweep a scope the way a claimant should: across every endpoint, and refusing to seal on the
+/// word of a single node.
+///
+/// An incomplete claim is indistinguishable from a dishonest one, and the penalty is the same. A
+/// claimant betting a bond on one RPC having told them about every log is taking a risk they did
+/// not choose and cannot see.
+export async function sweepForClaim(
+  scope: Scope,
+  fromBlock: number,
+  toBlock: number,
+  opts: { minSources?: number; chunkSize?: number; log?: (m: string) => void } = {},
+): Promise<ScopedEvent[]> {
+  const log = opts.log ?? (() => {});
+  const minSources = opts.minSources ?? 1;
+
+  const sweep = await scanScopeUnion(
+    sources(scope.chainKey),
+    scope,
+    fromBlock,
+    toBlock,
+    opts.chunkSize ?? 500,
+    (work) => withDeadline(SOURCE_TIMEOUT_MS, work),
+  );
+
+  log(`swept ${sweep.answered}/${sweep.attempted} endpoints: ${sweep.perSource.join('  ')}`);
+  if (sweep.answered < minSources) {
+    throw new Error(
+      `only ${sweep.answered} endpoint(s) answered and ${minSources} were required — ` +
+        'sealing on this would risk the bond on one node being complete',
+    );
+  }
+  if (sweep.answered === 1) {
+    log('WARNING: one endpoint answered. An omission it made would cost the bond.');
+  }
+  return sweep.events;
 }
 
 export interface BuiltClaim {

@@ -142,8 +142,15 @@ contract UtuhCredit {
     }
 
     HistorySpec public volumeSpec; // e.g. Aave V3 Repay(user)
-    HistorySpec public cleanSpec; // e.g. Aave V3 LiquidationCall(user)
     HistorySpec public repaySpec; // e.g. USDC Transfer(borrower -> lender)
+
+    /// @notice Every adverse-event class a borrower must come up clean on.
+    /// @dev A real history is spread across protocols, and one clean claim only ever speaks about
+    ///      the contract its scope names. A borrower with a spotless Aave record and a liquidated
+    ///      Compound position is not clean, and a lender that asked about Aave alone would never
+    ///      find out. So the lender lists what it cares about and a line requires one finalized,
+    ///      empty claim per entry.
+    HistorySpec[] private _cleanSpecs;
 
     address public immutable LENDER;
 
@@ -177,7 +184,7 @@ contract UtuhCredit {
         address indexed subject,
         uint256 limit,
         uint256 volumeClaimId,
-        uint256 cleanClaimId
+        uint256 cleanClaimCount
     );
     event Drawn(uint256 indexed lineId, uint256 amount, uint64 dueBlock, uint256 repayRequired);
     event Settled(uint256 indexed lineId, uint256 repayClaimId, uint256 proven);
@@ -213,6 +220,8 @@ contract UtuhCredit {
     error WindowTooShort(uint64 window, uint64 required);
     error NothingToWithdraw();
     error BadTerms();
+    error NoCleanSpecs();
+    error WrongNumberOfCleanClaims(uint256 given, uint256 required);
 
     /// @notice Thresholds the lender chooses, gathered so the constructor stays legible.
     struct Policy {
@@ -228,7 +237,7 @@ contract UtuhCredit {
         UtuhRegistry registry,
         Policy memory policy,
         HistorySpec memory volume,
-        HistorySpec memory clean,
+        HistorySpec[] memory clean,
         HistorySpec memory repay
     ) {
         uint256 volumeUnitInCtc = policy.volumeUnitInCtc;
@@ -249,11 +258,14 @@ contract UtuhCredit {
         CHAIN_INFO = ChainInfoLib.getChainInfo();
         PROVER = BlockProverLib.getProver();
         LENDER = msg.sender;
+        if (clean.length == 0) revert NoCleanSpecs();
         _requireSpec(volume);
-        _requireSpec(clean);
         _requireSpec(repay);
+        for (uint256 i = 0; i < clean.length; i++) {
+            _requireSpec(clean[i]);
+            _cleanSpecs.push(clean[i]);
+        }
         volumeSpec = volume;
-        cleanSpec = clean;
         repaySpec = repay;
     }
 
@@ -387,39 +399,29 @@ contract UtuhCredit {
 
     /// @notice Open a credit line for `subject`'s Ethereum history.
     /// @param volumeClaimId A finalized claim over the borrower's proven repayment volume.
-    /// @param cleanClaimId A finalized claim asserting the complete set of the borrower's
-    ///        liquidations over the same range — normally empty.
+    /// @param cleanClaimIds One finalized claim per configured adverse-event class, each
+    ///        asserting the complete set of the borrower's liquidations there — normally empty.
     /// @dev Both claims must cover the *same* source-chain range. Splitting them would let a
     ///      borrower pair a long volume history with a short clean window.
-    function openLine(address subject, uint256 volumeClaimId, uint256 cleanClaimId)
+    function openLine(address subject, uint256 volumeClaimId, uint256[] calldata cleanClaimIds)
         external
         returns (uint256 lineId)
     {
         // Reading a history is not the same as owning it.
         if (controllerOf[subject] != msg.sender) revert SubjectNotControlled(subject, msg.sender);
+        if (cleanClaimIds.length != _cleanSpecs.length) {
+            revert WrongNumberOfCleanClaims(cleanClaimIds.length, _cleanSpecs.length);
+        }
 
-        // One underwriting funds one line. Otherwise the bond cap would bound each line while
-        // bounding nothing in aggregate.
-        if (claimSpent[volumeClaimId]) revert ClaimAlreadySpent(volumeClaimId);
-        if (claimSpent[cleanClaimId]) revert ClaimAlreadySpent(cleanClaimId);
-        claimSpent[volumeClaimId] = true;
-        claimSpent[cleanClaimId] = true;
+        // One underwriting funds one line. Otherwise the cap would bound each line while bounding
+        // nothing in aggregate.
+        _spend(volumeClaimId);
 
         UtuhRegistry.Claim memory vol = REGISTRY.claim(volumeClaimId);
-        UtuhRegistry.Claim memory cln = REGISTRY.claim(cleanClaimId);
-
-        // A bond is only a deterrent for as long as someone could still take it.
         if (vol.challengeWindow < MIN_UNDERWRITING_WINDOW) {
             revert WindowTooShort(vol.challengeWindow, MIN_UNDERWRITING_WINDOW);
         }
-        if (cln.challengeWindow < MIN_UNDERWRITING_WINDOW) {
-            revert WindowTooShort(cln.challengeWindow, MIN_UNDERWRITING_WINDOW);
-        }
-
         _requireScope(volumeSpec, subject, vol.scope);
-        _requireScope(cleanSpec, subject, cln.scope);
-
-        if (vol.fromBlock != cln.fromBlock || vol.toBlock != cln.toBlock) revert RangeMismatch();
 
         uint64 span = vol.toBlock - vol.fromBlock;
         if (span < MIN_HISTORY_BLOCKS) revert HistoryTooShort(span, MIN_HISTORY_BLOCKS);
@@ -427,21 +429,16 @@ contract UtuhCredit {
         uint64 frontier = CHAIN_INFO.get_latest_attestation_height_and_hash(vol.scope.chainKey).height;
         if (frontier > vol.toBlock + MAX_STALENESS_BLOCKS) revert UnderwritingStale(vol.toBlock, frontier);
 
-        // Any proven liquidation in the window disqualifies. Counting members rather than reading
-        // the aggregate keeps this true whatever metric the clean scope carries: a DATA_WORD scope
-        // over an adverse event that happened to carry a zero amount would sum to nothing while
-        // the liquidation sat right there in the set.
-        uint256 adverse = REGISTRY.memberCount(cleanClaimId);
-        if (adverse != 0) revert NotClean(adverse);
-
         uint256 limit = (vol.aggregate * VOLUME_UNIT_IN_CTC * LTV_BPS) / 10_000;
-        uint256 bondCap = REGISTRY.enforceableLoss(cleanClaimId) * BOND_MULTIPLE;
-        if (limit > bondCap) limit = bondCap;
+        uint256 cap = _checkClean(subject, vol, cleanClaimIds);
+        if (limit > cap) limit = cap;
         if (limit == 0) revert NoCredit();
 
-        // Now that the exposure is known, hold both claims to it.
+        // Now that the exposure is known, hold every claim it rests on to it.
         _requireUsable(volumeClaimId, limit / BOND_MULTIPLE);
-        _requireUsable(cleanClaimId, limit / BOND_MULTIPLE);
+        for (uint256 i = 0; i < cleanClaimIds.length; i++) {
+            _requireUsable(cleanClaimIds[i], limit / BOND_MULTIPLE);
+        }
 
         lineId = nextLineId++;
         Line storage l = _lines[lineId];
@@ -452,7 +449,50 @@ contract UtuhCredit {
         l.repayFrom = vol.toBlock;
         l.repayScopeId = EventScope.id(expectedScope(repaySpec, subject));
 
-        emit LineOpened(lineId, msg.sender, subject, limit, volumeClaimId, cleanClaimId);
+        emit LineOpened(lineId, msg.sender, subject, limit, volumeClaimId, cleanClaimIds.length);
+    }
+
+    /// @dev Every clean claim must be empty, cover the volume claim's exact range, and carry a
+    ///      window worth having. The cap it returns is the weakest of them: exposure can only be
+    ///      as large as the least-backed assertion holding it up, because breaking any single one
+    ///      is enough to have made the underwriting wrong.
+    function _checkClean(address subject, UtuhRegistry.Claim memory vol, uint256[] calldata ids)
+        private
+        returns (uint256 cap)
+    {
+        cap = type(uint256).max;
+        for (uint256 i = 0; i < ids.length; i++) {
+            _spend(ids[i]);
+            UtuhRegistry.Claim memory cln = REGISTRY.claim(ids[i]);
+
+            if (cln.challengeWindow < MIN_UNDERWRITING_WINDOW) {
+                revert WindowTooShort(cln.challengeWindow, MIN_UNDERWRITING_WINDOW);
+            }
+            _requireScope(_cleanSpecs[i], subject, cln.scope);
+            if (vol.fromBlock != cln.fromBlock || vol.toBlock != cln.toBlock) revert RangeMismatch();
+
+            // Counting members rather than reading the aggregate keeps this true whatever metric
+            // the clean scope carries: a DATA_WORD scope over an adverse event that happened to
+            // carry a zero amount would sum to nothing while the liquidation sat in the set.
+            uint256 adverse = REGISTRY.memberCount(ids[i]);
+            if (adverse != 0) revert NotClean(adverse);
+
+            uint256 backing = REGISTRY.enforceableLoss(ids[i]) * BOND_MULTIPLE;
+            if (backing < cap) cap = backing;
+        }
+    }
+
+    function _spend(uint256 claimId) private {
+        if (claimSpent[claimId]) revert ClaimAlreadySpent(claimId);
+        claimSpent[claimId] = true;
+    }
+
+    function cleanSpecCount() external view returns (uint256) {
+        return _cleanSpecs.length;
+    }
+
+    function cleanSpecAt(uint256 i) external view returns (HistorySpec memory) {
+        return _cleanSpecs[i];
     }
 
     function _requireScope(HistorySpec storage spec, address subject, EventScope.Scope memory actual) private view {

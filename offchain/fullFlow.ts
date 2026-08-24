@@ -17,7 +17,7 @@ import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, PROVER_URL, source, requirePrivateKey
 import { artifact, deploy, signer, registryAt, creditAt } from './lib/contracts';
 import { scopeFor, scanScope, Metric, type Scope } from './lib/scope';
 import { Prover } from './lib/proofs';
-import { buildClaim, refuteClaim } from './lib/claims';
+import { buildClaim, refuteClaim, sweepForClaim } from './lib/claims';
 
 /// The whole product, end to end, with two parties who actually act.
 ///
@@ -141,7 +141,7 @@ async function main() {
         repayWindowBlocks: 400,
       },
       volumeSpec,
-      cleanSpec,
+      [cleanSpec],
       volumeSpec, // repayment is the same relationship, later in time
     ],
     { EvmV1Decoder: decoderAddress },
@@ -212,7 +212,9 @@ async function main() {
       metric: Metric.COUNT,
     });
 
-  const volumeEvents = await scanScope(eth, volumeScope, fromBlock, toBlock, 500);
+  const volumeEvents = await sweepForClaim(volumeScope, fromBlock, toBlock, {
+    log: (m) => console.log('  ' + m),
+  });
   console.log(`  the borrower's settlements to the lender: ${volumeEvents.length}`);
 
   const volumeClaim = await buildClaim(registryAsBorrower, prover, volumeScope, fromBlock, toBlock, volumeEvents, {
@@ -256,9 +258,15 @@ async function main() {
     console.log(`  ${name} claim ${cid}: ${statusName(c.status)}  aggregate ${c.aggregate}`);
   }
 
+  // Refunds are credited, not sent — finalize is permissionless and pays the claimant, so pushing
+  // would let a claimant that cannot receive ether brick their own claim.
+  const refund: bigint = await registry.withdrawable(borrower.address);
+  await (await registryAsBorrower.withdraw()).wait();
+  console.log(`  borrower withdrew ${formatEther(refund)} CTC of returned bonds`);
+
   // ------------------------------------------------------------------
   console.log('\n=== 7. the line opens ===');
-  await (await creditAsBorrower.openLine(borrower.address, volumeClaim.claimId, cleanClaim.claimId)).wait();
+  await (await creditAsBorrower.openLine(borrower.address, volumeClaim.claimId, [cleanClaim.claimId])).wait();
   const lineId = 1n;
   let line = await credit.line(lineId);
   console.log(`  limit ${formatEther(line.limit)} CTC`);

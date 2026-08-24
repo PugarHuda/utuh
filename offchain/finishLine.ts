@@ -4,7 +4,7 @@ import { CC3_RPC, CC3_CHAIN_ID, PROVER_URL, source, requirePrivateKey } from './
 import { registryAt, creditAt, signer } from './lib/contracts';
 import { scanScope, type Scope, type Metric } from './lib/scope';
 import { Prover } from './lib/proofs';
-import { buildClaim } from './lib/claims';
+import { buildClaim, sweepForClaim } from './lib/claims';
 
 /// Resume a line from wherever `npm run full` stopped.
 ///
@@ -131,7 +131,7 @@ async function buildRepayClaim(registry: any, registryAsBorrower: any, credit: a
   const toBlock = head - 3;
   console.log(`  sweeping ${fromBlock}..${toBlock} on chain key ${chainKey}`);
 
-  const events = await scanScope(eth, scope, fromBlock, toBlock, 500);
+  const events = await sweepForClaim(scope, fromBlock, toBlock, { log: (m) => console.log('  ' + m) });
   console.log(`  payments found: ${events.length}`);
   if (events.length === 0) throw new Error('no repayment on the source chain to prove');
 

@@ -128,6 +128,60 @@ export async function scanScope(
   return found;
 }
 
+export interface UnionSweep {
+  events: ScopedEvent[];
+  answered: number;
+  attempted: number;
+  perSource: string[];
+}
+
+/// Sweep a scope across every endpoint available and union what comes back.
+///
+/// A claimant sweeping with one RPC is betting their bond on that node having mentioned every log.
+/// A missed event is not a smaller claim — it is an incomplete one, and being slashed for it looks
+/// exactly like lying. Taking the union across independent endpoints means any one of them
+/// surfacing an event is enough to include it, so a single node's omission stops being fatal.
+///
+/// The same reasoning as the watcher's, from the other side: there, the union widens what can be
+/// refuted; here, it widens what gets claimed. Neither needs any endpoint to be trusted.
+export async function scanScopeUnion(
+  endpoints: { url: string; provider: JsonRpcProvider }[],
+  scope: Scope,
+  fromBlock: number,
+  toBlock: number,
+  chunkSize = 2000,
+  deadline?: (p: Promise<ScopedEvent[]>) => Promise<ScopedEvent[]>,
+): Promise<UnionSweep> {
+  const byKey = new Map<bigint, ScopedEvent>();
+  const perSource: string[] = [];
+  let answered = 0;
+
+  for (const { url, provider } of endpoints) {
+    try {
+      const work = scanScope(provider, scope, fromBlock, toBlock, chunkSize);
+      const seen = deadline ? await deadline(work) : await work;
+      answered++;
+      perSource.push(`${hostOf(url)}=${seen.length}`);
+      for (const e of seen) byKey.set(eventKey(e), e);
+    } catch {
+      perSource.push(`${hostOf(url)}=err`);
+    } finally {
+      provider.destroy();
+    }
+  }
+
+  const events = [...byKey.values()].sort((a, b) => (eventKey(a) < eventKey(b) ? -1 : 1));
+  return { events, answered, attempted: endpoints.length, perSource };
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
 /// Mirrors EventScope.value.
 function valueOf(scope: Scope, data: string): bigint {
   if (scope.metric === Metric.COUNT) return 1n;
