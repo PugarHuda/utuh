@@ -52,10 +52,25 @@ presence  →  cryptographic   (Merkle + continuity, verified by 0x0FD2)
 absence   →  economic        (bonded assertion, refutable by one proof)
 ```
 
-### Why it scales
+### What scales, and what does not
 
-The registry never verifies a whole set. Appends verify each event once; a refutation verifies
-exactly one. A claim spanning ten thousand events is settled by a single proof, or by none at all.
+*Settling* a claim is O(1): the registry never verifies a whole set, so a claim spanning ten
+thousand events is broken by a single proof or by none at all.
+
+*Building* one is not. Every member is verified on the way in, at ten queries per transaction and
+one storage slot each. Measured on CC3 Testnet, from real transactions:
+
+| Call | Gas (median) | ~CTC |
+|---|---|---|
+| `open` | 271,423 | 0.00014 |
+| `appendBatch` (3 events) | 533,330 | 0.00027 |
+| `seal` | 200,564 | 0.00010 |
+| `refute` | 455,686 | 0.00023 |
+| `finalize` | 207,368 | 0.00010 |
+
+So a small claim costs well under a thousandth of a CTC end to end, and a ten-thousand-event claim
+costs a thousand transactions. The asymmetry is the point — challenging is always cheap — but the
+construction cost is real and it is what caps practical claims in the low thousands.
 
 ### The subtle part
 
@@ -242,6 +257,9 @@ offchain/
   deploy.ts                 deploy decoder, registry, credit
   e2e.ts                    honest claim finalized; dishonest claim refuted and slashed
   creditDemo.ts             underwrite a real Aave borrower; refute a real liquidated one
+  watch.ts                  the watcher — follows ClaimSealed, sweeps, refutes what is short
+  badClaim.ts               files a deliberately incomplete claim, so the watcher has prey
+  liveTest.ts               the guards unit tests cannot reach, asserted against CC3
   fullFlow.ts               the whole loop on Sepolia, borrower and lender both acting
   finishLine.ts             resume an interrupted run — the state lives on-chain, not in the script
   proveControl.ts           bind a source-chain address to a Creditcoin account
@@ -266,7 +284,11 @@ npm run e2e                 # the registry, both outcomes
 npm run credit              # the credit line, on a real Aave borrower
 npm run control             # bind your own address (needs a little source-chain gas)
 npm run full                # the entire loop, two parties, on Sepolia
-npm run finish -- <registry> <credit> <claimId> <lineId>   # resume an interrupted run
+npm run finish -- <registry> <credit> <lineId>             # resume an interrupted run
+
+npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
+npm run bait                # seal a deliberately short claim for the watcher to find
+npm run livetest            # 19 guards asserted against the live chain
 
 npm run demo                # all three in sequence, for recording
 ```
@@ -377,6 +399,9 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —
   refuting pays only when the claimant fails to defend, so watching is worth less than the reward
   suggests.
+- The watcher in `offchain/watch.ts` is one process sweeping with one RPC. It demonstrates that
+  the role is mechanical and unprivileged, which is the part that matters; it is not a redundant
+  network, and a claim is only as safe as somebody bothering to run something like it.
 - Binding an address costs the borrower one source-chain transaction. That is a real onboarding
   step, and there is no way around it that does not reintroduce the hole it closes. `npm run credit`
   therefore stops at `SubjectNotControlled` when pointed at a stranger's history — the refusal is
