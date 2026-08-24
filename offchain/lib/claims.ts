@@ -26,7 +26,10 @@ export async function sweepForClaim(
   opts: { minSources?: number; chunkSize?: number; log?: (m: string) => void } = {},
 ): Promise<ScopedEvent[]> {
   const log = opts.log ?? (() => {});
-  const minSources = opts.minSources ?? 1;
+  // Two by default. This function stakes a bond on the answer being complete, and a warning
+  // printed to a log nobody reads protects nobody — refusing to seal does. A caller who really
+  // means to bet on one endpoint has to say so.
+  const minSources = opts.minSources ?? 2;
 
   const sweep = await scanScopeUnion(
     sources(scope.chainKey),
@@ -46,6 +49,9 @@ export async function sweepForClaim(
   }
   if (sweep.answered === 1) {
     log('WARNING: one endpoint answered. An omission it made would cost the bond.');
+  }
+  if (!sweep.perSource.every((c) => c.endsWith('=err')) && new Set(sweep.perSource.filter((c) => !c.endsWith('=err')).map((c) => c.split('=')[1])).size > 1) {
+    log(`endpoints disagreed (${sweep.perSource.join('  ')}) — claiming the union, which is the safe direction`);
   }
   return sweep.events;
 }

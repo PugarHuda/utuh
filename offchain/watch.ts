@@ -28,9 +28,9 @@ const LOOKBACK = Number(process.env.WATCH_LOOKBACK ?? 5_000);
 /// the same way the source-chain sweep is.
 const LOG_CHUNK = Number(process.env.WATCH_LOG_CHUNK ?? 2_000);
 
-interface Seen {
-  checked: Set<string>;
-}
+/// What an inspection concluded. Only a terminal verdict retires a claim from the queue — a
+/// watcher that forgets a claim it failed to check is blind to it for good.
+type Verdict = 'settled' | 'refuted' | 'complete' | 'expired' | 'inconclusive';
 
 async function main() {
   const once = process.argv.includes('--once');
@@ -49,31 +49,62 @@ async function main() {
 
   const head = await cc3.getBlockNumber();
   let from = Math.max(0, head - LOOKBACK);
-  const seen: Seen = { checked: new Set() };
+
+  /// Claims seen sealed and not yet resolved. A claim leaves this only on a verdict that cannot
+  /// change — refuted, finalized by someone else, proven complete by more than one endpoint, or
+  /// past its window. Anything short of that (every endpoint down, an RPC hiccup, a lost race)
+  /// leaves it in, because the alternative is deciding a claim is fine on the strength of never
+  /// having managed to look at it.
+  const pending = new Set<string>();
 
   for (;;) {
     const to = await cc3.getBlockNumber();
     for (let start = from; start <= to; start += LOG_CHUNK) {
       const end = Math.min(start + LOG_CHUNK - 1, to);
       const sealed = await registry.queryFilter(registry.filters.ClaimSealed(), start, end);
-      for (const log of sealed) {
-        const claimId: bigint = (log as any).args[0];
-        if (seen.checked.has(claimId.toString())) continue;
-        seen.checked.add(claimId.toString());
-        await inspect(registry, wallet, claimId, dry);
-      }
+      for (const log of sealed) pending.add(String((log as any).args[0]));
     }
     from = to + 1;
+
+    // Soonest deadline first. A claim with three blocks left cannot wait behind one with five
+    // thousand just because it was discovered second.
+    const queue = await byDeadline(registry, [...pending]);
+
+    for (const claimId of queue) {
+      let verdict: Verdict;
+      try {
+        verdict = await inspect(registry, wallet, claimId, dry);
+      } catch (e: any) {
+        // A lost race, a reverted refutation, an endpoint failing mid-sweep. None of these are
+        // reasons to stop watching, and none of them settle anything.
+        console.log(`
+claim ${claimId}: inspection failed — ${e.shortMessage ?? e.message}`);
+        verdict = 'inconclusive';
+      }
+      if (verdict !== 'inconclusive') pending.delete(String(claimId));
+    }
+
     if (once) break;
+    if (pending.size > 0) console.log(`
+${pending.size} claim(s) still unresolved, will retry`);
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 }
 
-async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: boolean): Promise<void> {
+/// Order a batch of claim ids by how soon their windows close.
+async function byDeadline(registry: Contract, ids: string[]): Promise<bigint[]> {
+  const withUntil = await Promise.all(
+    ids.map(async (id) => ({ id: BigInt(id), until: Number(await registry.challengeUntil(id)) })),
+  );
+  withUntil.sort((a, b) => a.until - b.until);
+  return withUntil.map((x) => x.id);
+}
+
+async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: boolean): Promise<Verdict> {
   const claim = await registry.claim(claimId);
   if (Number(claim.status) !== 2) {
     console.log(`\nclaim ${claimId}: ${statusName(claim.status)} — nothing to check`);
-    return;
+    return Number(claim.status) === 4 ? 'refuted' : 'settled';
   }
 
   const until = Number(await registry.challengeUntil(claimId));
@@ -86,7 +117,7 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
 
   if (now > until) {
     console.log('  window already closed — too late to refute');
-    return;
+    return 'expired';
   }
 
   const scope: Scope = {
@@ -122,8 +153,8 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
   );
 
   if (sweep.answered === 0) {
-    console.log('  no endpoint answered — cannot say anything about this claim');
-    return;
+    console.log('  no endpoint answered — cannot say anything about this claim, will retry');
+    return 'inconclusive';
   }
 
   const events = sweep.events;
@@ -138,10 +169,10 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
   if (gaps.length === 0) {
     if (sweep.answered < 2) {
       console.log(`  no gap found — but only ${sweep.answered} endpoint answered, so this is inconclusive`);
-    } else {
-      console.log(`  no gap found across ${sweep.answered} independent endpoints`);
+      return 'inconclusive';
     }
-    return;
+    console.log(`  no gap found across ${sweep.answered} independent endpoints`);
+    return 'complete';
   }
 
   const gap = gaps[0];
@@ -150,13 +181,14 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
 
   if (dry) {
     console.log('  dry run — leaving it');
-    return;
+    return 'inconclusive';
   }
 
   const prover = new Prover(scope.chainKey, PROVER_URL, 60_000);
   const { reward, key } = await refuteClaim(registry, prover, claimId, gap);
   console.log(`  refuted with one proof. key ${key}`);
   console.log(`  reward ${formatEther(reward)} CTC`);
+  return 'refuted';
 }
 
 function statusName(s: bigint | number): string {

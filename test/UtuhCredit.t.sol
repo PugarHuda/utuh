@@ -317,6 +317,13 @@ contract UtuhCreditTest is Test {
         assertFalse(registry.isUsable(999, 0));
     }
 
+    /// @notice A claim nothing can rely on quotes no figure. Reporting the bond a refuted claim
+    ///         once posted would read like a guarantee that no longer exists.
+    function test_enforceableLossIsZeroForClaimsNothingBacks() public view {
+        assertEq(registry.enforceableLoss(1), 0);
+        assertEq(registry.enforceableLoss(999), 0);
+    }
+
     // ------------------------------------------------------------------
     // Settlement watermark
     // ------------------------------------------------------------------

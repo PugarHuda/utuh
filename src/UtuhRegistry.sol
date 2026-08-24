@@ -472,7 +472,12 @@ contract UtuhRegistry {
     ///      reason — measuring against the bond would overstate the deterrent by the refuter's
     ///      share.
     function enforceableLoss(uint256 claimId) public view returns (uint256) {
-        return (_claims[claimId].bondPosted * (10_000 - REFUTER_SHARE_BPS)) / 10_000;
+        Claim storage c = _claims[claimId];
+        // Only a claim that is still challengeable, or that survived being challengeable, has a
+        // figure worth quoting. A refuted or abandoned one has nothing standing behind it, and
+        // reporting the bond it once posted would read like a guarantee that no longer exists.
+        if (c.status != Status.Sealed && c.status != Status.Finalized) return 0;
+        return (c.bondPosted * (10_000 - REFUTER_SHARE_BPS)) / 10_000;
     }
 
     /// @notice Whether a consumer standing to lose `exposure` may rely on this claim.

@@ -33,17 +33,39 @@ export const source = (chainKey: number) => new JsonRpcProvider(SOURCE_RPC[chain
 /// A watcher concluding "this claim is complete" is trusting one node to have told it about every
 /// log. That is the protocol's own problem reappearing one layer down, and one endpoint cannot
 /// detect it. Set MAINNET_RPCS / SEPOLIA_RPCS to comma-separated URLs to widen it.
+const DEFAULT_RPCS: Record<number, string[]> = {
+  [CHAIN_KEY.mainnet]: [
+    SOURCE_RPC[CHAIN_KEY.mainnet],
+    'https://rpc.mevblocker.io',
+    'https://ethereum-rpc.publicnode.com',
+  ],
+  [CHAIN_KEY.sepolia]: [
+    SOURCE_RPC[CHAIN_KEY.sepolia],
+    'https://sepolia.drpc.org',
+    'https://1rpc.io/sepolia',
+  ],
+};
+
+const list = (v?: string) =>
+  (v ?? '')
+    .split(',')
+    .map((u) => u.trim())
+    .filter(Boolean);
+
+/// `MAINNET_RPCS` / `SEPOLIA_RPCS` **replace** the defaults; `*_RPCS_EXTRA` adds to them.
+///
+/// An earlier version only ever appended, which meant an operator who knew the bundled public
+/// endpoints were rate-limited — or worse, that one of them was the claimant's — had no way to
+/// drop them. Widening a trust set has to come with the ability to narrow it.
 export const SOURCE_RPCS: Record<number, string[]> = {
-  [CHAIN_KEY.mainnet]: (process.env.MAINNET_RPCS ?? '')
-    .split(',')
-    .map((u) => u.trim())
-    .filter(Boolean)
-    .concat([SOURCE_RPC[CHAIN_KEY.mainnet], 'https://rpc.mevblocker.io', 'https://ethereum-rpc.publicnode.com']),
-  [CHAIN_KEY.sepolia]: (process.env.SEPOLIA_RPCS ?? '')
-    .split(',')
-    .map((u) => u.trim())
-    .filter(Boolean)
-    .concat([SOURCE_RPC[CHAIN_KEY.sepolia], 'https://sepolia.drpc.org', 'https://1rpc.io/sepolia']),
+  [CHAIN_KEY.mainnet]: [
+    ...(list(process.env.MAINNET_RPCS).length ? list(process.env.MAINNET_RPCS) : DEFAULT_RPCS[CHAIN_KEY.mainnet]),
+    ...list(process.env.MAINNET_RPCS_EXTRA),
+  ],
+  [CHAIN_KEY.sepolia]: [
+    ...(list(process.env.SEPOLIA_RPCS).length ? list(process.env.SEPOLIA_RPCS) : DEFAULT_RPCS[CHAIN_KEY.sepolia]),
+    ...list(process.env.SEPOLIA_RPCS_EXTRA),
+  ],
 };
 
 /// Milliseconds an endpoint gets before it is treated as absent.

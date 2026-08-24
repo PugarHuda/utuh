@@ -312,6 +312,9 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `MIN_CHALLENGE_WINDOW` | `25` | Creditcoin blocks, deploy-time floor |
 | `VOLUME_UNIT_IN_CTC` | `15000000000000` | CTC wei per USDC unit; the lender's stated rate |
 | `CONTROL_CHAIN_KEY` | `1` (Sepolia) | which source chain to send the control commitment on |
+| `MAINNET_RPCS` / `SEPOLIA_RPCS` | bundled list | comma-separated; **replaces** the defaults |
+| `*_RPCS_EXTRA` | — | comma-separated; adds to whatever is in use |
+| `SOURCE_TIMEOUT_MS` | `25000` | how long one endpoint gets before it counts as absent |
 | `MIN_HISTORY_BLOCKS` | `216000` | lender policy: how much history an underwriting must cover |
 | `MAX_STALENESS_BLOCKS` | `50400` | lender policy: how recently it must end |
 | `REPAYMENT_BPS` | `10500` | lender policy: what a draw must repay, in basis points |
@@ -320,7 +323,11 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 
 A watcher's whole job is sweeping a claim's range independently, so the source-chain RPC has to
 serve a wide `eth_getLogs`. Most free endpoints cap the range at 50–1000 blocks; Tenderly's public
-gateway returns a filtered 216,000-block sweep in one call, which is why it is the default.
+gateway returns a filtered 216,000-block sweep in one call, which is why it heads the default list.
+
+The `_RPCS` variables replace that list rather than extending it. Widening a trust set has to come
+with the ability to narrow it: an operator who knows one of the bundled endpoints is rate-limited —
+or is the claimant's — needs to be able to drop it, and an append-only setting cannot.
 
 `MIN_CHALLENGE_WINDOW` is a deployment parameter rather than a constant so a demonstration can
 watch a window actually elapse instead of asserting that it would have. The recommended production
@@ -329,7 +336,7 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-54 tests over the half that can run in a plain EVM: ordering and scope matching in
+55 tests over the half that can run in a plain EVM: ordering and scope matching in
 `EventScope.t.sol`, and in `UtuhCredit.t.sol` the guards that decide whose history a line may be
 opened against — deployment floors, the control commitment's layout, scope identity, and the
 lender's liquidity. Neither contract's constructor touches a precompile, so both deploy locally;
@@ -401,6 +408,15 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —
   refuting pays only when the claimant fails to defend, so watching is worth less than the reward
   suggests.
+- **A watcher only retires a claim on a verdict that cannot change.** Refuted, settled by someone
+  else, proven complete by two or more endpoints, or past its window. Anything short of that —
+  every endpoint down, an RPC hiccup mid-sweep, a refutation lost to a front-run — leaves the
+  claim queued for the next pass. An earlier version marked claims checked *before* inspecting
+  them, so a transient outage during the minute a claim sealed made that claim invisible for good;
+  and an unguarded `await` meant one failed refutation killed the process. A watcher that dies on
+  its first lost race is not a watcher. Claims are also worked soonest-deadline-first, because one
+  with three blocks left cannot wait behind one with five thousand.
+
 - **A watcher's silence is only as good as its sources.** Deciding a claim is complete means
   trusting some node to have mentioned every log — the protocol's own problem, one layer down.
   Voting across endpoints would not fix it, since they can be wrong together or captured. What
