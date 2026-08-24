@@ -52,11 +52,14 @@ contract UtuhCredit {
     ///      knows one.
     uint256 public immutable VOLUME_UNIT_IN_CTC;
 
-    /// @notice Credit extended per unit of bond behind the clean claim.
-    /// @dev This is the consumer half of the bond mechanism. The registry cannot know what a
-    ///      claim will be used for, so it cannot size the bond; only the party about to lend
-    ///      knows its own exposure. A line is never allowed to risk more than a liar stood to
-    ///      lose, which is what keeps the clean claim worth attacking when it is false.
+    /// @notice Credit extended per unit of enforceable loss behind the clean claim.
+    /// @dev This is the consumer half of the bond mechanism. The registry cannot know what a claim
+    ///      will be used for, so it cannot size the stake; only the party about to lend knows its
+    ///      own exposure. A line is never allowed to risk more than a liar is certain to lose.
+    ///
+    ///      "Certain to lose" is the burned share, not the whole bond — see
+    ///      {UtuhRegistry.enforceableLoss}. Measuring against the bond, as this did at first, let
+    ///      a line carry twice the exposure the deterrent actually covered.
     uint256 public constant BOND_MULTIPLE = 10;
 
     /// @notice Minimum span of source-chain history an underwriting must cover.
@@ -128,6 +131,7 @@ contract UtuhCredit {
 
     struct Line {
         address borrower;
+        address subject; // the source-chain address this line was underwritten on
         LineStatus status;
         uint256 limit; // CTC
         uint256 drawn; // CTC
@@ -156,6 +160,14 @@ contract UtuhCredit {
     ///      would bound each line while bounding nothing in aggregate.
     mapping(uint256 => bool) public claimSpent;
 
+    /// @notice First source-chain block whose payments a subject has not already spent settling.
+    /// @dev Marking claims spent stops a claim being reused; it does not stop a *payment* being
+    ///      reused. A borrower with two lines could build two claims over overlapping ranges, both
+    ///      containing the same transfer, and settle both with one payment. The watermark makes
+    ///      each settlement consume the range it rests on, so the next one has to prove money that
+    ///      has not already discharged a debt.
+    mapping(address => uint64) public settledThrough;
+
     /// @notice CTC deposited by the lender and not yet drawn.
     uint256 public available;
 
@@ -178,6 +190,7 @@ contract UtuhCredit {
     error ClaimNotUsable(uint256 claimId, uint256 requiredBond);
     error ScopeMismatch(bytes32 expected, bytes32 actual);
     error RangeMismatch();
+    error RepaymentAlreadyCounted(uint64 fromBlock, uint64 required);
     error HistoryTooShort(uint64 span, uint64 required);
     error UnderwritingStale(uint64 toBlock, uint64 frontier);
     error NotClean(uint256 adverseCount);
@@ -422,7 +435,7 @@ contract UtuhCredit {
         if (adverse != 0) revert NotClean(adverse);
 
         uint256 limit = (vol.aggregate * VOLUME_UNIT_IN_CTC * LTV_BPS) / 10_000;
-        uint256 bondCap = cln.bondPosted * BOND_MULTIPLE;
+        uint256 bondCap = REGISTRY.enforceableLoss(cleanClaimId) * BOND_MULTIPLE;
         if (limit > bondCap) limit = bondCap;
         if (limit == 0) revert NoCredit();
 
@@ -433,6 +446,7 @@ contract UtuhCredit {
         lineId = nextLineId++;
         Line storage l = _lines[lineId];
         l.borrower = msg.sender;
+        l.subject = subject;
         l.status = LineStatus.Active;
         l.limit = limit;
         l.repayFrom = vol.toBlock;
@@ -514,10 +528,16 @@ contract UtuhCredit {
 
         bytes32 got = EventScope.id(rc.scope);
         if (got != l.repayScopeId) revert ScopeMismatch(l.repayScopeId, got);
-        if (rc.fromBlock < l.repayFrom) revert RangeMismatch();
+
+        // The claim must start after both the underwriting it rests on and anything this subject
+        // has already settled with.
+        uint64 watermark = settledThrough[l.subject];
+        uint64 required = l.repayFrom > watermark ? l.repayFrom : watermark;
+        if (rc.fromBlock < required) revert RepaymentAlreadyCounted(rc.fromBlock, required);
 
         if (claimSpent[repayClaimId]) revert ClaimAlreadySpent(repayClaimId);
         claimSpent[repayClaimId] = true;
+        settledThrough[l.subject] = rc.toBlock + 1;
 
         _requireUsable(repayClaimId, l.drawn / BOND_MULTIPLE);
 

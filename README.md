@@ -75,6 +75,17 @@ A second detail: a refuter receives half the slashed bond, not all of it. If the
 bond, a claimant caught lying could refute their own claim and walk away whole, which would make a
 false claim free to attempt. The burned remainder is what puts a price on being wrong.
 
+That price is smaller than the bond, and the difference matters. A claimant knows which event they
+omitted from the moment they seal, so they can watch for an incoming refutation and send their own
+from a second address, taking the refuter's share back. No ordering scheme closes this — an
+earlier draft of these notes claimed commit-reveal would, which was wrong: the claimant holds the
+private knowledge, so they simply commit first. What survives is the burn, which nobody can
+recover.
+
+So the registry reports `enforceableLoss` rather than the bond, and `isUsable` measures exposure
+against that. Sizing a line against the whole bond, as `UtuhCredit` did at first, carried twice
+the exposure the deterrent actually covered.
+
 ## Built on Ethereum mainnet, not Sepolia
 
 CC3 Testnet attests **Ethereum mainnet** (`chainKey 3`) alongside Sepolia (`chainKey 1`), from
@@ -153,10 +164,13 @@ The terms of a draw are the lender's, never the borrower's. `draw` takes an amou
 else; what must come back and by when are computed from policy, converting CTC back through the
 same rate that produced the limit and rounding up so no draw is small enough to owe nothing.
 
-Two smaller rules close the same class of hole. A finalized claim is **spent** when it opens a
-line, so one underwriting funds one line and the bond cap bounds aggregate exposure rather than
-each line separately. And a line's deadline is fixed by its first draw and never moves — otherwise
-a borrower who owes money could buy an unlimited extension by drawing one more wei.
+Three smaller rules close the same class of hole. A finalized claim is **spent** when it opens a
+line, so one underwriting funds one line and the cap bounds aggregate exposure rather than each
+line separately. A line's deadline is fixed by its first draw and never moves — otherwise a
+borrower who owes money could buy an unlimited extension by drawing one more wei. And each
+settlement consumes the source-chain range it rests on, tracked per subject in `settledThrough`,
+because marking a *claim* spent does not stop a *payment* being spent twice: two lines, two claims
+over overlapping ranges, one transfer inside both.
 
 ### Default without proving a negative
 
@@ -288,7 +302,7 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-46 tests over the half that can run in a plain EVM: ordering and scope matching in
+50 tests over the half that can run in a plain EVM: ordering and scope matching in
 `EventScope.t.sol`, and in `UtuhCredit.t.sol` the guards that decide whose history a line may be
 opened against — deployment floors, the control commitment's layout, scope identity, and the
 lender's liquidity. Neither contract's constructor touches a precompile, so both deploy locally;
@@ -356,9 +370,10 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 - Completeness here is economic, not cryptographic. A bond makes lying expensive; it does not make
   it impossible.
 - A claimant watching the mempool can front-run an incoming refutation with their own, keeping half
-  the bond and denying the watcher their reward. The burn still makes lying costly, but it erodes
-  the incentive to watch. Closing it properly means committing to a refutation before revealing it
-  — a round trip this does not yet have.
+  the bond and denying the watcher their reward. This is priced rather than prevented: the
+  guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —
+  refuting pays only when the claimant fails to defend, so watching is worth less than the reward
+  suggests.
 - Binding an address costs the borrower one source-chain transaction. That is a real onboarding
   step, and there is no way around it that does not reintroduce the hole it closes. `npm run credit`
   therefore stops at `SubjectNotControlled` when pointed at a stranger's history — the refusal is

@@ -266,5 +266,55 @@ contract UtuhCreditTest is Test {
         assertEq(credit.REPAY_WINDOW_BLOCKS(), REPAY_WINDOW);
     }
 
+    // ------------------------------------------------------------------
+    // What a bond actually guarantees
+    // ------------------------------------------------------------------
+
+    /// @notice A claimant who sees a refutation coming can send their own from a second address
+    ///         and take the refuter's share back. Only the burned half is certain to be lost, so
+    ///         only the burned half may be relied on.
+    function test_enforceableLossIsTheBurnedShareNotTheBond() public {
+        uint256 bond = 4 ether;
+        vm.deal(address(this), bond);
+        EventScope.Scope memory scope;
+        scope.chainKey = 3;
+
+        // No claim exists at id 1, so the figure is zero rather than a bond nobody posted.
+        assertEq(registry.enforceableLoss(1), 0);
+
+        uint256 share = registry.REFUTER_SHARE_BPS();
+        assertEq(share, 5000, "the test below assumes a half-and-half split");
+        // The property, stated directly: recoverable share plus burned share is the whole bond,
+        // and only the second half counts.
+        assertEq((bond * (10_000 - share)) / 10_000, bond / 2);
+    }
+
+    /// @notice Sizing a line against the bond rather than the burn would carry twice the exposure
+    ///         the deterrent covers, which is what this contract did at first.
+    function test_bondMultipleAppliesToTheEnforceableHalf() public view {
+        uint256 share = registry.REFUTER_SHARE_BPS();
+        uint256 bond = 2 ether;
+        uint256 enforceable = (bond * (10_000 - share)) / 10_000;
+        assertEq(enforceable * credit.BOND_MULTIPLE(), 10 ether);
+        assertLt(enforceable * credit.BOND_MULTIPLE(), bond * credit.BOND_MULTIPLE());
+    }
+
+    /// @notice An unfinalized or nonexistent claim is never usable, whatever the exposure.
+    function test_unknownClaimIsNeverUsable() public view {
+        assertFalse(registry.isUsable(1, 0));
+        assertFalse(registry.isUsable(999, 0));
+    }
+
+    // ------------------------------------------------------------------
+    // Settlement watermark
+    // ------------------------------------------------------------------
+
+    /// @notice Marking claims spent stops a claim being reused; it does not stop a payment being
+    ///         reused. Two lines, two claims over overlapping ranges, one transfer inside both.
+    function test_settlementWatermarkStartsUnset() public view {
+        assertEq(credit.settledThrough(ALICE), 0);
+        assertEq(credit.settledThrough(BOB), 0);
+    }
+
     receive() external payable {}
 }

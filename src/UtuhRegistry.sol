@@ -60,8 +60,14 @@ contract UtuhRegistry {
 
     /// @notice Share of a slashed bond paid to the refuter, in basis points.
     /// @dev Deliberately below 100%. If a refuter took the whole bond, a claimant caught lying
-    ///      could refute their own claim and walk away whole, which would make a false claim
-    ///      free to attempt. Burning the remainder puts a real price on being wrong.
+    ///      could refute their own claim and walk away whole, which would make a false claim free
+    ///      to attempt. Burning the remainder puts a real price on being wrong.
+    ///
+    ///      The claimant can still take this share back. They know which event they omitted from
+    ///      the moment they seal, so they can watch for an incoming refutation and front-run it
+    ///      from another address — and no ordering scheme fixes that, because commit-reveal would
+    ///      simply let them commit first with the same private knowledge. What survives is the
+    ///      burn, which nobody can recover. See {enforceableLoss}.
     uint256 public constant REFUTER_SHARE_BPS = 5000;
 
     /// @notice The Attestcoin batch API shares one continuity proof across at most 10 queries.
@@ -439,13 +445,24 @@ contract UtuhRegistry {
     // Consumer views
     // ------------------------------------------------------------------
 
-    /// @notice Whether a consumer risking `minBond` may rely on this claim.
-    /// @dev Reads `bondPosted`, not `bond`: a finalized claim has already refunded its escrow,
-    ///      but what matters downstream is what stood behind the assertion while it could still
-    ///      be broken.
-    function isUsable(uint256 claimId, uint256 minBond) external view returns (bool) {
+    /// @notice What a false claim costs its author no matter what they do about it.
+    /// @dev Not the bond. A claimant who sees a refutation coming can send their own from a
+    ///      second address and take the refuter's share back, so the only part they cannot
+    ///      recover is the part that gets burned. Anything relying on this claim should be sized
+    ///      against this figure, and {isUsable} takes it rather than the bond for exactly that
+    ///      reason — measuring against the bond would overstate the deterrent by the refuter's
+    ///      share.
+    function enforceableLoss(uint256 claimId) public view returns (uint256) {
+        return (_claims[claimId].bondPosted * (10_000 - REFUTER_SHARE_BPS)) / 10_000;
+    }
+
+    /// @notice Whether a consumer standing to lose `exposure` may rely on this claim.
+    /// @dev Reads what was posted at seal time, not the live escrow: a finalized claim has already
+    ///      refunded its bond, but what matters downstream is what stood behind the assertion
+    ///      while it could still be broken.
+    function isUsable(uint256 claimId, uint256 exposure) external view returns (bool) {
         Claim storage c = _claims[claimId];
-        return c.status == Status.Finalized && c.bondPosted >= minBond;
+        return c.status == Status.Finalized && enforceableLoss(claimId) >= exposure;
     }
 
     function claim(uint256 claimId) external view returns (Claim memory) {
