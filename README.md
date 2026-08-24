@@ -290,7 +290,7 @@ npm run finish -- <registry> <credit> <lineId>             # resume an interrupt
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
 npm run bait                # seal a deliberately short claim for the watcher to find
-npm run livetest            # 19 guards asserted against the live chain
+npm run livetest            # 26 guards asserted against the live chain, refunds included
 
 npm run demo                # all three in sequence, for recording
 ```
@@ -320,6 +320,13 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `REPAYMENT_BPS` | `10500` | lender policy: what a draw must repay, in basis points |
 | `REPAY_WINDOW_BLOCKS` | `5760` | lender policy: how long the borrower has |
 | `LENDER_MAINNET` | Binance hot wallet | where repayment must land on Ethereum |
+
+Two endpoints per chain is the floor for sealing a claim, not a comfortable margin — lose one and
+claims stop being sealable until it returns. The bundled defaults are ones checked to actually
+answer; an earlier list carried three per chain of which two were dead, which meant the two-source
+minimum could never be met and nothing could be built at all. A safety default that makes the
+system unusable is not a safety default. Anyone running this for real should add endpoints they
+pay for through `*_RPCS_EXTRA`.
 
 A watcher's whole job is sweeping a claim's range independently, so the source-chain RPC has to
 serve a wide `eth_getLogs`. Most free endpoints cap the range at 50–1000 blocks; Tenderly's public
@@ -408,6 +415,14 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —
   refuting pays only when the claimant fails to defend, so watching is worth less than the reward
   suggests.
+- **The union is safe for a watcher and was not for a claimant.** A watcher meeting a candidate it
+  cannot prove shrugs and moves on; a claimant has to append everything it swept, so one
+  unprovable candidate aborted the whole claim — and since the union deliberately trusts no
+  endpoint, a single misbehaving one could inject a phantom event and stop every honest claimant
+  from building anything. The Block Prover decides what exists: an event nobody can prove cannot
+  be appended and cannot be refuted with either, so dropping it is not an omission. Candidates are
+  retried before being given up on, so a Proof Builder outage is not mistaken for nonexistence.
+
 - **A watcher only retires a claim on a verdict that cannot change.** Refuted, settled by someone
   else, proven complete by two or more endpoints, or past its window. Anything short of that —
   every endpoint down, an RPC hiccup mid-sweep, a refutation lost to a front-run — leaves the

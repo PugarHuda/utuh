@@ -2,7 +2,8 @@ import { JsonRpcProvider, Wallet, formatEther, keccak256, concat, toUtf8Bytes, p
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, PROVER_URL, source, requirePrivateKey } from './config';
 import { registryAt, creditAt, signer } from './lib/contracts';
-import { scanScope, type Scope, type Metric } from './lib/scope';
+import type { Scope } from './lib/scope';
+import { scopeFor, plainSpec } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { buildClaim, sweepForClaim } from './lib/claims';
 
@@ -82,19 +83,6 @@ async function findRepayClaim(registry: any, credit: any, line: any): Promise<bi
   return 0n;
 }
 
-function plainSpec(s: any) {
-  return {
-    chainKey: s.chainKey,
-    emitter: s.emitter,
-    eventSig: s.eventSig,
-    subjectTopic: s.subjectTopic,
-    counterpartyTopic: s.counterpartyTopic,
-    counterparty: s.counterparty,
-    metric: s.metric,
-    metricArg: s.metricArg,
-  };
-}
-
 function scopeIdOf(s: any): string {
   return JSON.stringify([
     Number(s.chainKey ?? s[0]),
@@ -110,19 +98,8 @@ function scopeIdOf(s: any): string {
 async function buildRepayClaim(registry: any, registryAsBorrower: any, credit: any, line: any): Promise<bigint> {
   // ethers hands struct returns back as a frozen Result, and passing one straight into another
   // call fails while it resolves arguments. Copy it into a plain object first.
-  const spec = plainSpec(await credit.repaySpec());
-  const raw = await credit.expectedScope(spec, line.subject);
-  const scope: Scope = {
-    chainKey: Number(raw.chainKey),
-    emitter: raw.emitter,
-    eventSig: raw.eventSig,
-    topics: [raw.topics[0], raw.topics[1], raw.topics[2]],
-    topicMask: Number(raw.topicMask),
-    metric: Number(raw.metric) as Metric,
-    metricArg: Number(raw.metricArg),
-  };
-
-  const chainKey = Number(spec.chainKey);
+  const scope: Scope = await scopeFor(credit, 'repay', line.subject);
+  const chainKey = scope.chainKey;
   const eth = source(chainKey);
   const prover = new Prover(chainKey, PROVER_URL, 60000);
 

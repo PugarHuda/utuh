@@ -87,19 +87,54 @@ export async function buildClaim(
   const claimId = readClaimId(registry, openReceipt);
   log(`claim ${claimId} opened over ${fromBlock}..${toBlock} (${included.length} members, bond ${opts.bond})`);
 
+  // Appending the union has a failure mode the watcher does not share. A watcher that meets a
+  // candidate it cannot prove shrugs and moves on; a claimant has to append everything it swept,
+  // so one unprovable candidate would abort the whole claim. Since the union deliberately trusts
+  // no endpoint, a single misbehaving one could inject a phantom event and stop every honest
+  // claimant from building anything.
+  //
+  // The Block Prover is the authority on what exists. An event nobody can prove cannot be
+  // appended and cannot be refuted with either — the same prover guards both paths — so dropping
+  // it is not an omission. What must not happen is dropping a *real* event because the Proof
+  // Builder was briefly down, hence the retries before giving up on any of them.
+  const dropped: ScopedEvent[] = [];
   const batches = planBatches(included);
+
   for (let i = 0; i < batches.length; i++) {
-    const { proofs, continuity } = await prover.proveBatch(batches[i]);
-    const tx = await registry.appendBatch(claimId, proofs, continuity);
-    await tx.wait();
-    log(`  batch ${i + 1}/${batches.length}: ${proofs.length} events verified on-chain`);
+    try {
+      const { proofs, continuity } = await prover.proveBatch(batches[i]);
+      const tx = await registry.appendBatch(claimId, proofs, continuity);
+      await tx.wait();
+      log(`  batch ${i + 1}/${batches.length}: ${proofs.length} events verified on-chain`);
+    } catch (e: any) {
+      log(`  batch ${i + 1}/${batches.length} failed as a batch (${e.shortMessage ?? e.message}) — one at a time`);
+      for (const event of batches[i]) {
+        const proven = await prover.proveOneOrGiveUp(event);
+        if (proven === null) {
+          dropped.push(event);
+          log(`    dropped ${event.blockNumber}/${event.txIndex}/${event.logIndexInTx}: unprovable`);
+          continue;
+        }
+        try {
+          await (await registry.appendBatch(claimId, [proven.proof], proven.continuity)).wait();
+        } catch (inner: any) {
+          dropped.push(event);
+          log(`    dropped ${event.blockNumber}/${event.txIndex}/${event.logIndexInTx}: ${inner.revert?.name ?? inner.shortMessage ?? 'rejected'}`);
+        }
+      }
+    }
+  }
+
+  if (dropped.length > 0) {
+    log(`  ${dropped.length} candidate(s) dropped as unprovable — an endpoint reported events the chain does not have`);
   }
 
   const sealTx = await registry.seal(claimId);
   await sealTx.wait();
   log(`claim ${claimId} sealed`);
 
-  return { claimId, included, omitted };
+  const kept = included.filter((e) => !dropped.includes(e));
+  return { claimId, included: kept, omitted };
 }
 
 function readClaimId(registry: Contract, receipt: any): bigint {

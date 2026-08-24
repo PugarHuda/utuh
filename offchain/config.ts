@@ -34,15 +34,10 @@ export const source = (chainKey: number) => new JsonRpcProvider(SOURCE_RPC[chain
 /// log. That is the protocol's own problem reappearing one layer down, and one endpoint cannot
 /// detect it. Set MAINNET_RPCS / SEPOLIA_RPCS to comma-separated URLs to widen it.
 const DEFAULT_RPCS: Record<number, string[]> = {
-  [CHAIN_KEY.mainnet]: [
-    SOURCE_RPC[CHAIN_KEY.mainnet],
-    'https://rpc.mevblocker.io',
-    'https://ethereum-rpc.publicnode.com',
-  ],
+  [CHAIN_KEY.mainnet]: [SOURCE_RPC[CHAIN_KEY.mainnet], 'https://rpc.mevblocker.io'],
   [CHAIN_KEY.sepolia]: [
     SOURCE_RPC[CHAIN_KEY.sepolia],
-    'https://sepolia.drpc.org',
-    'https://1rpc.io/sepolia',
+    'https://sepolia.gateway.tenderly.co',
   ],
 };
 
@@ -53,6 +48,15 @@ const list = (v?: string) =>
     .filter(Boolean);
 
 /// `MAINNET_RPCS` / `SEPOLIA_RPCS` **replace** the defaults; `*_RPCS_EXTRA` adds to them.
+///
+/// The defaults are endpoints checked to actually answer. An earlier list carried three per chain,
+/// two of which were dead — which meant the two-source minimum for sealing a claim could never be
+/// met and nothing could be built at all. A safety default that makes the system unusable is not a
+/// safety default; keep this list short and verified rather than long and hopeful.
+///
+/// Two per chain is the floor, not a comfortable margin: lose one and claims stop being sealable
+/// until it returns. Anyone running this for real should add their own through `*_RPCS_EXTRA`,
+/// ideally ones they pay for and nobody else shares.
 ///
 /// An earlier version only ever appended, which meant an operator who knew the bundled public
 /// endpoints were rate-limited — or worse, that one of them was the claimant's — had no way to

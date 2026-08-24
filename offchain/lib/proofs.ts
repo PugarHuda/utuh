@@ -140,4 +140,24 @@ export class Prover {
     const batch = await this.proveBatch([event]);
     return { proof: batch.proofs[0], continuity: batch.continuity };
   }
+
+  /// Prove one event, retrying before concluding that it cannot be proven.
+  ///
+  /// The distinction matters: a claimant drops candidates it cannot prove, and dropping a real
+  /// event because the Proof Builder was briefly unavailable would leave the claim incomplete and
+  /// its bond forfeit. Retrying separates "does not exist" from "was not reachable".
+  async proveOneOrGiveUp(
+    event: ScopedEvent,
+    attempts = 3,
+    backoffMs = 4000,
+  ): Promise<{ proof: EventProofStruct; continuity: ContinuityProofStruct } | null> {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        return await this.proveOne(event);
+      } catch {
+        if (i < attempts - 1) await new Promise((r) => setTimeout(r, backoffMs * (i + 1)));
+      }
+    }
+    return null;
+  }
 }

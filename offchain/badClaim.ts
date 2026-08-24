@@ -2,9 +2,10 @@ import { Wallet, formatEther, keccak256, concat, toUtf8Bytes, parseEther, getAdd
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, PROVER_URL, source, requirePrivateKey } from './config';
 import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
-import { scanScope, eventKey, type Scope, type Metric } from './lib/scope';
+import { eventKey, type Scope } from './lib/scope';
+import { scopeFor } from './lib/specs';
 import { Prover } from './lib/proofs';
-import { buildClaim } from './lib/claims';
+import { buildClaim, sweepForClaim } from './lib/claims';
 
 /// File a claim that is deliberately incomplete, so a watcher has something real to catch.
 ///
@@ -42,31 +43,9 @@ async function main() {
     console.log(`  topped up ${formatEther(need)} CTC`);
   }
 
-  const spec = await credit.volumeSpec();
-  const raw = await credit.expectedScope(
-    {
-      chainKey: spec.chainKey,
-      emitter: spec.emitter,
-      eventSig: spec.eventSig,
-      subjectTopic: spec.subjectTopic,
-      counterpartyTopic: spec.counterpartyTopic,
-      counterparty: spec.counterparty,
-      metric: spec.metric,
-      metricArg: spec.metricArg,
-    },
-    subject,
-  );
-  const scope: Scope = {
-    chainKey: Number(raw.chainKey),
-    emitter: raw.emitter,
-    eventSig: raw.eventSig,
-    topics: [raw.topics[0], raw.topics[1], raw.topics[2]],
-    topicMask: Number(raw.topicMask),
-    metric: Number(raw.metric) as Metric,
-    metricArg: Number(raw.metricArg),
-  };
+  const scope: Scope = await scopeFor(credit, 'volume', subject);
 
-  const chainKey = Number(spec.chainKey);
+  const chainKey = scope.chainKey;
   const eth = source(chainKey);
   const prover = new Prover(chainKey, PROVER_URL, 60_000);
 
@@ -74,7 +53,7 @@ async function main() {
   const toBlock = head - 3;
   const fromBlock = Number(process.env.BAIT_FROM ?? toBlock - 3_000);
 
-  const events = await scanScope(eth, scope, fromBlock, toBlock, 500);
+  const events = await sweepForClaim(scope, fromBlock, toBlock, { log: (m) => console.log('  ' + m) });
   console.log(`\nrange ${fromBlock}..${toBlock}: ${events.length} in-scope event(s)`);
   if (events.length < 2) throw new Error('need at least 2 events to hide one — widen BAIT_FROM');
 

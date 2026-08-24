@@ -2,7 +2,9 @@ import { Wallet, formatEther, keccak256, concat, toUtf8Bytes, parseEther } from 
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, PROVER_URL, source, requirePrivateKey } from './config';
 import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
-import { scanScope, eventKey, type Scope, type Metric } from './lib/scope';
+import type { Scope } from './lib/scope';
+import { scopeFor } from './lib/specs';
+import { sweepForClaim } from './lib/claims';
 import { Prover, type EventProofStruct, type ContinuityProofStruct } from './lib/proofs';
 
 /// The half of the registry that unit tests cannot reach.
@@ -72,30 +74,8 @@ async function main() {
   const window = Number(await registry.MIN_CHALLENGE_WINDOW());
 
   // Build the scope from the credit contract's own spec, so these are the shapes the system uses.
-  const spec = await credit.volumeSpec();
   const subject = new Wallet(keccak256(concat([master, toUtf8Bytes('utuh/borrower')]))).address;
-  const raw = await credit.expectedScope(
-    {
-      chainKey: spec.chainKey,
-      emitter: spec.emitter,
-      eventSig: spec.eventSig,
-      subjectTopic: spec.subjectTopic,
-      counterpartyTopic: spec.counterpartyTopic,
-      counterparty: spec.counterparty,
-      metric: spec.metric,
-      metricArg: spec.metricArg,
-    },
-    subject,
-  );
-  const scope: Scope = {
-    chainKey: Number(raw.chainKey),
-    emitter: raw.emitter,
-    eventSig: raw.eventSig,
-    topics: [raw.topics[0], raw.topics[1], raw.topics[2]],
-    topicMask: Number(raw.topicMask),
-    metric: Number(raw.metric) as Metric,
-    metricArg: Number(raw.metricArg),
-  };
+  const scope: Scope = await scopeFor(credit, 'volume', subject);
 
   const chainKey = scope.chainKey;
   const eth = source(chainKey);
@@ -121,7 +101,7 @@ async function main() {
   // ------------------------------------------------------------------
   const toBlock = head - 40;
   const fromBlock = Number(process.env.LIVE_FROM ?? toBlock - 3_000);
-  const events = await scanScope(eth, scope, fromBlock, toBlock, 500);
+  const events = await sweepForClaim(scope, fromBlock, toBlock, { log: (m) => console.log('  ' + m) });
   console.log(`\nrange ${fromBlock}..${toBlock}: ${events.length} in-scope event(s)`);
   if (events.length < 2) throw new Error('need at least 2 events — widen LIVE_FROM');
 
@@ -201,9 +181,90 @@ async function main() {
     console.log('  FAIL  claim should be Refuted');
   }
 
+  // The refund path. finalize stopped sending and started crediting, and until now nothing
+  // asserted that a bond ever actually comes back: the unit tests cannot create a claim at all,
+  // and everything above this line ends in a refutation. A money path nobody checks is a money
+  // path nobody has checked.
+  console.log('');
+  console.log('finalize and withdraw');
+  const honestOpen = await (await registry.open(scope, fromBlock, toBlock, window, { value: bond })).wait();
+  const honestId = readClaimId(registry, honestOpen);
+  const whole = await prover.proveBatch(events.slice(0, Math.min(events.length, 10)));
+  await (await registry.appendBatch(honestId, whole.proofs, whole.continuity)).wait();
+  await (await registry.seal(honestId)).wait();
+  console.log(`  claim ${honestId} sealed complete with ${whole.proofs.length} member(s)`);
+
+  await waitForBlock(owner.provider!, Number(await registry.challengeUntil(honestId)) + 1);
+
+  await expectOk('finalize after the window', async () => {
+    await (await registry.finalize(honestId)).wait();
+  });
+
+  const credited: bigint = await registry.withdrawable(owner.address);
+  if (credited === bond) {
+    passed++;
+    console.log(`  ok    the bond was credited, not sent (${formatEther(credited)} CTC)`);
+  } else {
+    failed++;
+    console.log(`  FAIL  credited ${formatEther(credited)} CTC, expected ${formatEther(bond)}`);
+  }
+
+  const balBefore = await owner.provider!.getBalance(owner.address);
+  await expectOk('withdraw', async () => {
+    await (await registry.withdraw()).wait();
+  });
+  const balAfter = await owner.provider!.getBalance(owner.address);
+  if (balAfter > balBefore) {
+    passed++;
+    console.log(`  ok    balance rose by ${formatEther(balAfter - balBefore)} CTC, net of gas`);
+  } else {
+    failed++;
+    console.log('  FAIL  balance did not rise after withdraw');
+  }
+
+  await expectRevert('withdrawing twice', 'NothingToWithdraw', () => registry.withdraw.staticCall());
+  await expectRevert('refuting something finalized', 'WrongStatus', () =>
+    registry.refute.staticCall(honestId, one.proof, one.continuity),
+  );
+
+  const settled = await registry.claim(honestId);
+  console.log(`  claim ${honestId}: ${statusName(settled.status)}`);
+
+  // Sweeping the union of independent endpoints means a claimant can be handed a candidate no
+  // chain has. Appending everything swept would then abort the claim, so one misbehaving endpoint
+  // could stop every honest claimant. The Block Prover decides: what it cannot prove is dropped,
+  // which is safe precisely because a refuter cannot refute with it either.
+  console.log('');
+  console.log('a candidate the chain does not have');
+  const phantom = {
+    blockNumber: events[0].blockNumber,
+    txHash: '0x' + 'ab'.repeat(32),
+    txIndex: events[0].txIndex,
+    logIndexInTx: 0,
+    value: 0n,
+  };
+  const proven = await prover.proveOneOrGiveUp(phantom, 2, 2000);
+  if (proven === null) {
+    passed++;
+    console.log('  ok    unprovable candidate gives up rather than aborting the claim');
+  } else {
+    failed++;
+    console.log('  FAIL  a fabricated transaction produced a proof');
+  }
+
+
   // ------------------------------------------------------------------
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exitCode = 1;
+}
+
+async function waitForBlock(provider: any, target: number): Promise<void> {
+  for (;;) {
+    const now = await provider.getBlockNumber();
+    if (now >= target) return;
+    console.log(`  waiting for CC3 block ${target}, at ${now}`);
+    await new Promise((r) => setTimeout(r, 10000));
+  }
 }
 
 function readClaimId(registry: any, receipt: any): bigint {
