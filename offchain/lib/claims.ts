@@ -1,7 +1,9 @@
 import { Contract } from 'ethers';
 import type { Scope, ScopedEvent } from './scope';
 import { eventKey, scanScopeUnion } from './scope';
-import { sources, withDeadline, SOURCE_TIMEOUT_MS } from '../config';
+import { Contract as EthContract } from 'ethers';
+import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
+import { sources, withDeadline, SOURCE_TIMEOUT_MS, CHAIN_INFO_ADDRESS } from '../config';
 import { Prover, planBatches } from './proofs';
 
 export interface BuildOptions {
@@ -108,18 +110,38 @@ export async function buildClaim(
       log(`  batch ${i + 1}/${batches.length}: ${proofs.length} events verified on-chain`);
     } catch (e: any) {
       log(`  batch ${i + 1}/${batches.length} failed as a batch (${e.shortMessage ?? e.message}) — one at a time`);
+      const chainInfo = new EthContract(CHAIN_INFO_ADDRESS, chainInfoAbi as any, registry.runner);
+
       for (const event of batches[i]) {
-        const proven = await prover.proveOneOrGiveUp(event);
-        if (proven === null) {
+        const where = `${event.blockNumber}/${event.txIndex}/${event.logIndexInTx}`;
+        const attempt = await prover.tryProveOne(event);
+
+        if (!attempt.ok) {
+          // Dropping is only safe on a definite answer. "I could not reach the prover" is not one,
+          // and treating it as one would seal a claim missing a real event — which is
+          // indistinguishable from lying and costs the same bond. Better to abort and let the
+          // claimant come back: an unbuilt claim loses nothing.
+          if (!attempt.authoritative) {
+            throw new Error(`could not prove ${where} and could not establish that it is absent: ${attempt.reason}`);
+          }
+          // Even a 404 only means "no such transaction" once the block is attested; before that
+          // the prover has nothing to serve for a transaction that does exist.
+          const attested: boolean = await chainInfo.is_height_attested(scope.chainKey, event.blockNumber);
+          if (!attested) {
+            throw new Error(`block ${event.blockNumber} is not attested yet — nothing can be concluded about ${where}`);
+          }
           dropped.push(event);
-          log(`    dropped ${event.blockNumber}/${event.txIndex}/${event.logIndexInTx}: unprovable`);
+          log(`    dropped ${where}: the chain has no such transaction`);
           continue;
         }
+
         try {
-          await (await registry.appendBatch(claimId, [proven.proof], proven.continuity)).wait();
+          await (await registry.appendBatch(claimId, [attempt.proof], attempt.continuity)).wait();
         } catch (inner: any) {
+          // The registry rejecting a proven event means it is out of scope or out of range, which
+          // a refuter could not use against the claim either.
           dropped.push(event);
-          log(`    dropped ${event.blockNumber}/${event.txIndex}/${event.logIndexInTx}: ${inner.revert?.name ?? inner.shortMessage ?? 'rejected'}`);
+          log(`    dropped ${where}: ${inner.revert?.name ?? inner.shortMessage ?? 'rejected on-chain'}`);
         }
       }
     }

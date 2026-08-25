@@ -18,7 +18,8 @@
     "finish": "tsx offchain/finishLine.ts",
     "watch": "tsx offchain/watch.ts",
     "bait": "tsx offchain/badClaim.ts",
-    "livetest": "tsx offchain/liveTest.ts"
+    "livetest": "tsx offchain/liveTest.ts",
+    "doctor": "tsx offchain/doctor.ts"
   },
   "keywords": [],
   "author": "",

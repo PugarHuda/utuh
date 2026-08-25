@@ -25,6 +25,9 @@ export const SOURCE_RPC: Record<number, string> = {
   [CHAIN_KEY.sepolia]: process.env.SEPOLIA_RPC ?? 'https://ethereum-sepolia-rpc.publicnode.com',
 };
 
+/// The ChainInfo precompile, quoted once so nothing has to remember the checksum.
+export const CHAIN_INFO_ADDRESS = '0x0000000000000000000000000000000000000fD3';
+
 export const cc3 = () => new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
 export const source = (chainKey: number) => new JsonRpcProvider(SOURCE_RPC[chainKey]);
 

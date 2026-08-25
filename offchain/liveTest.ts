@@ -243,13 +243,27 @@ async function main() {
     logIndexInTx: 0,
     value: 0n,
   };
-  const proven = await prover.proveOneOrGiveUp(phantom, 2, 2000);
-  if (proven === null) {
-    passed++;
-    console.log('  ok    unprovable candidate gives up rather than aborting the claim');
-  } else {
+  const attempt = await prover.tryProveOne(phantom, 2, 2000);
+  if (attempt.ok) {
     failed++;
     console.log('  FAIL  a fabricated transaction produced a proof');
+  } else if (attempt.authoritative) {
+    passed++;
+    console.log('  ok    the prover answered definitely, so the candidate can be dropped');
+  } else {
+    failed++;
+    console.log(`  FAIL  expected a definite answer, got: ${attempt.reason.slice(0, 70)}`);
+  }
+
+  // The other half of the distinction: an unreachable prover must never look like absence.
+  const blind = new Prover(chainKey, 'http://127.0.0.1:1', 3000);
+  const unreachable = await blind.tryProveOne(events[0], 1, 0);
+  if (!unreachable.ok && !unreachable.authoritative) {
+    passed++;
+    console.log('  ok    an unreachable prover is not mistaken for absence');
+  } else {
+    failed++;
+    console.log('  FAIL  an unreachable prover was treated as a definite answer');
   }
 
 

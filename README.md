@@ -264,6 +264,7 @@ offchain/
   liveTest.ts               the guards unit tests cannot reach, asserted against CC3
   fullFlow.ts               the whole loop on Sepolia, borrower and lender both acting
   finishLine.ts             resume an interrupted run — the state lives on-chain, not in the script
+  doctor.ts                 preflight: endpoints, prover, precompiles, balance
   proveControl.ts           bind a source-chain address to a Creditcoin account
   balance.ts                wallet, chain and attestation status
   lib/scope.ts              independent source-chain sweep
@@ -279,6 +280,7 @@ forge build
 forge test
 
 cp .env.example .env        # then fill in PRIVATE_KEY
+npm run doctor              # are the endpoints, prover and precompiles actually reachable?
 npm run balance             # prints the faucet command if the account is empty
 npm run probe               # verifies real mainnet events on-chain — needs no CTC at all
 npm run deploy
@@ -290,7 +292,7 @@ npm run finish -- <registry> <credit> <lineId>             # resume an interrupt
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
 npm run bait                # seal a deliberately short claim for the watcher to find
-npm run livetest            # 26 guards asserted against the live chain, refunds included
+npm run livetest            # 27 guards asserted against the live chain, refunds included
 
 npm run demo                # all three in sequence, for recording
 ```
@@ -327,6 +329,13 @@ answer; an earlier list carried three per chain of which two were dead, which me
 minimum could never be met and nothing could be built at all. A safety default that makes the
 system unusable is not a safety default. Anyone running this for real should add endpoints they
 pay for through `*_RPCS_EXTRA`.
+
+They were verified on the day they were written, and endpoints rot — "I checked once" is an
+assumption wearing the clothes of a fact. `npm run doctor` is how anyone finds out before a bond is
+on the line. It asks each endpoint the question the sweeps actually ask, which took two tries to
+get right: a query for every log on the chain is one no endpoint should serve and condemns all of
+them, and every USDC transfer across four hundred blocks times out the good ones. Real scopes pin
+an indexed topic, which is what makes a wide range affordable, so the probe pins one too.
 
 A watcher's whole job is sweeping a claim's range independently, so the source-chain RPC has to
 serve a wide `eth_getLogs`. Most free endpoints cap the range at 50–1000 blocks; Tenderly's public
@@ -420,8 +429,14 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
   unprovable candidate aborted the whole claim — and since the union deliberately trusts no
   endpoint, a single misbehaving one could inject a phantom event and stop every honest claimant
   from building anything. The Block Prover decides what exists: an event nobody can prove cannot
-  be appended and cannot be refuted with either, so dropping it is not an omission. Candidates are
-  retried before being given up on, so a Proof Builder outage is not mistaken for nonexistence.
+  be appended and cannot be refuted with either, so dropping it is not an omission.
+
+  Dropping is only safe on a *definite* answer, though, and the SDK returns "no such transaction"
+  and "I could not reach the prover" in the same shape — `success: false` with a message. They are
+  told apart by what the API said: a `404` is the prover speaking about the chain, anything else is
+  a failure to ask. An unreachable prover aborts the claim instead of dropping, because an unbuilt
+  claim costs nothing and an incomplete one costs the bond. Even a 404 only counts once the block
+  is attested, which is checked against `0x0FD3` rather than assumed.
 
 - **A watcher only retires a claim on a verdict that cannot change.** Refuted, settled by someone
   else, proven complete by two or more endpoints, or past its window. Anything short of that —

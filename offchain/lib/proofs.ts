@@ -141,23 +141,36 @@ export class Prover {
     return { proof: batch.proofs[0], continuity: batch.continuity };
   }
 
-  /// Prove one event, retrying before concluding that it cannot be proven.
+  /// Try to prove one event, and say *why* if it fails.
   ///
-  /// The distinction matters: a claimant drops candidates it cannot prove, and dropping a real
-  /// event because the Proof Builder was briefly unavailable would leave the claim incomplete and
-  /// its bond forfeit. Retrying separates "does not exist" from "was not reachable".
-  async proveOneOrGiveUp(
+  /// A claimant drops candidates that cannot be proven, so the difference between "the prover
+  /// says there is no such transaction" and "the prover could not be reached" is the difference
+  /// between a correct claim and an incomplete one with a forfeit bond. Both arrive from the SDK
+  /// as `success: false` with a message, so they are told apart by what the API answered: a 404
+  /// is the prover speaking about the chain, anything else is a failure to ask.
+  ///
+  ///   404                  -> "Failed to fetch proof: AxiosError: ... status code 404"
+  ///   unreachable prover   -> "Failed to fetch proof: Error: connect ECONNREFUSED ..."
+  async tryProveOne(
     event: ScopedEvent,
     attempts = 3,
     backoffMs = 4000,
-  ): Promise<{ proof: EventProofStruct; continuity: ContinuityProofStruct } | null> {
+  ): Promise<
+    | { ok: true; proof: EventProofStruct; continuity: ContinuityProofStruct }
+    | { ok: false; authoritative: boolean; reason: string }
+  > {
+    let last = 'unknown';
     for (let i = 0; i < attempts; i++) {
       try {
-        return await this.proveOne(event);
-      } catch {
+        const { proof, continuity } = await this.proveOne(event);
+        return { ok: true, proof, continuity };
+      } catch (e: any) {
+        last = String(e.message ?? e);
+        // A definite answer is not worth retrying.
+        if (last.includes('status code 404')) return { ok: false, authoritative: true, reason: last };
         if (i < attempts - 1) await new Promise((r) => setTimeout(r, backoffMs * (i + 1)));
       }
     }
-    return null;
+    return { ok: false, authoritative: false, reason: last };
   }
 }
