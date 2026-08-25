@@ -115,16 +115,30 @@ async function main() {
   console.log(`  window closes at Creditcoin block ${until}`);
   await waitForBlock(wallet, until + 1);
 
-  const balBefore = await wallet.provider!.getBalance(wallet.address);
-  const finalizeTx = await registry.finalize(honest.claimId);
-  await finalizeTx.wait();
+  await (await registry.finalize(honest.claimId)).wait();
   const finalized = await registry.claim(honest.claimId);
-  const balAfter = await wallet.provider!.getBalance(wallet.address);
-
   console.log(`  status ${statusName(finalized.status)}  aggregate ${finalized.aggregate}`);
-  console.log(`  bond returned: ${formatEther(balBefore)} -> ${formatEther(balAfter)} CTC`);
-  console.log(`  usable at exposure ${formatEther(BOND)} CTC: ${await registry.isUsable(honest.claimId, BOND)}`);
-  console.log(`  usable at exposure ${formatEther(BOND * 100n)} CTC: ${await registry.isUsable(honest.claimId, BOND * 100n)}`);
+
+  // finalize credits, it does not send. A claimant that cannot receive ether would otherwise have
+  // left its own claim stuck in Sealed forever, and anything waiting on that claim with it — so
+  // the refund is pulled. Printing the balance across `finalize` alone would show it *falling* by
+  // the gas and read as a bond lost.
+  const owed = await registry.withdrawable(wallet.address);
+  console.log(
+    `  this claim's ${formatEther(finalized.bondPosted)} CTC credited, ` +
+      `${formatEther(owed)} CTC owed in total — pulled rather than pushed`,
+  );
+  const balBefore = await wallet.provider!.getBalance(wallet.address);
+  await (await registry.withdraw()).wait();
+  const balAfter = await wallet.provider!.getBalance(wallet.address);
+  console.log(`  withdrawn: ${formatEther(balBefore)} -> ${formatEther(balAfter)} CTC, net of gas`);
+
+  // What the claim is worth to a lender is not the bond. Half of it is recoverable by a claimant
+  // who front-runs their own refutation from a second address; only the burned half is guaranteed.
+  const enforceable = await registry.enforceableLoss(honest.claimId);
+  console.log(`  bond ${formatEther(finalized.bondPosted)} CTC, but enforceableLoss ${formatEther(enforceable)} CTC`);
+  console.log(`  usable at exposure ${formatEther(enforceable)} CTC: ${await registry.isUsable(honest.claimId, enforceable)}`);
+  console.log(`  usable at one wei more than that: ${await registry.isUsable(honest.claimId, enforceable + 1n)}`);
 
   console.log('\nDone. Presence proven by Attestcoin; absence held up by a bond nobody could take.');
 }

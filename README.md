@@ -296,7 +296,7 @@ forge build
 forge test
 
 cp .env.example .env        # then fill in PRIVATE_KEY
-npm run doctor              # are the endpoints, prover and precompiles actually reachable?
+npm run doctor              # are the endpoints, both provers and the precompiles reachable?
 npm run verify              # publish contract sources to the block explorer
 npm run balance             # prints the faucet command if the account is empty
 npm run probe               # verifies real mainnet events on-chain — needs no CTC at all
@@ -420,9 +420,17 @@ $ eth_getCode 0x...0fD3 → 0x
 ```
 
 A forked EVM cannot execute them, and a stub would only ever test the stub. So that half runs
-against the live CC3 Testnet with proofs fetched from the real Proof Builder for real Ethereum
-mainnet transactions. `npm run e2e` and `npm run credit` are the tests, and they either pass on the
-real chain or they do not pass at all.
+against the live CC3 Testnet with real proofs for real Ethereum mainnet transactions. `npm run
+e2e`, `npm run credit` and `npm run livetest` are the tests, and they either pass on the real chain
+or they do not pass at all.
+
+`npm run livetest` is the one that reaches furthest: 44 guards, most of them `staticCall`s that
+prove a revert without spending gas, plus the steps that have to be real for the later ones to
+mean anything. It underwrites whichever address the source chain says was busiest in its window,
+which is a deliberate change — it used to underwrite a wallet derived from the operator's key,
+an address that has never repaid a loan on Ethereum and never will, so the suite could not run
+standalone at all. A hardcoded borrower would only move the problem, since addresses go quiet and
+a fixture that rots fails the suite for reasons that have nothing to do with the registry.
 
 ## One thing worth knowing before you build on this
 

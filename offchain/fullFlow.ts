@@ -14,6 +14,7 @@ import {
 } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, source, requirePrivateKey } from './config';
+import { writeFileSync } from 'node:fs';
 import { artifact, deploy, signer, registryAt, creditAt } from './lib/contracts';
 import { scopeFor, scanScope, Metric, type Scope } from './lib/scope';
 import { Prover } from './lib/proofs';
@@ -149,6 +150,30 @@ async function main() {
   const creditAddress = await creditContract.getAddress();
   console.log(`  UtuhRegistry ${registryAddress}`);
   console.log(`  UtuhCredit   ${creditAddress}`);
+  console.log(`  EvmV1Decoder ${decoderAddress}`);
+
+  // Write down what was deployed, because a run that only prints it leaves nothing to verify
+  // against. The library address in particular is needed to reproduce the bytecode and is not
+  // recoverable from anywhere except the linked runtime code itself. Its own file, so a full-flow
+  // run never overwrites the deployment the other scripts point at.
+  writeFileSync(
+    'deployments.full.json',
+    JSON.stringify(
+      {
+        chainId: CC3_CHAIN_ID,
+        decoder: decoderAddress,
+        registry: registryAddress,
+        credit: creditAddress,
+        ledger: ledgerAddress,
+        sourceChainKey: SOURCE,
+        challengeWindow: CHALLENGE_WINDOW,
+        deployer: lender.address,
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  console.log('  written to deployments.full.json');
 
   const registry = registryAt(registryAddress, lender);
   const registryAsBorrower = registryAt(registryAddress, borrowerCc3);
