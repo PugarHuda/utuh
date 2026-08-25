@@ -177,12 +177,27 @@ async function main() {
   // ------------------------------------------------------------------
   console.log('\n=== 4. the line is refused, and that is the point ===');
   const volumeAggregate: bigint = (await registry.claim(volumeClaim.claimId)).aggregate;
+
+  // Ask the contracts for their own arithmetic instead of restating it here. This line printed
+  // ten times the *bond* and called it the cap, which is twice what the contract would allow: a
+  // claimant can front-run their own refutation from a second address and take the refuter's half
+  // back, so only the burned half is enforceable, and it is the enforceable half that lends.
+  const [rate, ltvBps, multiple, enforceable] = await Promise.all([
+    credit.VOLUME_UNIT_IN_CTC(),
+    credit.LTV_BPS(),
+    credit.BOND_MULTIPLE(),
+    registry.enforceableLoss(cleanClaim.claimId),
+  ]);
   const cleanBond: bigint = (await registry.claim(cleanClaim.claimId)).bondPosted;
-  const rate: bigint = await credit.VOLUME_UNIT_IN_CTC();
 
   console.log(`  proven volume ${formatUnits(volumeAggregate, 6)} USDC at ${rate} wei/unit`);
-  console.log(`  20% of that = ${formatEther((volumeAggregate * rate * 2000n) / 10_000n)} CTC`);
-  console.log(`  bond cap    = ${formatEther(cleanBond * 10n)} CTC  (10x the clean claim's bond)`);
+  console.log(
+    `  ${Number(ltvBps) / 100}% of that = ${formatEther((volumeAggregate * rate * ltvBps) / 10_000n)} CTC`,
+  );
+  console.log(
+    `  bond cap    = ${formatEther(enforceable * multiple)} CTC  ` +
+      `(${multiple}x enforceableLoss ${formatEther(enforceable)}, not the ${formatEther(cleanBond)} CTC bond)`,
+  );
 
   // Everything above was read off a public chain. Reading a history is not the same as holding
   // the key that wrote it, so the line must not open for whoever happens to ask.

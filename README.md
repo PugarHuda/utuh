@@ -366,6 +366,13 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `REPAYMENT_BPS` | `10500` | lender policy: what a draw must repay, in basis points |
 | `REPAY_WINDOW_BLOCKS` | `5760` | lender policy: how long the borrower has |
 | `LENDER_MAINNET` | Binance hot wallet | where repayment must land on Ethereum |
+| `PROVER_TIMEOUT_MS` | `30000` | `doctor` only; the prover is a separate service with its own latency |
+| `LIVE_SUBJECT` / `LIVE_FROM` / `LIVE_SPAN` | discovered / head−3040 / 400 | pin `livetest` to one address or window instead of letting it find a busy one |
+| `WATCH_POLL_MS` / `WATCH_LOOKBACK` / `WATCH_LOG_CHUNK` | `20000` / `5000` / `2000` | watcher cadence, how far back it looks on start, and its log-scan chunk |
+| `BOND` / `BAIT_FROM` | `2` CTC / `toBlock−3000` | what `npm run bait` stakes, and where it looks for an event to hide |
+| `SUBJECT` / `RANGE_BLOCKS` / `MAX_MEMBERS` | derived / `60` / `12` | who and how much `npm run e2e` builds a claim over |
+| `LEDGER` | — | set it and `npm run verify` publishes the source-chain contract too |
+| `EXPLORER_URL` / `SEPOLIA_EXPLORER_URL` | Blockscout | where `npm run verify` submits |
 
 Two endpoints per chain is the floor for sealing a claim, not a comfortable margin — lose one and
 claims stop being sealable until it returns. The bundled defaults are ones checked to actually
