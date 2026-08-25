@@ -292,7 +292,7 @@ npm run finish -- <registry> <credit> <lineId>             # resume an interrupt
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
 npm run bait                # seal a deliberately short claim for the watcher to find
-npm run livetest            # 27 guards asserted against the live chain, refunds included
+npm run livetest            # 33 guards asserted against the live chain, refunds included
 
 npm run demo                # all three in sequence, for recording
 ```
@@ -332,10 +332,12 @@ pay for through `*_RPCS_EXTRA`.
 
 They were verified on the day they were written, and endpoints rot — "I checked once" is an
 assumption wearing the clothes of a fact. `npm run doctor` is how anyone finds out before a bond is
-on the line. It asks each endpoint the question the sweeps actually ask, which took two tries to
-get right: a query for every log on the chain is one no endpoint should serve and condemns all of
-them, and every USDC transfer across four hundred blocks times out the good ones. Real scopes pin
-an indexed topic, which is what makes a wide range affordable, so the probe pins one too.
+on the line. It asks each endpoint the question the sweeps actually ask, which took three tries to get right. A
+query for every log on the chain is one no endpoint should serve and condemns all of them. Every
+USDC transfer across four hundred blocks times out the good ones. And a probe whose right answer is
+"nothing" cannot tell a working endpoint from a broken one that returns nothing — which is the
+failure it exists to catch. Each chain now gets two questions: a narrow one that must come back
+with results, and a wide filtered one that must come back at all.
 
 A watcher's whole job is sweeping a claim's range independently, so the source-chain RPC has to
 serve a wide `eth_getLogs`. Most free endpoints cap the range at 50–1000 blocks; Tenderly's public
@@ -446,6 +448,20 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
   and an unguarded `await` meant one failed refutation killed the process. A watcher that dies on
   its first lost race is not a watcher. Claims are also worked soonest-deadline-first, because one
   with three blocks left cannot wait behind one with five thousand.
+
+- **An endpoint's answer is not automatically an answer to the question.** A sweep now discards
+  anything that does not match the filter it sent — wrong contract, wrong signature, wrong pinned
+  topic, or a block outside the range asked for. That last one matters most: a log claiming a
+  height above the attestation frontier becomes a candidate the prover cannot prove and the chain
+  cannot yet rule absent, which by the drop rule aborts the whole claim. One hostile endpoint would
+  otherwise stop anyone sealing anything.
+
+- **Reconciling log indices needs a capability not every endpoint has.** `eth_getLogs` numbers logs
+  across the block; the decoder on Creditcoin numbers them within their transaction, and bridging
+  the two needs every log that transaction emitted. There are two ways to ask and endpoints differ
+  on which they answer — publicnode serves a filtered historical `eth_getLogs` while refusing both
+  the receipt and an unfiltered block query over the same blocks; tenderly answers the block query.
+  Both are tried, and an endpoint that can do neither fails loudly rather than guessing an index.
 
 - **A watcher's silence is only as good as its sources.** Deciding a claim is complete means
   trusting some node to have mentioned every log — the protocol's own problem, one layer down.

@@ -32,16 +32,25 @@ import { Prover } from './lib/proofs';
 /// time out. A real scope always pins an indexed topic as well, which is what makes a wide range
 /// affordable, so the probe pins one too: transfers *from* the zero address, which are rare
 /// enough to come back empty while still making the endpoint scan the whole range.
-const TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+/// A probe whose right answer is "nothing" cannot tell a working endpoint from a broken one that
+/// returns nothing — which is the failure this exists to catch. So each chain gets two questions:
+/// a narrow one that must come back with results, and a wide filtered one that must come back at
+/// all. The first proves the endpoint is really looking; the second proves it will look far.
+const PROVER_TIMEOUT_MS = Number(process.env.PROVER_TIMEOUT_MS ?? 30_000);
 const ZERO_TOPIC = '0x' + '00'.repeat(32);
-const PROBE: Record<number, { address: string; topics: string[] }> = {
+const TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+const PROBE: Record<number, { address: string; topics: string[]; narrow: number; wide: number }> = {
   [CHAIN_KEY.mainnet]: {
-    address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
-    topics: [TRANSFER, ZERO_TOPIC],
+    address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC, never quiet
+    topics: [TRANSFER],
+    narrow: 3,
+    wide: 400,
   },
   [CHAIN_KEY.sepolia]: {
     address: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14', // WETH
-    topics: [TRANSFER, ZERO_TOPIC],
+    topics: [TRANSFER],
+    narrow: 60,
+    wide: 400,
   },
 };
 
@@ -87,20 +96,40 @@ async function main() {
     // ask: one contract, one event signature, a modest range. An unfiltered query for every log
     // on the chain is one no endpoint should serve, and probing with it would condemn all of them.
     const probe = PROBE[key];
-    const from = Math.max(0, frontier - 400);
     const to = Math.max(0, frontier - 40);
     let answered = 0;
     const counts: number[] = [];
 
     for (const { url, provider } of sources(key)) {
       try {
-        const logs = await withDeadline(
+        const narrow = await withDeadline(
           SOURCE_TIMEOUT_MS,
-          provider.getLogs({ address: probe.address, topics: probe.topics, fromBlock: from, toBlock: to }),
+          provider.getLogs({
+            address: probe.address,
+            topics: probe.topics,
+            fromBlock: to - probe.narrow,
+            toBlock: to,
+          }),
         );
+        if (narrow.length === 0) {
+          problems++;
+          console.log(`  FAIL  ${host(url)}  returned nothing where there is certainly something`);
+          continue;
+        }
+
+        await withDeadline(
+          SOURCE_TIMEOUT_MS,
+          provider.getLogs({
+            address: probe.address,
+            topics: [...probe.topics, ZERO_TOPIC],
+            fromBlock: to - probe.wide,
+            toBlock: to,
+          }),
+        );
+
         answered++;
-        counts.push(logs.length);
-        console.log(`  ok    ${host(url)}  scanned ${to - from} blocks, ${logs.length} matched`);
+        counts.push(narrow.length);
+        console.log(`  ok    ${host(url)}  ${narrow.length} logs in ${probe.narrow} blocks, and scans ${probe.wide}`);
       } catch (e: any) {
         console.log(`  FAIL  ${host(url)}  ${(e.shortMessage ?? e.message).slice(0, 60)}`);
       } finally {
@@ -114,14 +143,21 @@ async function main() {
       console.log('           Sealing a claim needs two. Add endpoints through');
       console.log(`           ${name.toUpperCase()}_RPCS_EXTRA, or replace the list with ${name.toUpperCase()}_RPCS.`);
     } else if (new Set(counts).size > 1) {
-      // Not a failure — the union is what gets claimed, and disagreement is exactly what having
-      // more than one endpoint is for. Worth seeing, though.
-      console.log(`  note  endpoints disagreed on the count (${counts.join(' vs ')})`);
+      // The union means a disagreement is survivable, so this is not fatal. It does mean one of
+      // them is wrong about what the chain contains, which an operator should hear about rather
+      // than find out from a slashed bond.
+      problems++;
+      console.log(`  PROBLEM  endpoints disagree about the same range (${counts.join(' vs ')}).`);
+      console.log('           The union covers it, but one of them is not telling the truth.');
     }
 
+    // waitUntilHeightAttested polls for up to fifteen minutes by default. That is right for a
+    // claimant waiting on the frontier and wrong for a preflight, which should answer now.
     try {
-      const prover = new Prover(key, PROVER_URL, SOURCE_TIMEOUT_MS);
-      await prover.waitAttested(to);
+      // Its own deadline: the prover is a different service with different latency, and reusing
+      // the endpoint budget would report it down whenever that budget is tightened for the sweeps.
+      const prover = new Prover(key, PROVER_URL, PROVER_TIMEOUT_MS);
+      await withDeadline(PROVER_TIMEOUT_MS, prover.waitAttested(to));
       console.log(`  ok    proof builder has block ${to}`);
     } catch (e: any) {
       problems++;
@@ -131,8 +167,22 @@ async function main() {
 
   const d = readDeployments();
   if (d.registry) {
-    console.log('\ndeployments.json');
-    for (const [k, v] of Object.entries(d)) console.log(`  ${k.padEnd(9)} ${v}`);
+    console.log('');
+    console.log('deployments.json');
+    // `deployer` is an account, not a contract, and expecting code at it would report a problem
+    // that is not one. Only the entries that are meant to hold bytecode are checked for it.
+    const CONTRACTS = new Set(['decoder', 'registry', 'credit']);
+    for (const [k, v] of Object.entries(d)) {
+      if (!CONTRACTS.has(k) || typeof v !== 'string') {
+        console.log(`  ...  ${k.padEnd(9)} ${v}`);
+        continue;
+      }
+      // An address written in a file is not a contract. Redeploy elsewhere, or keep a stale file,
+      // and every script downstream aims confidently at nothing.
+      const code = await cc3.getCode(v);
+      if (code === '0x') problems++;
+      console.log(`  ${code === '0x' ? 'FAIL' : 'ok  '} ${k.padEnd(9)} ${v}`);
+    }
   }
 
   console.log(problems === 0 ? '\nEverything needed is reachable.' : `\n${problems} problem(s) above.`);

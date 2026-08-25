@@ -90,7 +90,8 @@ export async function scanScope(
   while (filterTopics.length > 1 && filterTopics[filterTopics.length - 1] === null) filterTopics.pop();
 
   const found: ScopedEvent[] = [];
-  const receiptCache = new Map<string, number[]>();
+  // Transaction hash -> the block-wide indices of every log it emitted, ascending.
+  const txLogIndices = new Map<string, number[]>();
 
   for (let start = fromBlock; start <= toBlock; start += chunkSize) {
     const end = Math.min(start + chunkSize - 1, toBlock);
@@ -102,17 +103,39 @@ export async function scanScope(
     });
 
     for (const log of logs) {
-      // eth_getLogs reports a block-wide log index; translate it to the per-transaction index
-      // the decoder will produce on Creditcoin.
-      let blockWideIndices = receiptCache.get(log.transactionHash);
-      if (!blockWideIndices) {
-        const receipt = await provider.getTransactionReceipt(log.transactionHash);
-        if (!receipt) throw new Error(`no receipt for ${log.transactionHash}`);
-        blockWideIndices = receipt.logs.map((l) => l.index);
-        receiptCache.set(log.transactionHash, blockWideIndices);
+      // An endpoint's answer is not automatically an answer to the question. Everything below is
+      // taken from whatever the node chose to send back, so anything that does not match what was
+      // asked for is discarded rather than carried forward.
+      //
+      // This is not pedantry. A log claiming a block above the attestation frontier would become a
+      // candidate the prover cannot prove and the chain cannot yet speak about — which, by the
+      // rule that only a definite answer permits dropping, aborts the whole claim. One hostile or
+      // broken endpoint could otherwise stop anyone from ever sealing anything.
+      if (!answersTheQuestion(scope, log, start, end)) continue;
+
+      // eth_getLogs reports a block-wide log index; the decoder on Creditcoin numbers logs within
+      // their transaction, so the two have to be reconciled — which needs every log that
+      // transaction emitted, not just the ones matching this scope.
+      //
+      // There are two ways to ask and endpoints differ on which they will answer. publicnode
+      // serves a filtered eth_getLogs across historical blocks but refuses both the receipt and an
+      // unfiltered block query over the same range; tenderly answers the block query happily. So
+      // both are tried, and an endpoint that can do neither cannot serve this sweep at all — which
+      // is worth failing loudly rather than guessing an index.
+      let siblings = txLogIndices.get(log.transactionHash);
+      if (!siblings) {
+        const found2 = await siblingLogIndices(provider, log);
+        if (!found2) {
+          throw new Error(`cannot determine the per-transaction log index for ${log.transactionHash}`);
+        }
+        siblings = found2;
+        txLogIndices.set(log.transactionHash, siblings);
       }
-      const logIndexInTx = blockWideIndices.indexOf(log.index);
-      if (logIndexInTx < 0) throw new Error(`log ${log.index} not found in its own receipt`);
+
+      const logIndexInTx = siblings.indexOf(log.index);
+      if (logIndexInTx < 0) {
+        throw new Error(`log ${log.index} not found among its own transaction's logs`);
+      }
 
       found.push({
         blockNumber: log.blockNumber,
@@ -180,6 +203,52 @@ function hostOf(url: string): string {
   } catch {
     return url;
   }
+}
+
+/// The block-wide indices of every log the transaction emitted, ascending, or null if this
+/// endpoint will not say.
+async function siblingLogIndices(provider: JsonRpcProvider, log: any): Promise<number[] | null> {
+  const receipt = await withRetry(() => provider.getTransactionReceipt(log.transactionHash), 2, 600);
+  if (receipt) return receipt.logs.map((l) => l.index).sort((a, b) => a - b);
+
+  const all = await withRetry(
+    () => provider.getLogs({ fromBlock: log.blockNumber, toBlock: log.blockNumber }),
+    2,
+    600,
+  );
+  if (!all) return null;
+
+  return (all as any[])
+    .filter((l) => l.transactionIndex === log.transactionIndex)
+    .map((l) => l.index)
+    .sort((a, b) => a - b);
+}
+
+async function withRetry<T>(work: () => Promise<T>, attempts = 3, waitMs = 800): Promise<T | null> {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const result = await work();
+      if (result != null) return result;
+    } catch {
+      /* fall through to the wait */
+    }
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, waitMs * (i + 1)));
+  }
+  return null;
+}
+
+/// Whether a returned log is actually a response to the filter that was sent.
+/// Exported so it can be tested as what it is: a pure decision about untrusted input.
+export function answersTheQuestion(scope: Scope, log: any, fromBlock: number, toBlock: number): boolean {
+  if (log.blockNumber < fromBlock || log.blockNumber > toBlock) return false;
+  if (String(log.address).toLowerCase() !== scope.emitter.toLowerCase()) return false;
+  if (!log.topics?.length || String(log.topics[0]).toLowerCase() !== scope.eventSig.toLowerCase()) return false;
+  for (let i = 0; i < 3; i++) {
+    if ((scope.topicMask & (1 << i)) === 0) continue;
+    const got = log.topics[i + 1];
+    if (!got || String(got).toLowerCase() !== scope.topics[i].toLowerCase()) return false;
+  }
+  return true;
 }
 
 /// Mirrors EventScope.value.

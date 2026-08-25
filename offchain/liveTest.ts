@@ -5,6 +5,7 @@ import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
 import type { Scope } from './lib/scope';
 import { scopeFor } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
+import { answersTheQuestion } from './lib/scope';
 import { Prover, type EventProofStruct, type ContinuityProofStruct } from './lib/proofs';
 
 /// The half of the registry that unit tests cannot reach.
@@ -83,6 +84,40 @@ async function main() {
   const head = await eth.getBlockNumber();
 
   // ------------------------------------------------------------------
+  // An endpoint's answer is not automatically an answer to the question. These cost nothing and
+  // guard the point where untrusted data first enters: a log claiming a block above the
+  // attestation frontier would become a candidate that cannot be proven and cannot be ruled
+  // absent, which aborts the whole claim. One hostile endpoint would stop anyone sealing anything.
+  console.log('what a sweep will accept from an endpoint');
+  {
+    // Built from the scope's own pinned topics, so the positive case is a log this scope really
+    // would accept rather than one that happens to look plausible.
+    const topics: string[] = [scope.eventSig];
+    for (let i = 0; i < 3; i++) {
+      topics.push((scope.topicMask & (1 << i)) !== 0 ? scope.topics[i] : '0x' + '11'.repeat(32));
+    }
+    const good = { blockNumber: 100, address: scope.emitter, topics, index: 0, transactionIndex: 0 };
+    const cases: [string, any, boolean][] = [
+      ['a log that matches the filter', good, true],
+      ['a log below the range', { ...good, blockNumber: 99 }, false],
+      ['a log above the range', { ...good, blockNumber: 201 }, false],
+      ['a log from another contract', { ...good, address: '0x' + '22'.repeat(20) }, false],
+      ['a log with another signature', { ...good, topics: ['0x' + '33'.repeat(32)] }, false],
+      ['a log with no topics at all', { ...good, topics: [] }, false],
+    ];
+    for (const [name, log, want] of cases) {
+      const got = answersTheQuestion(scope, log, 100, 200);
+      if (got === want) {
+        passed++;
+        console.log(`  ok    ${name} → ${got ? 'accepted' : 'discarded'}`);
+      } else {
+        failed++;
+        console.log(`  FAIL  ${name} → ${got ? 'accepted' : 'discarded'}, expected the opposite`);
+      }
+    }
+  }
+
+  console.log('');
   console.log('opening a claim — the checks that need no state');
 
   await expectRevert('bond below the minimum', 'BondTooSmall', () =>
@@ -99,8 +134,13 @@ async function main() {
   );
 
   // ------------------------------------------------------------------
-  const toBlock = head - 40;
-  const fromBlock = Number(process.env.LIVE_FROM ?? toBlock - 3_000);
+  // A bounded window, anchored where the events are. Taking everything since LIVE_FROM up to the
+  // current head grows a little every hour until it is ten thousand blocks wide and only the
+  // strongest endpoint will serve it — at which point the two-source minimum stops the suite for
+  // reasons that have nothing to do with what it is testing.
+  const anchor = process.env.LIVE_FROM ? Number(process.env.LIVE_FROM) : head - 3_040;
+  const fromBlock = anchor;
+  const toBlock = Math.min(anchor + Number(process.env.LIVE_SPAN ?? 400), head - 40);
   const events = await sweepForClaim(scope, fromBlock, toBlock, { log: (m) => console.log('  ' + m) });
   console.log(`\nrange ${fromBlock}..${toBlock}: ${events.length} in-scope event(s)`);
   if (events.length < 2) throw new Error('need at least 2 events — widen LIVE_FROM');
