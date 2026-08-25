@@ -34,6 +34,31 @@ This is not hypothetical. Season 1 of this hackathon drew 76 submissions, and mo
 them were some form of on-chain credit score or reputation-based lending. Every one of them
 inherits this hole. None of them won.
 
+## Where this sits next to Creditcoin's own example
+
+Creditcoin ships a [loan-flow tutorial](https://github.com/gluwa/usc-testnet-bridge-examples/tree/main/loan-flow)
+— `USCLoanManager` on Creditcoin, an auxiliary contract on Sepolia, an offchain worker between
+them. It is a good tutorial and it is the right shape for what it teaches. It is also a precise
+illustration of the gap, because it is the reference every builder will start from.
+
+Each event proves itself as it happens. `_markLoanAsFunded` and `_noteLoanRepayment` take one
+proven transaction each; `USCBase.execute` verifies it through `0x0FD2` and records the query so
+it cannot be replayed. Every *present* fact is cryptographic, and that part is sound.
+
+Two things follow from proving one event at a time, and neither is a defect in the tutorial:
+
+- Nothing asks whether the set is complete. That is fine when the loan is already registered on
+  chain and the contract knows exactly which events it is waiting for. It stops being fine the
+  moment the question is *"has this borrower ever been liquidated"* — because that question is
+  about events nobody submitted, and no number of inclusion proofs answers it.
+- Default is declared, not proven. `markLoanAsExpired` is `onlyOwner`. Somebody trusted says the
+  loan went bad. For a tutorial that is the honest simplification; for underwriting a stranger it
+  is the whole problem moved one layer up.
+
+Utuh is the layer that would sit under such a contract: a bonded claim that a set of events is
+*all* of them, refutable by anyone with one proof of one omitted event. Presence stays
+cryptographic exactly as above. Absence becomes economic, which is the most that can be had.
+
 ## What Utuh does
 
 Two halves, each sound on its own.
