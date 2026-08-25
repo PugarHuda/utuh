@@ -19,7 +19,8 @@
     "watch": "tsx offchain/watch.ts",
     "bait": "tsx offchain/badClaim.ts",
     "livetest": "tsx offchain/liveTest.ts",
-    "doctor": "tsx offchain/doctor.ts"
+    "doctor": "tsx offchain/doctor.ts",
+    "verify": "tsx offchain/verify.ts"
   },
   "keywords": [],
   "author": "",

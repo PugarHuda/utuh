@@ -196,13 +196,22 @@ it. Silence is the default condition, not an inference.
 
 ## Deployed on CC3 Testnet (chain id 102031)
 
+Every contract below is **verified on Blockscout** — source, ABI and decoded constructor arguments
+are readable at its address. An unverified address is a wall of bytecode, and "the source is on
+GitHub" is a different claim from "this address runs that source". `npm run verify` republishes
+them after a redeploy.
+
+Blockscout reports a *partial* match: the runtime bytecode agrees and the trailing metadata hash
+does not, which is what happens when the compilation environment is not reproduced byte for byte.
+The code is readable and the functions are callable.
+
 ### Mainnet-sourced deployment
 
 | Contract | Address |
 |---|---|
-| `UtuhRegistry` | `0x3e25268549F4a11A7Dca04c7B56e9c865Ce37710` |
-| `UtuhCredit` | `0x923fD30c312Af140C71c246BBAc19f05C85ee08c` |
-| `EvmV1Decoder` | `0x493182aCD8bae67F76f4e692318b999a65E5D030` |
+| `UtuhRegistry` | [`0xA7b5aCf4E4654596471b364C22E1bb31509B6896`](https://creditcoin-testnet.blockscout.com/address/0xA7b5aCf4E4654596471b364C22E1bb31509B6896?tab=contract) |
+| `UtuhCredit` | [`0x6227da68BF8B098825deA05CBC2767C1EfFAa50F`](https://creditcoin-testnet.blockscout.com/address/0x6227da68BF8B098825deA05CBC2767C1EfFAa50F?tab=contract) |
+| `EvmV1Decoder` | [`0x693A9f495b450622611Dfb6E391Dbd4d8910c49E`](https://creditcoin-testnet.blockscout.com/address/0x693A9f495b450622611Dfb6E391Dbd4d8910c49E?tab=contract) |
 
 `npm run credit` runs against these, on Ethereum mainnet data.
 
@@ -210,20 +219,26 @@ it. Silence is the default condition, not an inference.
 
 | Contract | Address |
 |---|---|
-| `UtuhRegistry` | `0x98D1A55dd1C7Eb0BB31BD8D6C5fC850Cdb0467a1` |
-| `UtuhCredit` | `0xAdee7d0ab93978cABAd22b2cb2eB66F6B562eE6e` |
-| `SettlementLedger` (Sepolia) | `0x2f92Bd9E8F97c9e7e2Af0DCB3Bde86A72335B064` |
+| `UtuhRegistry` | [`0x769b5e6b038C69F139b00102E8361F722b22f9dA`](https://creditcoin-testnet.blockscout.com/address/0x769b5e6b038C69F139b00102E8361F722b22f9dA?tab=contract) |
+| `UtuhCredit` | [`0xE9ADF49adc442fc93385FDEc8D9F9B0722518Dc3`](https://creditcoin-testnet.blockscout.com/address/0xE9ADF49adc442fc93385FDEc8D9F9B0722518Dc3?tab=contract) |
+| `EvmV1Decoder` | [`0x2884e2A39fBad20524759F3B9416E71b68D11490`](https://creditcoin-testnet.blockscout.com/address/0x2884e2A39fBad20524759F3B9416E71b68D11490?tab=contract) |
+| `SettlementLedger` (Sepolia) | [`0xc52a4810606f0846bF508C625198B57A35E8489d`](https://eth-sepolia.blockscout.com/address/0xc52a4810606f0846bF508C625198B57A35E8489d?tab=contract) |
 
-Claim 1 volume finalized at 0.003 ETH over three payments, claim 2 clean finalized empty, claim 3
-refuted, claim 4 repayment finalized at 0.000525 ETH — and line 1 `Settled`. The borrower's own
-sweep for that run read `publicnode=3  drpc=err  1rpc=3`: two independent endpoints agreeing, one
-down, and the claim built on the union rather than on whichever one answered first.
+Everything below is readable at those addresses rather than taken on trust — `claim(id)`,
+`memberCount(id)`, `enforceableLoss(id)`, `line(1)` and `settledThrough(subject)` all answer to
+anyone. Claim 1 volume finalized at **0.003 ETH** over three payments, claim 2 clean finalized
+with zero members, claim 3 **Refuted** with `enforceableLoss` collapsed to 0, claim 4 repayment
+finalized at **0.000525 ETH** — and line 1 reads `Repaid`. The borrower's sweep read
+`publicnode=3  tenderly=3`: two independent endpoints agreeing, and the claim built on the union
+rather than on whichever answered first. `burned()` on that registry reads 1 CTC, which is the
+refuted claimant's half that nobody collected.
 
-Two figures in that run are the last two fixes, visible. The limit is **10 CTC**, not the 12 the
-volume would justify: a 2 CTC bond guarantees a 1 CTC loss, and ten times that is the ceiling.
-And 0.000525 ETH is what drawing 10 CTC obliges at the lender's rate and 105% terms — the borrower
-had no say in the figure. Afterwards `settledThrough` for that subject reads 11554020, so the
-payment behind it cannot discharge a second line.
+Three figures there are fixes made visible. The limit is **10 CTC** — `enforceableLoss` of 1 CTC
+times a `BOND_MULTIPLE` of 10 — and not the far larger number the 0.003 ETH of volume alone would
+justify, because a 2 CTC bond only guarantees a 1 CTC loss and it is the guarantee that lends.
+0.000525 ETH is what drawing 10 CTC obliges at the lender's rate and 105% terms; the borrower had
+no say in the figure. And `settledThrough` for that subject reads 11565483, past the payment that
+discharged the line, so the same payment cannot discharge a second one.
 
 ## Two demonstrations, and why there are two
 
@@ -264,11 +279,12 @@ offchain/
   liveTest.ts               the guards unit tests cannot reach, asserted against CC3
   fullFlow.ts               the whole loop on Sepolia, borrower and lender both acting
   finishLine.ts             resume an interrupted run — the state lives on-chain, not in the script
-  doctor.ts                 preflight: endpoints, prover, precompiles, balance
+  doctor.ts                 preflight: endpoints, both provers, precompiles, balance
+  verify.ts                 publish sources to Blockscout, constructor args and all
   proveControl.ts           bind a source-chain address to a Creditcoin account
   balance.ts                wallet, chain and attestation status
   lib/scope.ts              independent source-chain sweep
-  lib/proofs.ts             Proof Builder batching within Attestcoin's limits
+  lib/proofs.ts             hosted and local proof building, batched within Attestcoin's limits
   lib/claims.ts             open, append, seal, find omissions, refute
 ```
 
@@ -281,6 +297,7 @@ forge test
 
 cp .env.example .env        # then fill in PRIVATE_KEY
 npm run doctor              # are the endpoints, prover and precompiles actually reachable?
+npm run verify              # publish contract sources to the block explorer
 npm run balance             # prints the faucet command if the account is empty
 npm run probe               # verifies real mainnet events on-chain — needs no CTC at all
 npm run deploy
@@ -292,7 +309,7 @@ npm run finish -- <registry> <credit> <lineId>             # resume an interrupt
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
 npm run bait                # seal a deliberately short claim for the watcher to find
-npm run livetest            # 37 guards asserted against the live chain, refunds included
+npm run livetest            # 44 guards asserted against the live chain, refunds included
 
 npm run demo                # all three in sequence, for recording
 ```
@@ -348,6 +365,38 @@ gateway returns a filtered 216,000-block sweep in one call, which is why it head
 The `_RPCS` variables replace that list rather than extending it. Widening a trust set has to come
 with the ability to narrow it: an operator who knows one of the bundled endpoints is rate-limited —
 or is the claimant's — needs to be able to drop it, and an append-only setting cannot.
+
+### The prover was the last single point of failure
+
+Everything above refuses to trust one endpoint for anything — and until recently the one thing
+that mattered most came from exactly one place. Merkle and continuity proofs were fetched only
+from Gluwa's hosted Proof Builder, so an outage there meant no claim could be built and, far
+worse, **no claim could be refuted**. The whole enforcement mechanism sat behind one hosted
+service, which is the same assumption the registry exists to reject.
+
+The SDK also ships `RawProofBuilder`, which constructs the identical proofs from a source-chain
+RPC and the ChainInfo precompile with no hosted service involved. Every prover is now hosted with
+that behind it, verified against the precompile rather than assumed:
+
+```
+hosted      roots= 55  precompile verify = true
+local only  roots= 55  precompile verify = true
+```
+
+Two details decide whether the fallback is real or decorative. It needs whole blocks *with
+receipts*, and `eth_getBlockReceipts` is a method plenty of public endpoints decline — so the
+local builder reads through every configured endpoint rather than one, and `npm run doctor` asks
+each of them for that method by name. On Sepolia the answer today is that `publicnode` does not
+serve it and Tenderly does, which is a thing worth knowing before a bond is on the line.
+
+The second is that absence now arrives in two dialects. A claimant may drop a candidate only when
+the chain definitely does not have it, and the hosted service says that with a `404` while the
+local builder says `Transaction 0x… not found`. Two of the local builder's messages read like
+absence and are not — `Transaction 0x… not found in block N` and `Block N not found for
+transaction 0x…` are a *sibling* transaction or the block itself failing to load from the source
+endpoints. Reading either as absence would let a claimant drop an event that is really there and
+forfeit the bond, so only the exact form counts, and only when **every** prover consulted agrees.
+One answering while the other is unreachable is not agreement.
 
 `MIN_CHALLENGE_WINDOW` is a deployment parameter rather than a constant so a demonstration can
 watch a window actually elapse instead of asserting that it would have. The recommended production
@@ -410,6 +459,8 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 | `is_height_attested` on `0x0FD3` | the gate that makes challenge windows sound |
 | `get_latest_attestation_height_and_hash` | underwriting staleness bound |
 | `get_attestation_genesis_height` | lower bound on claimable ranges |
+| `PrecompileChainInfoProvider` | waiting for attestation without asking a hosted service |
+| `RawProofBuilder` over source RPCs | proofs built locally when the hosted Proof Builder is down |
 | Ethereum mainnet as source chain (`chainKey 3`) | all demos |
 
 ## Known limits
@@ -437,9 +488,10 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 
   Dropping is only safe on a *definite* answer, though, and the SDK returns "no such transaction"
   and "I could not reach the prover" in the same shape — `success: false` with a message. They are
-  told apart by what the API said: a `404` is the prover speaking about the chain, anything else is
-  a failure to ask. An unreachable prover aborts the claim instead of dropping, because an unbuilt
-  claim costs nothing and an incomplete one costs the bond. Even a 404 only counts once the block
+  told apart by what each prover said, in its own dialect, and only when every prover consulted
+  agrees; see [The prover was the last single point of failure](#the-prover-was-the-last-single-point-of-failure).
+  Anything short of that aborts the claim instead of dropping, because an unbuilt claim costs
+  nothing and an incomplete one costs the bond. Even a definite answer only counts once the block
   is attested, which is checked against `0x0FD3` rather than assumed.
 
 - **A watcher only retires a claim on a verdict that cannot change.** Refuted, settled by someone

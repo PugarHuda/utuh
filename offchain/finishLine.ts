@@ -1,6 +1,6 @@
 import { JsonRpcProvider, Wallet, formatEther, keccak256, concat, toUtf8Bytes, parseEther } from 'ethers';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, PROVER_URL, source, requirePrivateKey } from './config';
+import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
 import { registryAt, creditAt, signer } from './lib/contracts';
 import type { Scope } from './lib/scope';
 import { scopeFor, plainSpec } from './lib/specs';
@@ -101,7 +101,7 @@ async function buildRepayClaim(registry: any, registryAsBorrower: any, credit: a
   const scope: Scope = await scopeFor(credit, 'repay', line.subject);
   const chainKey = scope.chainKey;
   const eth = source(chainKey);
-  const prover = new Prover(chainKey, PROVER_URL, 60000);
+  const prover = Prover.withDefaults(chainKey, 60000);
 
   const head = await eth.getBlockNumber();
   const fromBlock = Number(line.repayFrom);

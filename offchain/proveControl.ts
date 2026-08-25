@@ -1,6 +1,6 @@
 import { Wallet, formatEther, getAddress } from 'ethers';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, PROVER_URL, source, requirePrivateKey } from './config';
+import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, source, requirePrivateKey } from './config';
 import { readDeployments, creditAt, signer } from './lib/contracts';
 import { Prover } from './lib/proofs';
 
@@ -53,7 +53,7 @@ async function main() {
   if (!receipt) throw new Error('no receipt');
   console.log(`  ${sent.hash} in block ${receipt.blockNumber}`);
 
-  const prover = new Prover(SOURCE, PROVER_URL, 60000);
+  const prover = Prover.withDefaults(SOURCE, 60000);
   console.log(`waiting for Creditcoin to attest block ${receipt.blockNumber}...`);
   await prover.waitAttested(receipt.blockNumber);
 

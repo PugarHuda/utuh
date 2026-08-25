@@ -5,7 +5,6 @@ import {
   CC3_RPC,
   CC3_CHAIN_ID,
   CHAIN_KEY,
-  PROVER_URL,
   AAVE_V3_POOL,
   USDC,
   AAVE_REPAY_SIG,
@@ -36,7 +35,7 @@ async function main() {
   const chainInfo = new Contract(CHAIN_INFO, chainInfoAbi as any, wallet.provider!);
   const ck = CHAIN_KEY.mainnet;
   const eth = source(ck);
-  const prover = new Prover(ck, PROVER_URL, 60000);
+  const prover = Prover.withDefaults(ck, 60000);
   const minWindow = Number(await registry.MIN_CHALLENGE_WINDOW());
 
   const frontier = Number((await chainInfo.get_latest_attestation_height_and_hash(ck))[0]);

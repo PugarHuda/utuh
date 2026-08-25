@@ -13,7 +13,7 @@ import {
   ZeroAddress,
 } from 'ethers';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, PROVER_URL, source, requirePrivateKey } from './config';
+import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, source, requirePrivateKey } from './config';
 import { artifact, deploy, signer, registryAt, creditAt } from './lib/contracts';
 import { scopeFor, scanScope, Metric, type Scope } from './lib/scope';
 import { Prover } from './lib/proofs';
@@ -156,7 +156,7 @@ async function main() {
   const credit = creditAt(creditAddress, lender);
   const creditAsBorrower = creditAt(creditAddress, borrowerCc3);
 
-  const prover = new Prover(SOURCE, PROVER_URL, 60000);
+  const prover = Prover.withDefaults(SOURCE, 60000);
 
   // ------------------------------------------------------------------
   console.log('\n=== 4. the borrower binds their Sepolia address ===');

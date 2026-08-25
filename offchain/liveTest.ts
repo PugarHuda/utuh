@@ -1,12 +1,22 @@
-import { Wallet, formatEther, keccak256, concat, toUtf8Bytes, parseEther } from 'ethers';
+import {
+  Wallet,
+  formatEther,
+  keccak256,
+  concat,
+  toUtf8Bytes,
+  parseEther,
+  zeroPadValue,
+  getAddress,
+  type JsonRpcProvider,
+} from 'ethers';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, PROVER_URL, source, requirePrivateKey } from './config';
+import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
 import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
 import type { Scope } from './lib/scope';
-import { scopeFor } from './lib/specs';
+import { scopeFor, plainSpec } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
 import { answersTheQuestion } from './lib/scope';
-import { Prover, type EventProofStruct, type ContinuityProofStruct } from './lib/proofs';
+import { Prover, isAbsence, type EventProofStruct, type ContinuityProofStruct } from './lib/proofs';
 
 /// The half of the registry that unit tests cannot reach.
 ///
@@ -75,13 +85,31 @@ async function main() {
   const window = Number(await registry.MIN_CHALLENGE_WINDOW());
 
   // Build the scope from the credit contract's own spec, so these are the shapes the system uses.
-  const subject = new Wallet(keccak256(concat([master, toUtf8Bytes('utuh/borrower')]))).address;
-  const scope: Scope = await scopeFor(credit, 'volume', subject);
-
-  const chainKey = scope.chainKey;
+  const spec = plainSpec(await credit.volumeSpec());
+  const chainKey = Number(spec.chainKey);
   const eth = source(chainKey);
-  const prover = new Prover(chainKey, PROVER_URL, 60_000);
+  const prover = Prover.withDefaults(chainKey, 60_000);
   const head = await eth.getBlockNumber();
+
+  // A bounded window, anchored where the events are. Taking everything since LIVE_FROM up to the
+  // current head grows a little every hour until it is ten thousand blocks wide and only the
+  // strongest endpoint will serve it — at which point the two-source minimum stops the suite for
+  // reasons that have nothing to do with what it is testing.
+  const anchor = process.env.LIVE_FROM ? Number(process.env.LIVE_FROM) : head - 3_040;
+  const fromBlock = anchor;
+  const toBlock = Math.min(anchor + Number(process.env.LIVE_SPAN ?? 400), head - 40);
+
+  // Find a subject that actually has a history in this window, rather than asserting one.
+  //
+  // The suite used to underwrite a wallet derived from the operator's key, which has never
+  // repaid a loan on Ethereum and never will — so every run past this point needed the Sepolia
+  // deployment and an explicit argument, and `npm run livetest` on its own could not get here at
+  // all. A hardcoded borrower would only move the problem: addresses go quiet, and a fixture that
+  // rots fails the suite for a reason that has nothing to do with the registry. So ask the chain
+  // who was active in this exact range and take the busiest answer.
+  const subject = process.env.LIVE_SUBJECT ?? (await busiestSubject(eth, spec, fromBlock, toBlock));
+  console.log(`subject ${subject}`);
+  const scope: Scope = await scopeFor(credit, 'volume', subject);
 
   // ------------------------------------------------------------------
   // An endpoint's answer is not automatically an answer to the question. These cost nothing and
@@ -123,6 +151,37 @@ async function main() {
     }
   }
 
+  // ------------------------------------------------------------------
+  // Which failures mean "the chain does not have it" and which mean "I could not tell". Getting
+  // this backwards either forfeits a bond or lets one bad endpoint stop every honest claimant, and
+  // it is decided by reading strings — the exact thing that silently broke once already when a
+  // regex meant to match 404 was mangled into literal backspace characters.
+  console.log('');
+  console.log('telling absence apart from not knowing');
+  {
+    const hash = '0x' + 'ab'.repeat(32);
+    const cases: [string, string, string, boolean][] = [
+      ['hosted 404', 'hosted', 'Failed to fetch proof: AxiosError: Request failed with status code 404', true],
+      ['hosted refused', 'hosted', 'Failed to fetch proof: Error: connect ECONNREFUSED 127.0.0.1:1', false],
+      ['hosted 503', 'hosted', 'Failed to fetch proof: AxiosError: Request failed with status code 503', false],
+      ['local absent', 'local', `Failed to generate merkle proof: Transaction ${hash} not found`, true],
+      ['local sibling missing', 'local', `Failed to generate merkle proof: Transaction ${hash} not found in block 25834280`, false],
+      ['local block missing', 'local', `Failed to generate merkle proof: Block 25834280 not found for transaction ${hash}`, false],
+      ['local pending', 'local', `Failed to generate merkle proof: Transaction ${hash} is pending and not yet included in a block`, false],
+      ['local unreachable', 'local', 'getBlockWithReceipts: fetch failed', false],
+    ];
+    for (const [name, prover, message, want] of cases) {
+      const got = isAbsence(prover, message);
+      if (got === want) {
+        passed++;
+        console.log(`  ok    ${name} → ${got ? 'absent' : 'unknown'}`);
+      } else {
+        failed++;
+        console.log(`  FAIL  ${name} → ${got ? 'absent' : 'unknown'}, expected the opposite`);
+      }
+    }
+  }
+
   console.log('');
   console.log('opening a claim — the checks that need no state');
 
@@ -140,13 +199,6 @@ async function main() {
   );
 
   // ------------------------------------------------------------------
-  // A bounded window, anchored where the events are. Taking everything since LIVE_FROM up to the
-  // current head grows a little every hour until it is ten thousand blocks wide and only the
-  // strongest endpoint will serve it — at which point the two-source minimum stops the suite for
-  // reasons that have nothing to do with what it is testing.
-  const anchor = process.env.LIVE_FROM ? Number(process.env.LIVE_FROM) : head - 3_040;
-  const fromBlock = anchor;
-  const toBlock = Math.min(anchor + Number(process.env.LIVE_SPAN ?? 400), head - 40);
   // One source is accepted here and nowhere else. This suite is exercising the registry's guards,
   // not asserting a history to anyone: its claims are refuted or finalized within the run, and a
   // short sweep costs it nothing. A real claimant staking a bond on completeness gets the default
@@ -156,7 +208,7 @@ async function main() {
     log: (m) => console.log('  ' + m),
   });
   console.log(`\nrange ${fromBlock}..${toBlock}: ${events.length} in-scope event(s)`);
-  if (events.length < 2) throw new Error('need at least 2 events — widen LIVE_FROM');
+  if (events.length < 2) throw new Error('need at least 2 events — widen LIVE_SPAN');
 
   await prover.waitAttested(toBlock);
   const included = events.slice(0, events.length - 1);
@@ -344,6 +396,38 @@ function readClaimId(registry: any, receipt: any): bigint {
     }
   }
   throw new Error('ClaimOpened not found');
+}
+
+/// Ask the source chain which address the spec's subject topic saw most often in a range.
+///
+/// Only the emitter, the signature and the spec's pinned counterparty are filtered on — the
+/// subject slot is left open, which is the one query a real claim never makes. Nothing here is
+/// asserted; it only picks the fixture the rest of the suite then treats as untrusted input.
+async function busiestSubject(
+  eth: JsonRpcProvider,
+  spec: any,
+  fromBlock: number,
+  toBlock: number,
+): Promise<string> {
+  const subjectSlot = Number(spec.subjectTopic);
+  const counterpartySlot = Number(spec.counterpartyTopic);
+  const topics: (string | null)[] = [spec.eventSig, null, null, null];
+  if (counterpartySlot > 0) topics[counterpartySlot] = zeroPadValue(getAddress(spec.counterparty), 32);
+  while (topics.length && topics[topics.length - 1] === null) topics.pop();
+
+  const logs = await eth.getLogs({ address: spec.emitter, topics, fromBlock, toBlock });
+  const tally = new Map<string, number>();
+  for (const l of logs) {
+    const t = l.topics[subjectSlot];
+    if (t) tally.set(t, (tally.get(t) ?? 0) + 1);
+  }
+  const best = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (!best || best[1] < 2) {
+    throw new Error(
+      `no address has 2+ events in ${fromBlock}..${toBlock} — widen LIVE_SPAN or set LIVE_SUBJECT`,
+    );
+  }
+  return getAddress('0x' + best[0].slice(26));
 }
 
 function statusName(s: bigint | number): string {

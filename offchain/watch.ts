@@ -1,6 +1,6 @@
 import { Contract, JsonRpcProvider, formatEther } from 'ethers';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, PROVER_URL, sources, withDeadline, SOURCE_TIMEOUT_MS, requirePrivateKey } from './config';
+import { CC3_RPC, CC3_CHAIN_ID, sources, withDeadline, SOURCE_TIMEOUT_MS, requirePrivateKey } from './config';
 import { readDeployments, registryAt, signer } from './lib/contracts';
 import { scanScopeUnion, eventKey, type Scope, type Metric } from './lib/scope';
 import { Prover } from './lib/proofs';
@@ -184,8 +184,10 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
     return 'inconclusive';
   }
 
-  const prover = new Prover(scope.chainKey, PROVER_URL, 60_000);
-  const { reward, key } = await refuteClaim(registry, prover, claimId, gap);
+  const prover = Prover.withDefaults(scope.chainKey, 60_000);
+  // The watcher outlives the refutation, so the providers this prover opened have to be closed or
+  // each catch leaves another set of sockets behind for the rest of the run.
+  const { reward, key } = await refuteClaim(registry, prover, claimId, gap).finally(() => prover.close());
   console.log(`  refuted with one proof. key ${key}`);
   console.log(`  reward ${formatEther(reward)} CTC`);
   return 'refuted';

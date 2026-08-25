@@ -191,12 +191,39 @@ async function main() {
     try {
       // Its own deadline: the prover is a different service with different latency, and reusing
       // the endpoint budget would report it down whenever that budget is tightened for the sweeps.
+      // Deliberately the bare hosted builder — `withDefaults` would answer this from the ChainInfo
+      // precompile and report the hosted service healthy while it is down.
       const prover = new Prover(key, PROVER_URL, PROVER_TIMEOUT_MS);
       await withDeadline(PROVER_TIMEOUT_MS, prover.waitAttested(to));
-      console.log(`  ok    proof builder has block ${to}`);
+      console.log(`  ok    hosted proof builder has block ${to}`);
     } catch (e: any) {
       problems++;
-      console.log(`  FAIL  proof builder: ${(e.message ?? '').slice(0, 70)}`);
+      console.log(`  FAIL  hosted proof builder: ${(e.message ?? '').slice(0, 70)}`);
+    }
+
+    // The hosted builder is a convenience; the local one is what makes refutation independent of
+    // it. Building proofs locally needs whole blocks *with* receipts, and `eth_getBlockReceipts` is
+    // a method plenty of public endpoints decline. An endpoint list that answers every sweep and
+    // serves no receipts leaves the fallback looking wired and doing nothing, so ask each one.
+    let receipts = 0;
+    for (const { url, provider } of sources(key)) {
+      try {
+        const res = await withDeadline(SOURCE_TIMEOUT_MS, provider.send('eth_getBlockReceipts', [hex(to)]));
+        if (Array.isArray(res)) {
+          receipts++;
+          console.log(`  ok    ${host(url)}  serves eth_getBlockReceipts`);
+        } else {
+          console.log(`  ...   ${host(url)}  eth_getBlockReceipts returned nothing usable`);
+        }
+      } catch (e: any) {
+        console.log(`  ...   ${host(url)}  no eth_getBlockReceipts (${(e.shortMessage ?? e.message ?? '').slice(0, 40)})`);
+      }
+      provider.destroy();
+    }
+    if (receipts === 0) {
+      problems++;
+      console.log('  PROBLEM  no endpoint serves eth_getBlockReceipts, so the local proof builder');
+      console.log(`           cannot run and refutation depends entirely on ${new URL(PROVER_URL).host}.`);
     }
   }
 
@@ -223,6 +250,8 @@ async function main() {
   console.log(problems === 0 ? '\nEverything needed is reachable.' : `\n${problems} problem(s) above.`);
   if (problems > 0) process.exitCode = 1;
 }
+
+const hex = (n: number) => '0x' + n.toString(16);
 
 function host(url: string): string {
   try {

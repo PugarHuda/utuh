@@ -1,6 +1,6 @@
 import { Wallet, formatEther, keccak256, concat, toUtf8Bytes, parseEther, getAddress } from 'ethers';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, PROVER_URL, source, requirePrivateKey } from './config';
+import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
 import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
 import { eventKey, type Scope } from './lib/scope';
 import { scopeFor } from './lib/specs';
@@ -47,7 +47,7 @@ async function main() {
 
   const chainKey = scope.chainKey;
   const eth = source(chainKey);
-  const prover = new Prover(chainKey, PROVER_URL, 60_000);
+  const prover = Prover.withDefaults(chainKey, 60_000);
 
   const head = await eth.getBlockNumber();
   const toBlock = head - 3;

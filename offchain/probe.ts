@@ -2,7 +2,7 @@ import { Contract, JsonRpcProvider } from 'ethers';
 import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
 import blockProverAbi from '@gluwa/usc-sdk/dist/block-prover/block_prover.json';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, PROVER_URL, USDC, TRANSFER_SIG, source } from './config';
+import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, USDC, TRANSFER_SIG, source } from './config';
 import { scopeFor, scanScope, Metric } from './lib/scope';
 import { Prover, planBatches } from './lib/proofs';
 
@@ -59,7 +59,7 @@ async function main() {
   const batches = planBatches(events);
   console.log(`${events.length} events -> ${batches.length} batches of ${batches.map((b) => b.length).join(', ')}`);
 
-  const prover = new Prover(ck, PROVER_URL, 60000);
+  const prover = Prover.withDefaults(ck, 60000);
   await prover.waitAttested(toBlock);
 
   const bp = new Contract(BLOCK_PROVER, blockProverAbi as any, cc3);

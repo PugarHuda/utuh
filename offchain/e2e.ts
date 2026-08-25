@@ -5,7 +5,6 @@ import {
   CC3_RPC,
   CC3_CHAIN_ID,
   CHAIN_KEY,
-  PROVER_URL,
   USDC,
   TRANSFER_SIG,
   source,
@@ -63,7 +62,7 @@ async function main() {
     console.log(`  block ${e.blockNumber} tx#${e.txIndex} log#${e.logIndexInTx}  value ${e.value}`);
   }
 
-  const prover = new Prover(ck, PROVER_URL);
+  const prover = Prover.withDefaults(ck);
   const minWindow = Number(await registry.MIN_CHALLENGE_WINDOW());
 
   // ------------------------------------------------------------------
