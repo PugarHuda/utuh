@@ -292,7 +292,7 @@ npm run finish -- <registry> <credit> <lineId>             # resume an interrupt
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
 npm run bait                # seal a deliberately short claim for the watcher to find
-npm run livetest            # 33 guards asserted against the live chain, refunds included
+npm run livetest            # 37 guards asserted against the live chain, refunds included
 
 npm run demo                # all three in sequence, for recording
 ```
@@ -317,6 +317,8 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `MAINNET_RPCS` / `SEPOLIA_RPCS` | bundled list | comma-separated; **replaces** the defaults |
 | `*_RPCS_EXTRA` | — | comma-separated; adds to whatever is in use |
 | `SOURCE_TIMEOUT_MS` | `25000` | how long one endpoint gets before it counts as absent |
+| `PROBE_DEPTH` | `60000` | how far back `doctor` asks; deep enough to cross an archive cutoff |
+| `ALLOW_SINGLE_SOURCE` | unset | let `npm run full` seal on one endpoint when two will not answer |
 | `MIN_HISTORY_BLOCKS` | `216000` | lender policy: how much history an underwriting must cover |
 | `MAX_STALENESS_BLOCKS` | `50400` | lender policy: how recently it must end |
 | `REPAYMENT_BPS` | `10500` | lender policy: what a draw must repay, in basis points |
@@ -471,7 +473,24 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
   prove. So `watch.ts` sweeps every endpoint it has and takes the union rather than a vote, and no
   endpoint has to be trusted for the positive case. The negative stays soft, and is reported that
   way — "no gap found across 3 endpoints", or "inconclusive, 1 answered". Public RPCs tested here
-  error rather than truncate, which is a property of those vendors and not of the design.
+  **do not** always error rather than truncate. That was written here after testing simple
+  queries and it was wrong. Measured on Sepolia, same query, same moment, WETH transfers over 200
+  blocks:
+
+  | depth below head | publicnode | tenderly |
+  |---|---|---|
+  | 100 | 27 | 27 |
+  | 5,000 | 31 | 31 |
+  | 20,000 | 24 | 24 |
+  | 60,000 | **0** | 22 |
+
+  An archive cutoff served as an empty result rather than an error, and intermittently — the same
+  endpoint agreed at that depth twenty minutes later. Underwriting sweeps two hundred thousand
+  blocks, so an endpoint like this reports an empty history for most of the range and a claimant
+  trusting it alone seals an empty claim and loses the bond. This is why the union exists, why
+  sealing needs two sources, and why `npm run doctor` reports a pass as "this time" rather than as
+  a certificate: it catches persistent breakage, not intermittent lying. The union absorbs any
+  subset of endpoints being wrong-empty. Nothing here detects all of them being wrong together.
 
 - **The mechanism punishes scale.** One omission voids the whole claim and there is no amend path
   — by design, since amending after being caught would defeat it. So a five-thousand-member claim

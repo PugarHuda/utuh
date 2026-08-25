@@ -104,6 +104,12 @@ async function main() {
       ['a log from another contract', { ...good, address: '0x' + '22'.repeat(20) }, false],
       ['a log with another signature', { ...good, topics: ['0x' + '33'.repeat(32)] }, false],
       ['a log with no topics at all', { ...good, topics: [] }, false],
+      // A raw endpoint can hand back hex strings where ethers would give numbers, and
+      // `'0x5f5e0ff' < 100` is false rather than an error — a range check that looks total.
+      ['a height smuggled in as a hex string', { ...good, blockNumber: '0x5f5e0ff' }, false],
+      ['a height that is not a number at all', { ...good, blockNumber: 'soon' }, false],
+      ['a negative transaction index', { ...good, transactionIndex: -1 }, false],
+      ['a fractional log index', { ...good, index: 1.5 }, false],
     ];
     for (const [name, log, want] of cases) {
       const got = answersTheQuestion(scope, log, 100, 200);
@@ -141,7 +147,14 @@ async function main() {
   const anchor = process.env.LIVE_FROM ? Number(process.env.LIVE_FROM) : head - 3_040;
   const fromBlock = anchor;
   const toBlock = Math.min(anchor + Number(process.env.LIVE_SPAN ?? 400), head - 40);
-  const events = await sweepForClaim(scope, fromBlock, toBlock, { log: (m) => console.log('  ' + m) });
+  // One source is accepted here and nowhere else. This suite is exercising the registry's guards,
+  // not asserting a history to anyone: its claims are refuted or finalized within the run, and a
+  // short sweep costs it nothing. A real claimant staking a bond on completeness gets the default
+  // of two, which is why that default exists.
+  const events = await sweepForClaim(scope, fromBlock, toBlock, {
+    minSources: 1,
+    log: (m) => console.log('  ' + m),
+  });
   console.log(`\nrange ${fromBlock}..${toBlock}: ${events.length} in-scope event(s)`);
   if (events.length < 2) throw new Error('need at least 2 events — widen LIVE_FROM');
 

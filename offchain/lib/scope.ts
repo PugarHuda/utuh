@@ -240,7 +240,15 @@ async function withRetry<T>(work: () => Promise<T>, attempts = 3, waitMs = 800):
 /// Whether a returned log is actually a response to the filter that was sent.
 /// Exported so it can be tested as what it is: a pure decision about untrusted input.
 export function answersTheQuestion(scope: Scope, log: any, fromBlock: number, toBlock: number): boolean {
-  if (log.blockNumber < fromBlock || log.blockNumber > toBlock) return false;
+  // Coerce before comparing. A raw endpoint can hand back "0x5f5e0ff" where ethers would have
+  // given a number, and `'0x5f5e0ff' < 100` is false rather than an error — so a string block
+  // height would sail through a range check that looks like it rejects everything outside it.
+  const height = Number(log.blockNumber);
+  const txIndex = Number(log.transactionIndex);
+  const index = Number(log.index);
+  if (!Number.isInteger(height) || !Number.isInteger(txIndex) || !Number.isInteger(index)) return false;
+  if (txIndex < 0 || index < 0) return false;
+  if (height < fromBlock || height > toBlock) return false;
   if (String(log.address).toLowerCase() !== scope.emitter.toLowerCase()) return false;
   if (!log.topics?.length || String(log.topics[0]).toLowerCase() !== scope.eventSig.toLowerCase()) return false;
   for (let i = 0; i < 3; i++) {

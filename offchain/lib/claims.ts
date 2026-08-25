@@ -1,6 +1,7 @@
 import { Contract } from 'ethers';
 import type { Scope, ScopedEvent } from './scope';
 import { eventKey, scanScopeUnion } from './scope';
+import type { ScopedEvent as Ev } from './scope';
 import { Contract as EthContract } from 'ethers';
 import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
 import { sources, withDeadline, SOURCE_TIMEOUT_MS, CHAIN_INFO_ADDRESS } from '../config';
@@ -58,6 +59,43 @@ export async function sweepForClaim(
   return sweep.events;
 }
 
+/// Raised when the chain keys an event differently from the sweep that found it.
+export class KeyMismatch extends Error {}
+
+/// Compare the keys the registry computed against the ones the sweep predicted.
+///
+/// The registry takes the transaction index from the proof, which is authoritative, but the log
+/// index from the caller — and the caller got it from an endpoint. An endpoint returning a real,
+/// in-scope log with a permuted index makes an honest claimant seal a set with a wrong key, which
+/// is then refutable: they lose the bond and it looks like they lied.
+///
+/// `EventAppended` carries the key the chain computed, so the two can simply be compared. A
+/// mismatch means the sweep was wrong about position, and the claim is still Open at that point —
+/// abandoning it costs nothing.
+function assertKeysMatch(registry: Contract, receipt: any, expected: Ev[]): void {
+  const got: bigint[] = [];
+  for (const raw of receipt.logs) {
+    try {
+      const parsed = registry.interface.parseLog(raw);
+      if (parsed?.name === 'EventAppended') got.push(parsed.args[1] as bigint);
+    } catch {
+      /* not ours */
+    }
+  }
+  if (got.length !== expected.length) {
+    throw new KeyMismatch(`appended ${got.length} events but expected ${expected.length}`);
+  }
+  for (let i = 0; i < got.length; i++) {
+    const want = eventKey(expected[i]);
+    if (got[i] !== want) {
+      throw new KeyMismatch(
+        `the chain keyed ${expected[i].blockNumber}/${expected[i].txIndex}/${expected[i].logIndexInTx} as ` +
+          `${got[i]}, the sweep said ${want} — an endpoint reported the wrong position`,
+      );
+    }
+  }
+}
+
 export interface BuiltClaim {
   claimId: bigint;
   included: ScopedEvent[];
@@ -102,54 +140,71 @@ export async function buildClaim(
   const dropped: ScopedEvent[] = [];
   const batches = planBatches(included);
 
-  for (let i = 0; i < batches.length; i++) {
-    try {
-      const { proofs, continuity } = await prover.proveBatch(batches[i]);
-      const tx = await registry.appendBatch(claimId, proofs, continuity);
-      await tx.wait();
-      log(`  batch ${i + 1}/${batches.length}: ${proofs.length} events verified on-chain`);
-    } catch (e: any) {
-      log(`  batch ${i + 1}/${batches.length} failed as a batch (${e.shortMessage ?? e.message}) — one at a time`);
-      const chainInfo = new EthContract(CHAIN_INFO_ADDRESS, chainInfoAbi as any, registry.runner);
+  try {
 
-      for (const event of batches[i]) {
-        const where = `${event.blockNumber}/${event.txIndex}/${event.logIndexInTx}`;
-        const attempt = await prover.tryProveOne(event);
+    for (let i = 0; i < batches.length; i++) {
+      try {
+        const { proofs, continuity } = await prover.proveBatch(batches[i]);
+        const tx = await registry.appendBatch(claimId, proofs, continuity);
+        const receipt = await tx.wait();
+        assertKeysMatch(registry, receipt, batches[i]);
+        log(`  batch ${i + 1}/${batches.length}: ${proofs.length} events verified on-chain`);
+      } catch (e: any) {
+        if (e instanceof KeyMismatch) throw e;
+        log(`  batch ${i + 1}/${batches.length} failed as a batch (${e.shortMessage ?? e.message}) — one at a time`);
+        const chainInfo = new EthContract(CHAIN_INFO_ADDRESS, chainInfoAbi as any, registry.runner);
 
-        if (!attempt.ok) {
-          // Dropping is only safe on a definite answer. "I could not reach the prover" is not one,
-          // and treating it as one would seal a claim missing a real event — which is
-          // indistinguishable from lying and costs the same bond. Better to abort and let the
-          // claimant come back: an unbuilt claim loses nothing.
-          if (!attempt.authoritative) {
-            throw new Error(`could not prove ${where} and could not establish that it is absent: ${attempt.reason}`);
+        for (const event of batches[i]) {
+          const where = `${event.blockNumber}/${event.txIndex}/${event.logIndexInTx}`;
+          const attempt = await prover.tryProveOne(event);
+
+          if (!attempt.ok) {
+            // Dropping is only safe on a definite answer. "I could not reach the prover" is not one,
+            // and treating it as one would seal a claim missing a real event — which is
+            // indistinguishable from lying and costs the same bond. Better to abort and let the
+            // claimant come back: an unbuilt claim loses nothing.
+            if (!attempt.authoritative) {
+              throw new Error(`could not prove ${where} and could not establish that it is absent: ${attempt.reason}`);
+            }
+            // Even a 404 only means "no such transaction" once the block is attested; before that
+            // the prover has nothing to serve for a transaction that does exist.
+            const attested: boolean = await chainInfo.is_height_attested(scope.chainKey, event.blockNumber);
+            if (!attested) {
+              throw new Error(`block ${event.blockNumber} is not attested yet — nothing can be concluded about ${where}`);
+            }
+            dropped.push(event);
+            log(`    dropped ${where}: the chain has no such transaction`);
+            continue;
           }
-          // Even a 404 only means "no such transaction" once the block is attested; before that
-          // the prover has nothing to serve for a transaction that does exist.
-          const attested: boolean = await chainInfo.is_height_attested(scope.chainKey, event.blockNumber);
-          if (!attested) {
-            throw new Error(`block ${event.blockNumber} is not attested yet — nothing can be concluded about ${where}`);
-          }
-          dropped.push(event);
-          log(`    dropped ${where}: the chain has no such transaction`);
-          continue;
-        }
 
-        try {
-          await (await registry.appendBatch(claimId, [attempt.proof], attempt.continuity)).wait();
-        } catch (inner: any) {
-          // The registry rejecting a proven event means it is out of scope or out of range, which
-          // a refuter could not use against the claim either.
-          dropped.push(event);
-          log(`    dropped ${where}: ${inner.revert?.name ?? inner.shortMessage ?? 'rejected on-chain'}`);
+          try {
+            const one = await (await registry.appendBatch(claimId, [attempt.proof], attempt.continuity)).wait();
+            assertKeysMatch(registry, one, [event]);
+          } catch (inner: any) {
+            if (inner instanceof KeyMismatch) throw inner;
+            // The registry rejecting a proven event means it is out of scope or out of range, which
+            // a refuter could not use against the claim either.
+            dropped.push(event);
+            log(`    dropped ${where}: ${inner.revert?.name ?? inner.shortMessage ?? 'rejected on-chain'}`);
+          }
         }
       }
     }
+
+    } catch (e) {
+    if (e instanceof KeyMismatch) {
+      // Still Open, so nothing has been asserted to anyone yet and the bond comes back whole.
+      // Sealing on a set the chain keys differently would hand a refuter an easy win.
+      log(`  ${e.message}`);
+      log('  abandoning the claim — the bond is recoverable while it is still open');
+      await (await registry.abandon(claimId)).wait();
+    }
+    throw e;
   }
 
   if (dropped.length > 0) {
-    log(`  ${dropped.length} candidate(s) dropped as unprovable — an endpoint reported events the chain does not have`);
-  }
+      log(`  ${dropped.length} candidate(s) dropped as unprovable — an endpoint reported events the chain does not have`);
+    }
 
   const sealTx = await registry.seal(claimId);
   await sealTx.wait();

@@ -212,7 +212,12 @@ async function main() {
       metric: Metric.COUNT,
     });
 
+  // Sealing needs two independent endpoints agreeing to have looked. Free Sepolia endpoints are
+  // unreliable enough that this genuinely blocks sometimes, so there is an escape hatch — set
+  // ALLOW_SINGLE_SOURCE=1 — with the cost stated: a claim built on one node's word is only as
+  // complete as that node, and being wrong about that is what the bond pays for.
   const volumeEvents = await sweepForClaim(volumeScope, fromBlock, toBlock, {
+    minSources: process.env.ALLOW_SINGLE_SOURCE === '1' ? 1 : 2,
     log: (m) => console.log('  ' + m),
   });
   console.log(`  the borrower's settlements to the lender: ${volumeEvents.length}`);

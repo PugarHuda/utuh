@@ -37,6 +37,8 @@ import { Prover } from './lib/proofs';
 /// a narrow one that must come back with results, and a wide filtered one that must come back at
 /// all. The first proves the endpoint is really looking; the second proves it will look far.
 const PROVER_TIMEOUT_MS = Number(process.env.PROVER_TIMEOUT_MS ?? 30_000);
+/// How far back to ask. Deep enough to cross a typical archive cutoff, shallow enough to answer.
+const PROBE_DEPTH = Number(process.env.PROBE_DEPTH ?? 60_000);
 const ZERO_TOPIC = '0x' + '00'.repeat(32);
 const TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const PROBE: Record<number, { address: string; topics: string[]; narrow: number; wide: number }> = {
@@ -47,9 +49,9 @@ const PROBE: Record<number, { address: string; topics: string[]; narrow: number;
     wide: 400,
   },
   [CHAIN_KEY.sepolia]: {
-    address: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14', // WETH
+    address: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14', // WETH, quiet enough to need room
     topics: [TRANSFER],
-    narrow: 60,
+    narrow: 300,
     wide: 400,
   },
 };
@@ -96,59 +98,92 @@ async function main() {
     // ask: one contract, one event signature, a modest range. An unfiltered query for every log
     // on the chain is one no endpoint should serve, and probing with it would condemn all of them.
     const probe = PROBE[key];
-    const to = Math.max(0, frontier - 40);
-    let answered = 0;
-    const counts: number[] = [];
+    // Probe where the sweeps actually go, not where it is easy to answer.
+    //
+    // Underwriting reads {MIN_HISTORY_BLOCKS} of history — hundreds of thousands of blocks — and
+    // an endpoint can be perfectly correct near the head and silently empty past its archive
+    // cutoff. publicnode on Sepolia agrees with tenderly at depths of 100, 5,000 and 20,000, and
+    // returns zero at 60,000 where tenderly returns 22. A probe near the tip would have called it
+    // healthy and a claimant would have found out by losing a bond.
+    const to = Math.max(0, frontier - PROBE_DEPTH);
+    const from = to - probe.narrow;
+    const endpoints = sources(key);
 
-    for (const { url, provider } of sources(key)) {
+    // Reachability is the easy half. The half that matters is whether an endpoint tells the truth
+    // about a filtered query, and there is no need for a reference answer to find that out —
+    // endpoints can be compared against each other. Whoever reports the most has seen the most,
+    // and anyone reporting less than that is either behind or wrong.
+    const seen: { url: string; narrow: number | null; scoped: number | null }[] = [];
+    let subjectTopic: string | null = null;
+
+    for (const { url, provider } of endpoints) {
+      let narrow: number | null = null;
       try {
-        const narrow = await withDeadline(
+        const logs = await withDeadline(
           SOURCE_TIMEOUT_MS,
-          provider.getLogs({
-            address: probe.address,
-            topics: probe.topics,
-            fromBlock: to - probe.narrow,
-            toBlock: to,
-          }),
+          provider.getLogs({ address: probe.address, topics: probe.topics, fromBlock: from, toBlock: to }),
         );
-        if (narrow.length === 0) {
-          problems++;
-          console.log(`  FAIL  ${host(url)}  returned nothing where there is certainly something`);
-          continue;
+        narrow = logs.length;
+        // Borrow a real indexed topic from whatever came back, so the second question is the shape
+        // a real scope uses rather than a filter nothing can match.
+        if (!subjectTopic) subjectTopic = logs.find((l: any) => l.topics?.length > 1)?.topics[1] ?? null;
+      } catch {
+        /* recorded as null below */
+      }
+      seen.push({ url, narrow, scoped: null });
+      provider.destroy();
+    }
+
+    if (subjectTopic) {
+      for (const row of seen) {
+        const provider = sources(key).find((e) => e.url === row.url)!.provider;
+        try {
+          row.scoped = (
+            await withDeadline(
+              SOURCE_TIMEOUT_MS,
+              provider.getLogs({
+                address: probe.address,
+                topics: [...probe.topics, subjectTopic],
+                fromBlock: from,
+                toBlock: to,
+              }),
+            )
+          ).length;
+        } catch {
+          /* stays null */
         }
-
-        await withDeadline(
-          SOURCE_TIMEOUT_MS,
-          provider.getLogs({
-            address: probe.address,
-            topics: [...probe.topics, ZERO_TOPIC],
-            fromBlock: to - probe.wide,
-            toBlock: to,
-          }),
-        );
-
-        answered++;
-        counts.push(narrow.length);
-        console.log(`  ok    ${host(url)}  ${narrow.length} logs in ${probe.narrow} blocks, and scans ${probe.wide}`);
-      } catch (e: any) {
-        console.log(`  FAIL  ${host(url)}  ${(e.shortMessage ?? e.message).slice(0, 60)}`);
-      } finally {
         provider.destroy();
       }
     }
 
+    const best = Math.max(0, ...seen.map((r) => r.scoped ?? -1));
+    let answered = 0;
+
+    for (const row of seen) {
+      if (row.narrow === null) {
+        console.log(`  FAIL  ${host(row.url)}  unreachable or refused the query`);
+        continue;
+      }
+      if (row.narrow === 0) {
+        problems++;
+        console.log(`  FAIL  ${host(row.url)}  returned nothing where there is certainly something`);
+        continue;
+      }
+      if (row.scoped !== null && row.scoped < best) {
+        problems++;
+        console.log(`  WRONG ${host(row.url)}  ${row.narrow} unfiltered, but only ${row.scoped} of ${best} with a topic pinned`);
+        console.log('        It answers, and what it answers is untrue. Redundancy that includes');
+        console.log('        this endpoint is smaller than it looks.');
+        continue;
+      }
+      answered++;
+      console.log(`  ok    ${host(row.url)}  ${row.narrow} unfiltered, ${row.scoped ?? '-'} with a topic pinned`);
+    }
+
     if (answered < 2) {
       problems++;
-      console.log(`  PROBLEM  only ${answered} of ${SOURCE_RPCS[key].length} answered.`);
-      console.log('           Sealing a claim needs two. Add endpoints through');
-      console.log(`           ${name.toUpperCase()}_RPCS_EXTRA, or replace the list with ${name.toUpperCase()}_RPCS.`);
-    } else if (new Set(counts).size > 1) {
-      // The union means a disagreement is survivable, so this is not fatal. It does mean one of
-      // them is wrong about what the chain contains, which an operator should hear about rather
-      // than find out from a slashed bond.
-      problems++;
-      console.log(`  PROBLEM  endpoints disagree about the same range (${counts.join(' vs ')}).`);
-      console.log('           The union covers it, but one of them is not telling the truth.');
+      console.log(`  PROBLEM  only ${answered} endpoint(s) can be relied on, and sealing a claim needs two.`);
+      console.log(`           Add one through ${name.toUpperCase()}_RPCS_EXTRA.`);
     }
 
     // waitUntilHeightAttested polls for up to fifteen minutes by default. That is right for a
