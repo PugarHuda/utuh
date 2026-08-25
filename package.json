@@ -20,7 +20,8 @@
     "bait": "tsx offchain/badClaim.ts",
     "livetest": "tsx offchain/liveTest.ts",
     "doctor": "tsx offchain/doctor.ts",
-    "verify": "tsx offchain/verify.ts"
+    "verify": "tsx offchain/verify.ts",
+    "provers": "tsx offchain/provers.ts"
   },
   "keywords": [],
   "author": "",

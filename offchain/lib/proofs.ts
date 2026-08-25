@@ -27,6 +27,13 @@ export interface ProvenBatch {
 /// bounds. Both come from the SDK's own limits and are the reason claims are built incrementally
 /// rather than in one shot.
 export const MAX_BATCH_SIZE = 10;
+
+/// How long to wait for the attestation frontier to reach a block, in milliseconds.
+///
+/// Attestation runs about seventy blocks behind the source-chain head, so a claim that ends near
+/// the tip has a real wait in front of it. Fifteen minutes is the hosted builder's own default and
+/// is generous enough for both source chains.
+export const WAIT_ATTESTED_MS = Number(process.env.WAIT_ATTESTED_MS ?? 900_000);
 export const MAX_BATCH_RANGE = 1000;
 
 /// Split events into batches the Block Prover will actually accept.
@@ -226,9 +233,14 @@ export class Prover {
   /// The ChainInfo precompile is where this fact lives; the hosted builder only relays it. When a
   /// local fallback is wired, ask the chain directly — otherwise a hosted outage stalls a claimant
   /// at the one step that has no reason to depend on a hosted service at all.
-  async waitAttested(height: number): Promise<void> {
+  ///
+  /// Both budgets are stated rather than defaulted, because the SDK's two implementations disagree
+  /// about them: the hosted builder waits fifteen minutes, the precompile provider one. Switching
+  /// to the precompile without saying so silently turned a fifteen-minute wait into a one-minute
+  /// one, and a claimant thirty blocks behind the frontier simply gave up.
+  async waitAttested(height: number, timeoutMs = WAIT_ATTESTED_MS, pollMs = 15_000): Promise<void> {
     const provider = this.localChainInfo ?? this.builder;
-    await provider.waitUntilHeightAttested(this.chainKey, height);
+    await provider.waitUntilHeightAttested(this.chainKey, height, pollMs, timeoutMs);
   }
 
   /// Prove a group of events that share a batch.

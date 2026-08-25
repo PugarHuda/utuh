@@ -325,6 +325,7 @@ npm run doctor              # are the endpoints, both provers and the precompile
 npm run verify              # publish contract sources to the block explorer
 npm run balance             # prints the faucet command if the account is empty
 npm run probe               # verifies real mainnet events on-chain — needs no CTC at all
+npm run provers             # prove one transaction hosted and locally, and compare
 npm run deploy
 npm run e2e                 # the registry, both outcomes
 npm run credit              # the credit line, on a real Aave borrower
@@ -407,13 +408,45 @@ worse, **no claim could be refuted**. The whole enforcement mechanism sat behind
 service, which is the same assumption the registry exists to reject.
 
 The SDK also ships `RawProofBuilder`, which constructs the identical proofs from a source-chain
-RPC and the ChainInfo precompile with no hosted service involved. Every prover is now hosted with
-that behind it, verified against the precompile rather than assumed:
+RPC and the ChainInfo precompile with no hosted service involved. Every prover here now asks the
+hosted service first and falls back to that. `npm run provers` proves the same transaction both
+ways and compares them, so the claim rests on evidence rather than on the code path existing:
 
 ```
-hosted      roots= 55  precompile verify = true
-local only  roots= 55  precompile verify = true
+sepolia block 11566420, 126 transaction(s)
+
+  hosted  ok    1.9s   1 continuity roots
+  local   ok   50.4s   1 continuity roots
+
+Both proofs carry the same continuity roots.
+The local path is 27x slower. Size the challenge window for it, not for the fast one.
 ```
+
+The test that matters is not the comparison but the outage. Plant an incomplete claim, then run
+the watcher with `PROVER_URL` pointed at a dead port:
+
+```
+$ PROVER_URL=http://127.0.0.1:1 npm run watch -- --once
+
+claim 5: sealed with 3 member(s), bond 2.0 CTC
+  window closes at CC3 block 5373599 (now 5373580, 19 to go)
+  swept independently: publicnode=4  tenderly=4
+  union: 4 in-scope event(s)
+  INCOMPLETE: 1 event(s) missing
+  first gap at block 11565480 tx#109 log#0
+  refuted with one proof. key 916311728995473911151381154883436544
+  reward 1.0 CTC
+```
+
+A real bond, taken on chain, with no hosted proof service reachable at all.
+
+That ratio is the operational fact. The local builder re-fetches every sibling transaction in the
+block and every block in the continuity range, so it costs tens of seconds where the hosted one
+costs one — 84s against a block with 112 transactions and a hundred-block continuity range. Against
+`RECOMMENDED_CHALLENGE_WINDOW` (5760 blocks, about a day) that is nothing. Against the absolute
+floor of 20 blocks — under four minutes — a refuter driving the local path alone is working with
+very little room. The floor exists so a demonstration can watch a window elapse; it is not a
+setting to underwrite against.
 
 Two details decide whether the fallback is real or decorative. It needs whole blocks *with
 receipts*, and `eth_getBlockReceipts` is a method plenty of public endpoints decline — so the
@@ -514,6 +547,12 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
   messaging.
 - Completeness here is economic, not cryptographic. A bond makes lying expensive; it does not make
   it impossible.
+- **The independent proof path is slow enough to matter.** Building a proof locally costs tens of
+  seconds against roughly one for the hosted service, because it re-fetches every sibling
+  transaction in the block and every block in the continuity range. It is correct, and it is what
+  makes refutation independent of a hosted service at all, but a challenge window near the 20-block
+  floor leaves a refuter on that path with almost no margin. Measure it for your own endpoints with
+  `npm run provers` before choosing a window.
 - A claimant watching the mempool can front-run an incoming refutation with their own, keeping half
   the bond and denying the watcher their reward. This is priced rather than prevented: the
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —
