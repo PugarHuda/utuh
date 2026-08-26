@@ -26,10 +26,7 @@ interface IChainInfo {
     function is_height_attested(uint64 chainKey, uint64 targetHeight) external view returns (bool);
 
     /// @notice Highest source-chain height currently attested on Creditcoin.
-    function get_latest_attestation_height_and_hash(uint64 chainKey)
-        external
-        view
-        returns (HeightHashResult memory);
+    function get_latest_attestation_height_and_hash(uint64 chainKey) external view returns (HeightHashResult memory);
 
     /// @notice Lowest source-chain height Creditcoin holds attestation data for.
     function get_attestation_genesis_height(uint64 chainKey) external view returns (uint64);

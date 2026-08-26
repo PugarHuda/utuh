@@ -226,9 +226,12 @@ contract UtuhRegistry {
     ///      Members must arrive in strictly ascending key order. Enforcing the sort here rather
     ///      than trusting a sorted input buys two things at once: refutation becomes a binary
     ///      search, and duplicate members become impossible.
-    function appendBatch(uint256 claimId, EventProof[] calldata proofs, IBlockProver.ContinuityProof calldata continuity)
-        external
-    {
+    // slither-disable-next-line reentrancy-no-eth,reentrancy-benign,reentrancy-events
+    function appendBatch(
+        uint256 claimId,
+        EventProof[] calldata proofs,
+        IBlockProver.ContinuityProof calldata continuity
+    ) external {
         Claim storage c = _claims[claimId];
         if (c.claimant != msg.sender) revert NotClaimant();
         if (c.status != Status.Open) revert WrongStatus(Status.Open, c.status);
@@ -273,9 +276,7 @@ contract UtuhRegistry {
     function _record(uint256 claimId, Claim storage c, EventProof calldata p) private {
         EvmV1Decoder.LogEntry memory log = _extractLog(c.scope, p);
 
-        uint64 txIndex = PROVER.calculateTxIndex(
-            IBlockProver.MerkleProof({root: p.merkleRoot, siblings: p.siblings})
-        );
+        uint64 txIndex = PROVER.calculateTxIndex(IBlockProver.MerkleProof({root: p.merkleRoot, siblings: p.siblings}));
         uint256 k = EventScope.key(p.blockHeight, txIndex, p.logIndex);
 
         if (_keys[claimId].length > 0 && k <= c.lastKey) revert KeysOutOfOrder(c.lastKey, k);
@@ -328,9 +329,12 @@ contract UtuhRegistry {
     ///      makes lying costly, but it does erode the incentive to watch. Closing it properly
     ///      means committing to a refutation before revealing it, which is a round trip this does
     ///      not yet have.
-    function refute(uint256 claimId, EventProof calldata p, IBlockProver.ContinuityProof calldata continuity)
-        external
-    {
+    /// @dev Slither flags the state written after the Block Prover call. `0x0FD2` is a Substrate
+    ///      runtime native with no bytecode — `eth_getCode` returns `0x` — so it cannot call back
+    ///      into the EVM at all, and the one interaction that could, `_pay`, is last and comes
+    ///      after every effect.
+    // slither-disable-next-line reentrancy-no-eth,reentrancy-benign,reentrancy-events
+    function refute(uint256 claimId, EventProof calldata p, IBlockProver.ContinuityProof calldata continuity) external {
         Claim storage c = _claims[claimId];
         if (c.status != Status.Sealed) revert WrongStatus(Status.Sealed, c.status);
 
@@ -418,6 +422,10 @@ contract UtuhRegistry {
 
     /// @dev Decode a verified transaction and pull out the one log the caller pointed at, after
     ///      checking it belongs to the claim's scope.
+    /// @dev solc warns that this could be `pure`. It could not: `scope` is a storage pointer and
+    ///      this reads through it. The mutability checker does not track reads through storage
+    ///      pointer parameters, so it would accept the change and the signature would then be a
+    ///      lie. Left as `view` deliberately.
     function _extractLog(EventScope.Scope storage scope, EventProof calldata p)
         private
         view
@@ -510,6 +518,12 @@ contract UtuhRegistry {
         return c.sealedAt + c.challengeWindow;
     }
 
+    /// @dev Slither reports this as sending ether to an arbitrary destination. Every call site
+    ///      passes `msg.sender` and nothing else — {refute} pays the refuter, {withdraw} and
+    ///      {abandon} pay the caller their own credited balance — so the destination is never
+    ///      attacker-chosen. Each of those sets its state before calling here, so a payee that
+    ///      reenters finds the work already done.
+    // slither-disable-next-line arbitrary-send-eth
     function _pay(address to, uint256 amount) private {
         if (amount == 0) return;
         (bool ok,) = payable(to).call{value: amount}("");

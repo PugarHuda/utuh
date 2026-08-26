@@ -26,12 +26,17 @@ contract SettlementLedger {
 
     error PaymentFailed();
     error NothingToSettle();
+    error NoPayee();
 
     /// @notice Pay `payee` and record it.
     /// @dev The ether goes through rather than into this contract: a settlement nobody received is
-    ///      not a settlement.
+    ///      not a settlement. The zero address is refused for the same reason — a call to it
+    ///      succeeds and burns the value, so without this guard the contract would emit a
+    ///      `Settled` event for ether nobody was paid. A lender whose HistorySpec leaves the
+    ///      counterparty unpinned would then be counting burns as volume.
     function settle(address payee) external payable {
         if (msg.value == 0) revert NothingToSettle();
+        if (payee == address(0)) revert NoPayee();
         emit Settled(msg.sender, payee, msg.value);
         (bool ok,) = payable(payee).call{value: msg.value}("");
         if (!ok) revert PaymentFailed();

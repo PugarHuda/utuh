@@ -1,0 +1,107 @@
+name: ci
+
+# Everything here runs without a key and without CTC. The parts that need either — the demos, the
+# live suite — cannot run in CI on a public repo without handing a funded account to anyone who
+# opens a pull request, so they stay manual and the README says which they are.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Daily, so a dead endpoint or a changed precompile surfaces on its own.
+    - cron: '17 6 * * *'
+
+jobs:
+  contracts:
+    name: contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: formatting
+        run: forge fmt --check
+
+      - name: build
+        run: forge build --sizes
+
+      - name: tests
+        run: forge test -vv
+
+      # A tolerance, because the fuzz tests draw different inputs every run and their mean gas
+      # moves a little with the seed. Five percent is far below anything a real change costs — the
+      # append path is hundreds of thousands of gas — and far above that noise.
+      - name: gas snapshot
+        run: forge snapshot --check --tolerance 5 || (echo "::error::gas moved more than 5% — run 'forge snapshot' and commit .gas-snapshot" && exit 1)
+
+  offchain:
+    name: offchain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - run: npm ci
+
+      # The scripts read ABIs out of forge's artifacts, so they need a build before they typecheck.
+      - name: build artifacts
+        run: forge build
+
+      - name: typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+
+  analysis:
+    name: static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: crytic/slither-action@v0.4.1
+        with:
+          fail-on: medium
+          slither-args: --filter-paths "node_modules|lib" --exclude-dependencies
+
+  live:
+    # A daily check that the chain still behaves the way this is built on. It proves real Ethereum
+    # mainnet transactions against the live Block Prover precompile through eth_call — no key, no
+    # CTC, nothing written. When it goes red, either an endpoint died or Attestcoin changed, and
+    # both are things worth finding out from a notification rather than from a failed demo.
+    name: live precompile
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - run: npm ci
+      - run: forge build
+      - name: verify real mainnet events against 0x0FD2
+        run: npm run probe

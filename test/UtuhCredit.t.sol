@@ -80,9 +80,7 @@ contract UtuhCreditTest is Test {
     /// @notice A challenge window no watcher could act inside is not a window.
     function test_registryRejectsWindowBelowAbsoluteFloor() public {
         uint64 floor = registry.ABSOLUTE_MIN_CHALLENGE_WINDOW();
-        vm.expectRevert(
-            abi.encodeWithSelector(UtuhRegistry.ChallengeWindowFloorTooLow.selector, floor - 1, floor)
-        );
+        vm.expectRevert(abi.encodeWithSelector(UtuhRegistry.ChallengeWindowFloorTooLow.selector, floor - 1, floor));
         new UtuhRegistry(floor - 1);
     }
 

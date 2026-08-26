@@ -228,8 +228,7 @@ contract EventScopeTest is Test {
 
     function test_scopeIdIsStable() public pure {
         assertEq(
-            EventScope.id(_scope(USDC, TRANSFER_SIG, ALICE, 1)),
-            EventScope.id(_scope(USDC, TRANSFER_SIG, ALICE, 1))
+            EventScope.id(_scope(USDC, TRANSFER_SIG, ALICE, 1)), EventScope.id(_scope(USDC, TRANSFER_SIG, ALICE, 1))
         );
     }
 

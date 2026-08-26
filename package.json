@@ -21,7 +21,11 @@
     "livetest": "tsx offchain/liveTest.ts",
     "doctor": "tsx offchain/doctor.ts",
     "verify": "tsx offchain/verify.ts",
-    "provers": "tsx offchain/provers.ts"
+    "provers": "tsx offchain/provers.ts",
+    "slither": "slither .",
+    "fmt": "forge fmt",
+    "check": "forge fmt --check && forge test && tsc --noEmit -p tsconfig.json && slither .",
+    "gas": "tsx offchain/gas.ts"
   },
   "keywords": [],
   "author": "",

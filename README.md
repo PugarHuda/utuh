@@ -82,20 +82,50 @@ absence   →  economic        (bonded assertion, refutable by one proof)
 *Settling* a claim is O(1): the registry never verifies a whole set, so a claim spanning ten
 thousand events is broken by a single proof or by none at all.
 
-*Building* one is not. Every member is verified on the way in, at ten queries per transaction and
-one storage slot each. Measured on CC3 Testnet, from real transactions:
+*Building* one is not. `npm run gas` measures it rather than reasoning about it — it finds every
+transaction the registry has ever seen from the registry's own logs, reads the receipts, and fits a
+cost model. Ninety-two transactions across both deployments:
 
-| Call | Gas (median) | ~CTC |
+| Call | Gas (mean) | % of a 75M block |
 |---|---|---|
-| `open` | 271,423 | 0.00014 |
-| `appendBatch` (3 events) | 533,330 | 0.00027 |
-| `seal` | 200,564 | 0.00010 |
-| `refute` | 455,686 | 0.00023 |
-| `finalize` | 207,368 | 0.00010 |
+| `open` | 251,843 | 0.33% |
+| `seal` | 206,010 | 0.27% |
+| `appendBatch` (1 event) | 551,922 | 0.73% |
+| `appendBatch` (10 events) | 2,556,706 | 3.40% |
+| `refute` | 609,721 | 0.81% |
+| `finalize` | 209,258 | 0.27% |
+| `withdraw` | 205,870 | 0.27% |
 
-So a small claim costs well under a thousandth of a CTC end to end, and a ten-thousand-event claim
-costs a thousand transactions. The asymmetry is the point — challenging is always cheap — but the
-construction cost is real and it is what caps practical claims in the low thousands.
+The interesting part is what those numbers are made of, because member count alone does not explain
+them — one append of **three** events cost 541,464 gas while an append of **two** cost 878,903. A
+least-squares fit over all twenty-five appends, against the call's own calldata gas and its member
+count, says why:
+
+```
+  314,503 gas fixed
+  2.33 x the call's own calldata gas   (1.00 would be exact)
+   20,526 gas per member on top of its bytes
+  worst residual 177,745 gas, 16% of the mean append
+```
+
+Two things worth reading off that. **A member costs 20,526 gas** — a cold `SSTORE` is 20,000, so
+the storage array really is the whole per-event cost, exactly as the design assumed. And **the
+transaction it proves costs about 2.3× its own calldata gas**, because those bytes are not just
+paid for at the door: they are copied, RLP-decoded by `EvmV1Decoder`, and hashed by the Block
+Prover. That term dominates, and it is not one the claimant chooses — proving one in-scope log
+inside a fat mainnet transaction means carrying all thirty kilobytes of it.
+
+So the practical ceiling is set by *bytes*, not by events:
+
+```
+  a 100-event claim:     10 batches,    ~23.0M gas,  0.3 full blocks of it
+  a 1,000-event claim:  100 batches,   ~230.4M gas,  3.1 full blocks
+  a 10,000-event claim: 1000 batches, ~2303.8M gas, 30.7 full blocks
+```
+
+The asymmetry is still the point — challenging is one proof and a binary search, whatever the claim
+holds — but a claim of ten thousand events is thirty blocks' worth of gas, and that is the number
+that caps this rather than any argument about storage.
 
 ### The subtle part
 
@@ -285,6 +315,10 @@ to.
 ## Layout
 
 ```
+.github/workflows/ci.yml    fmt, build, tests, gas snapshot, typecheck, slither — and a daily
+                            eth_call against the live precompile, which needs no key
+slither.config.json         which detectors are off, with the reasons next to the code
+.gas-snapshot               committed, and CI fails if gas moves more than 5%
 src/
   UtuhRegistry.sol          the completeness layer
   source/SettlementLedger.sol   deployed on the *source* chain: payments and adverse events
@@ -295,6 +329,7 @@ src/
 test/
   EventScope.t.sol          the matcher, ordering key, metrics and leaf identity
   UtuhCredit.t.sol          deployment floors, control binding, scope identity, terms, liquidity
+  SettlementLedger.t.sol    what the source-chain ledger will and will not record as a payment
 offchain/
   deploy.ts                 deploy decoder, registry, credit
   e2e.ts                    honest claim finalized; dishonest claim refuted and slashed
@@ -307,6 +342,8 @@ offchain/
   doctor.ts                 preflight: endpoints, both provers, precompiles, balance
   verify.ts                 publish sources to Blockscout, constructor args and all
   proveControl.ts           bind a source-chain address to a Creditcoin account
+  provers.ts                the same proof hosted and locally, compared and timed
+  gas.ts                    what the registry has cost, fitted from its own receipts
   balance.ts                wallet, chain and attestation status
   lib/scope.ts              independent source-chain sweep
   lib/proofs.ts             hosted and local proof building, batched within Attestcoin's limits
@@ -326,6 +363,9 @@ npm run verify              # publish contract sources to the block explorer
 npm run balance             # prints the faucet command if the account is empty
 npm run probe               # verifies real mainnet events on-chain — needs no CTC at all
 npm run provers             # prove one transaction hosted and locally, and compare
+npm run gas                 # what the registry has really cost, fitted from its own receipts
+npm run slither             # static analysis; the config says which detectors are off and why
+npm run check               # everything CI runs: fmt, tests, typecheck, slither
 npm run deploy
 npm run e2e                 # the registry, both outcomes
 npm run credit              # the credit line, on a real Aave borrower
@@ -367,6 +407,8 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `REPAYMENT_BPS` | `10500` | lender policy: what a draw must repay, in basis points |
 | `REPAY_WINDOW_BLOCKS` | `5760` | lender policy: how long the borrower has |
 | `LENDER_MAINNET` | Binance hot wallet | where repayment must land on Ethereum |
+| `WAIT_ATTESTED_MS` | `900000` | how long to wait for the attestation frontier to reach a block |
+| `GAS_LOOKBACK` / `GAS_LOG_CHUNK` | `100000` / `2000` | how far back `npm run gas` reads, and its chunk size |
 | `PROVER_TIMEOUT_MS` | `30000` | `doctor` only; the prover is a separate service with its own latency |
 | `LIVE_SUBJECT` / `LIVE_FROM` / `LIVE_SPAN` | discovered / head−3040 / 400 | pin `livetest` to one address or window instead of letting it find a busy one |
 | `WATCH_POLL_MS` / `WATCH_LOOKBACK` / `WATCH_LOG_CHUNK` | `20000` / `5000` / `2000` | watcher cadence, how far back it looks on start, and its log-scan chunk |
@@ -496,6 +538,43 @@ which is a deliberate change — it used to underwrite a wallet derived from the
 an address that has never repaid a loan on Ethereum and never will, so the suite could not run
 standalone at all. A hardcoded borrower would only move the problem, since addresses go quiet and
 a fixture that rots fails the suite for reasons that have nothing to do with the registry.
+
+## What the tools say
+
+`npm run check` is what CI runs: `forge fmt --check`, the 62 tests, `tsc --noEmit`, and Slither.
+Slither reports **0 findings**, which is only worth stating alongside what it was allowed to look
+for.
+
+Five detectors are off in `slither.config.json`, and none of them are off because they were
+inconvenient:
+
+| Detector | Why |
+|---|---|
+| `naming-convention` | The ChainInfo precompile's ABI is snake_case; the interface has to match it or the calls do not resolve. Immutables are SCREAMING_CASE by house style. |
+| `assembly` | One block, in `_readCommitment`, reading a 32-byte word out of calldata. |
+| `low-level-calls` | `_pay` uses `.call{value:}` because that is the recommended way to send ether. |
+| `calls-loop` | Both loops are bounded — `MAX_BATCH` is 10, and the clean-claim loop runs once per class the lender configured at deployment. |
+| `solc-version` | Pinned at 0.8.28. |
+
+Everything else stays on, and `fail_on: medium` means a new medium-or-worse finding fails the
+build. The four findings that were real judgments rather than categories — two `arbitrary-send-eth`
+on `_pay`, and the reentrancy detectors on the three functions that call `0x0FD2` — are suppressed
+at the line, with the reasoning in the source next to them rather than in a config file:
+
+- `_pay` is flagged for sending to an arbitrary destination. Every call site passes `msg.sender`,
+  and each sets its state before calling, so a payee that reenters finds the work already done.
+- `appendBatch`, `refute` and `proveControl` write state after calling the Block Prover. `0x0FD2`
+  is a Substrate runtime native with no bytecode — `eth_getCode` returns `0x` — so it cannot call
+  back into the EVM at all.
+
+One finding was not a false positive and is fixed: `SettlementLedger.settle` took a payee without
+checking for the zero address. A call to the zero address *succeeds* and burns the value, so the
+ledger would have stood behind a `Settled` event for ether nobody received — and a lender whose
+`HistorySpec` leaves the counterparty unpinned would have been counting burns as proven volume.
+
+solc also suggests two functions could be `pure`. They could not: both read through a `storage`
+pointer parameter, which the mutability checker does not track. Accepting the suggestion compiles
+and makes the signature a lie, so both say so in a comment.
 
 ## One thing worth knowing before you build on this
 

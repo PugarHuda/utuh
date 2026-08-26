@@ -317,19 +317,18 @@ contract UtuhCredit {
     ///      Any supported source chain will do, because an EOA address is derived from its public
     ///      key and is the same on all of them. Sepolia gas is cheaper than mainnet gas and proves
     ///      exactly as much.
+    // slither-disable-next-line reentrancy-benign,reentrancy-events
     function proveControl(ControlProof calldata p, IBlockProver.ContinuityProof calldata continuity)
         external
         returns (address subject, address account)
     {
-        if (
-            !PROVER.verifyAndEmit(
+        if (!PROVER.verifyAndEmit(
                 p.chainKey,
                 p.blockHeight,
                 p.encodedTransaction,
                 IBlockProver.MerkleProof({root: p.merkleRoot, siblings: p.siblings}),
                 continuity
-            )
-        ) revert ProofRejected();
+            )) revert ProofRejected();
 
         (subject, account) = _readControlTx(p.encodedTransaction);
         controllerOf[subject] = account;
@@ -338,11 +337,7 @@ contract UtuhCredit {
     }
 
     /// @dev Everything here is read out of bytes the prover has already vouched for.
-    function _readControlTx(bytes calldata encodedTransaction)
-        private
-        pure
-        returns (address subject, address account)
-    {
+    function _readControlTx(bytes calldata encodedTransaction) private pure returns (address subject, address account) {
         uint8 txType = EvmV1Decoder.getTransactionType(encodedTransaction);
         if (!EvmV1Decoder.isValidTransactionType(txType)) revert UnsupportedTransactionType(txType);
 
@@ -377,11 +372,7 @@ contract UtuhCredit {
     // ------------------------------------------------------------------
 
     /// @notice Rebuild the exact scope a claim must carry for `subject` under `spec`.
-    function expectedScope(HistorySpec memory spec, address subject)
-        public
-        pure
-        returns (EventScope.Scope memory s)
-    {
+    function expectedScope(HistorySpec memory spec, address subject) public pure returns (EventScope.Scope memory s) {
         s.chainKey = spec.chainKey;
         s.emitter = spec.emitter;
         s.eventSig = spec.eventSig;
@@ -495,6 +486,8 @@ contract UtuhCredit {
         return _cleanSpecs[i];
     }
 
+    /// @dev solc suggests `pure` here for the same reason it does in {UtuhRegistry._extractLog},
+    ///      and it is wrong for the same reason: `spec` is a storage pointer and this reads it.
     function _requireScope(HistorySpec storage spec, address subject, EventScope.Scope memory actual) private view {
         bytes32 want = EventScope.id(expectedScope(spec, subject));
         bytes32 got = EventScope.id(actual);
@@ -605,6 +598,10 @@ contract UtuhCredit {
         return _lines[lineId];
     }
 
+    /// @dev Slither reports this as sending ether to an arbitrary destination. Both call sites
+    ///      pass `msg.sender` — a borrower drawing their own line, and the lender collecting a
+    ///      settled repayment — and both set their state first.
+    // slither-disable-next-line arbitrary-send-eth
     function _pay(address to, uint256 amount) private {
         (bool ok,) = payable(to).call{value: amount}("");
         if (!ok) revert TransferFailed();
