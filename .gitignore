@@ -5,3 +5,4 @@ cache/
 broadcast/
 lcov.info
 lint.txt
+.watch-state.json

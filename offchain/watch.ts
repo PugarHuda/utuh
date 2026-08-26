@@ -1,3 +1,4 @@
+import { readFileSync, writeFileSync } from 'node:fs';
 import { Contract, JsonRpcProvider, formatEther } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, sources, withDeadline, SOURCE_TIMEOUT_MS, requirePrivateKey } from './config';
@@ -26,6 +27,8 @@ import { isTransportFailure } from './lib/gasLimit';
 
 const POLL_MS = Number(process.env.WATCH_POLL_MS ?? 20_000);
 const LOOKBACK = Number(process.env.WATCH_LOOKBACK ?? 5_000);
+/// Where the watcher remembers how far it has read. See `resumeFrom`.
+const STATE_FILE = process.env.WATCH_STATE ?? '.watch-state.json';
 /// CC3's RPC gives up on a wide eth_getLogs after ten seconds, so the catch-up sweep is chunked
 /// the same way the source-chain sweep is.
 const LOG_CHUNK = Number(process.env.WATCH_LOG_CHUNK ?? 2_000);
@@ -35,6 +38,50 @@ const LOG_CHUNK = Number(process.env.WATCH_LOG_CHUNK ?? 2_000);
 type Verdict = 'settled' | 'refuted' | 'complete' | 'expired' | 'inconclusive';
 
 const NL = String.fromCharCode(10);
+
+/// Where to start reading ClaimSealed from.
+///
+/// The watcher used to start `WATCH_LOOKBACK` blocks behind the head, always. That default is
+/// 5,000 CC3 blocks — around fifteen hours — while the recommended challenge window is 5,760, a
+/// full day. A watcher down for longer than the lookback came back and never saw the claims sealed
+/// in the gap: not "inconclusive", not queued, simply never discovered. The guarantee that a claim
+/// is retired only on a verdict that cannot change says nothing about one that was never found.
+///
+/// So it remembers. The state file is per registry, because pointing the watcher at a different
+/// one and resuming from the old one's progress would skip the new one's entire history.
+function resumeFrom(registry: string, head: number, pending: Set<string>): number {
+  try {
+    const saved = JSON.parse(readFileSync(STATE_FILE, 'utf8')) as {
+      registry?: string;
+      lastScanned?: number;
+      pending?: string[];
+    };
+    if (saved.registry?.toLowerCase() === registry.toLowerCase() && Number.isInteger(saved.lastScanned)) {
+      // The unresolved queue comes back too. Without it the mark would advance past a claim that
+      // was still Sealed when the watcher stopped, and the restart would never look at it again —
+      // the same hole as the lookback, moved one step along.
+      for (const id of saved.pending ?? []) pending.add(id);
+      const behind = head - saved.lastScanned!;
+      const queued = pending.size > 0 ? `, ${pending.size} claim(s) still queued from last time` : '';
+      console.log(`resuming from block ${saved.lastScanned! + 1} (${behind} behind the head)${queued}`);
+      return Math.max(0, saved.lastScanned! + 1);
+    }
+  } catch {
+    // No state, or state for a different registry. Falling back is correct, and saying so matters:
+    // it is the difference between "caught up" and "started fresh and may have missed something".
+  }
+  console.log(`no usable state for this registry — starting ${LOOKBACK} blocks back`);
+  return Math.max(0, head - LOOKBACK);
+}
+
+/// Record progress only after a sweep that finished. A partial sweep must not advance the mark.
+function remember(registry: string, lastScanned: number, pending: Set<string>): void {
+  try {
+    writeFileSync(STATE_FILE, JSON.stringify({ registry, lastScanned, pending: [...pending] }, null, 2) + NL);
+  } catch (e: any) {
+    console.log(`  could not write ${STATE_FILE} — a restart will fall back to the lookback (${e.message})`);
+  }
+}
 
 async function main() {
   const once = process.argv.includes('--once');
@@ -52,7 +99,7 @@ async function main() {
   console.log(`as        ${wallet.address}${dry ? '  (dry run — will not refute)' : ''}`);
 
   const head = await cc3.getBlockNumber();
-  let from = Math.max(0, head - LOOKBACK);
+  let from = 0;
 
   /// Claims seen sealed and not yet resolved. A claim leaves this only on a verdict that cannot
   /// change — refuted, finalized by someone else, proven complete by more than one endpoint, or
@@ -60,6 +107,7 @@ async function main() {
   /// leaves it in, because the alternative is deciding a claim is fine on the strength of never
   /// having managed to look at it.
   const pending = new Set<string>();
+  from = resumeFrom(registryAddress, head, pending);
 
   /// What this watcher has done since it started.
   ///
@@ -95,6 +143,7 @@ async function main() {
     let queue: bigint[];
     try {
       queue = await discover();
+      remember(registryAddress, from - 1, pending);
     } catch (e: any) {
       console.log(`${NL}looking for claims failed — ${e.shortMessage ?? e.message}`);
       console.log(`  will re-read from block ${from}; ${pending.size} claim(s) still queued`);
@@ -117,6 +166,7 @@ async function main() {
       }
       tally[verdict]++;
       if (verdict !== 'inconclusive') pending.delete(String(claimId));
+      remember(registryAddress, from - 1, pending);
     }
     tally.sweeps++;
 

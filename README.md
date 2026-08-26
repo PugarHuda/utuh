@@ -455,7 +455,8 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `GAS_LOOKBACK` / `GAS_LOG_CHUNK` | `100000` / `2000` | how far back `npm run gas` reads, and its chunk size |
 | `PROVER_TIMEOUT_MS` | `30000` | `doctor` only; the prover is a separate service with its own latency |
 | `LIVE_SUBJECT` / `LIVE_FROM` / `LIVE_SPAN` | discovered / head−3040 / 400 | pin `livetest` to one address or window instead of letting it find a busy one |
-| `WATCH_POLL_MS` / `WATCH_LOOKBACK` / `WATCH_LOG_CHUNK` | `20000` / `5000` / `2000` | watcher cadence, how far back it looks on start, and its log-scan chunk |
+| `WATCH_POLL_MS` / `WATCH_LOOKBACK` / `WATCH_LOG_CHUNK` | `20000` / `5000` / `2000` | watcher cadence, how far back it looks with no saved state, and its log-scan chunk |
+| `WATCH_STATE` | `.watch-state.json` | where the watcher records how far it has read and what is still unresolved |
 | `BOND` / `BAIT_FROM` | `2` CTC / `toBlock−3000` | what `npm run bait` stakes, and where it looks for an event to hide |
 | `SUBJECT` / `RANGE_BLOCKS` / `MAX_MEMBERS` | derived / `60` / `12` | who and how much `npm run e2e` builds a claim over |
 | `LEDGER` | — | set it and `npm run verify` publishes the source-chain contract too |
@@ -778,6 +779,14 @@ cheaply by the `eth_call` in `sendRegistryCall`.
   Anything short of that aborts the claim instead of dropping, because an unbuilt claim costs
   nothing and an incomplete one costs the bond. Even a definite answer only counts once the block
   is attested, which is checked against `0x0FD3` rather than assumed.
+
+- **A watcher that was switched off does not get to skip what it missed.** It used to start
+  `WATCH_LOOKBACK` blocks behind the head every time — 5,000 CC3 blocks, about fifteen hours,
+  against a recommended challenge window of 5,760, a full day. Down for longer than that, it came
+  back and never saw the claims sealed in the gap: not inconclusive, not queued, simply never
+  discovered, which is a hole that the retirement rule below says nothing about. It now records how
+  far it has read and what is still unresolved, per registry, and resumes from there. The mark
+  advances only after a sweep that finished.
 
 - **A watcher only retires a claim on a verdict that cannot change.** Refuted, settled by someone
   else, proven complete by two or more endpoints, or past its window. Anything short of that —
