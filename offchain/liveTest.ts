@@ -14,7 +14,7 @@ import {
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey, CHAIN_KEY, SOURCE_CHAIN_ID } from './config';
 import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
-import { scopeFor, plainSpec, sameScope } from './lib/specs';
+import { scopeFromCredit, plainSpec, sameScope } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
 import { answersTheQuestion, valueOf, type Scope } from './lib/scope';
 import { supportedChains, verifyChainKeys } from './lib/chain';
@@ -136,7 +136,7 @@ async function main() {
     fromBlock = found.fromBlock;
   }
   console.log(`subject ${subject}`);
-  const scope: Scope = await scopeFor(credit, 'volume', subject);
+  const scope: Scope = await scopeFromCredit(credit, 'volume', subject);
 
   // ------------------------------------------------------------------
   // An endpoint's answer is not automatically an answer to the question. These cost nothing and

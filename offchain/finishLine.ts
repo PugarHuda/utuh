@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
 import { registryAt, creditAt, signer } from './lib/contracts';
 import type { Scope } from './lib/scope';
-import { scopeFor, plainSpec, sameScope } from './lib/specs';
+import { scopeFromCredit, plainSpec, sameScope } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { buildClaim, sweepForClaim } from './lib/claims';
 import { waitForBlock } from './lib/chain';
@@ -101,7 +101,7 @@ async function findRepayClaim(registry: any, credit: any, line: any): Promise<bi
 async function buildRepayClaim(registry: any, registryAsBorrower: any, credit: any, line: any): Promise<bigint> {
   // ethers hands struct returns back as a frozen Result, and passing one straight into another
   // call fails while it resolves arguments. Copy it into a plain object first.
-  const scope: Scope = await scopeFor(credit, 'repay', line.subject);
+  const scope: Scope = await scopeFromCredit(credit, 'repay', line.subject);
   const chainKey = scope.chainKey;
   const eth = source(chainKey);
   const prover = Prover.withDefaults(chainKey, 60000);

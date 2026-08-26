@@ -37,7 +37,11 @@ export type SpecName = 'volume' | 'repay';
 
 /// The exact scope a claim must carry for `subject`, rebuilt by the contract itself rather than
 /// reconstructed alongside it.
-export async function scopeFor(credit: Contract, which: SpecName, subject: string): Promise<Scope> {
+///
+/// Named `scopeFor` once, which is also what ./scope calls its pure builder — so seven files used
+/// the same call to mean two different things, one a local construction and this one two round
+/// trips to the chain, and only the import line said which.
+export async function scopeFromCredit(credit: Contract, which: SpecName, subject: string): Promise<Scope> {
   const spec = plainSpec(which === 'volume' ? await credit.volumeSpec() : await credit.repaySpec());
   return toScope(await credit.expectedScope(spec, subject));
 }

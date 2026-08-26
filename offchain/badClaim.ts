@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
 import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
 import { eventKey, type Scope } from './lib/scope';
-import { scopeFor } from './lib/specs';
+import { scopeFromCredit } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { buildClaim, sweepForClaim } from './lib/claims';
 import { runScript } from './lib/cli';
@@ -44,7 +44,7 @@ async function main() {
     console.log(`  topped up ${formatEther(need)} CTC`);
   }
 
-  const scope: Scope = await scopeFor(credit, 'volume', subject);
+  const scope: Scope = await scopeFromCredit(credit, 'volume', subject);
 
   const chainKey = scope.chainKey;
   const eth = source(chainKey);
