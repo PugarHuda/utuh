@@ -275,14 +275,32 @@ export function answersTheQuestion(scope: Scope, log: any, fromBlock: number, to
     const got = log.topics[i + 1];
     if (!got || String(got).toLowerCase() !== scope.topics[i].toLowerCase()) return false;
   }
+  // The payload has to be well-formed hex before anything reads a number out of it. A DATA_WORD
+  // metric slices a 64-character window at a fixed offset, and that offset assumes the `0x` the
+  // prefix normally supplies — hand the same bytes over without it and every window lands two
+  // characters early. With three data words that is not a short read the length check would catch;
+  // it is a different number, returned silently. An amount of 1234567 reads as 316049152.
+  if (!isHexData(log.data)) return false;
   return true;
 }
 
+/// A `0x`-prefixed hex string of whole bytes, or nothing.
+export function isHexData(data: unknown): data is string {
+  return typeof data === 'string' && /^0x([0-9a-fA-F]{2})*$/.test(data);
+}
+
 /// Mirrors EventScope.value.
-function valueOf(scope: Scope, data: string): bigint {
+///
+/// The offset is taken from the hex *body* rather than from the whole string, so a payload that
+/// arrives without its `0x` cannot shift every window two characters early — see `isHexData`,
+/// which is what actually keeps such a payload out. Belt and braces, because the failure this
+/// prevents is a wrong number rather than an error.
+export function valueOf(scope: Scope, data: string): bigint {
   if (scope.metric === Metric.COUNT) return 1n;
-  const offset = 2 + scope.metricArg * 64;
-  const word = data.slice(offset, offset + 64);
+  if (!isHexData(data)) throw new Error(`log payload is not whole-byte hex: ${String(data).slice(0, 24)}`);
+  const body = data.slice(2);
+  const offset = scope.metricArg * 64;
+  const word = body.slice(offset, offset + 64);
   if (word.length < 64) throw new Error('metric word out of range for this log');
   return BigInt('0x' + word);
 }

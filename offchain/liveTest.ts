@@ -14,7 +14,7 @@ import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
 import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
 import { scopeFor, plainSpec, sameScope } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
-import { answersTheQuestion, type Scope } from './lib/scope';
+import { answersTheQuestion, valueOf, type Scope } from './lib/scope';
 import { Prover, isAbsence, type EventProofStruct, type ContinuityProofStruct } from './lib/proofs';
 import { calldataGas, modelledGas, isChainRejection } from './lib/gasLimit';
 
@@ -124,7 +124,9 @@ async function main() {
     for (let i = 0; i < 3; i++) {
       topics.push((scope.topicMask & (1 << i)) !== 0 ? scope.topics[i] : '0x' + '11'.repeat(32));
     }
-    const good = { blockNumber: 100, address: scope.emitter, topics, index: 0, transactionIndex: 0 };
+    // A real log always carries a payload field, even when it is empty. The fixture did not, which
+    // is what a fixture is for: it caught the guard, and the guard was right.
+    const good = { blockNumber: 100, address: scope.emitter, topics, index: 0, transactionIndex: 0, data: '0x' };
     const cases: [string, any, boolean][] = [
       ['a log that matches the filter', good, true],
       ['a log below the range', { ...good, blockNumber: 99 }, false],
@@ -138,6 +140,12 @@ async function main() {
       ['a height that is not a number at all', { ...good, blockNumber: 'soon' }, false],
       ['a negative transaction index', { ...good, transactionIndex: -1 }, false],
       ['a fractional log index', { ...good, index: 1.5 }, false],
+      // The payload is where a number gets read out, so its shape is part of the question.
+      ['a payload that is not hex', { ...good, data: '0xzz' }, false],
+      ['a payload of half a byte', { ...good, data: '0x123' }, false],
+      ['a payload with no 0x', { ...good, data: '00'.repeat(32) }, false],
+      ['a payload that is missing', { ...good, data: undefined }, false],
+      ['an empty payload', { ...good, data: '0x' }, true],
     ];
     for (const [name, log, want] of cases) {
       const got = answersTheQuestion(scope, log, 100, 200);
@@ -149,6 +157,45 @@ async function main() {
         console.log(`  FAIL  ${name} → ${got ? 'accepted' : 'discarded'}, expected the opposite`);
       }
     }
+  }
+
+  // ------------------------------------------------------------------
+  // Reading a number out of a log's payload. The window is a fixed 64 characters at a fixed
+  // offset, and the offset used to be counted from the whole string — so a payload arriving
+  // without its `0x` shifted every window two characters early. With three data words that is not
+  // a short read any length check would catch: it is a different number, returned in silence.
+  console.log('');
+  console.log('reading a value out of a payload');
+  {
+    const word = (n: bigint) => n.toString(16).padStart(64, '0');
+    const three = '0x' + word(0xaan) + word(1234567n) + word(0n);
+    // valueOf reads nothing from a scope but its metric and which word to take.
+    const dataScope = { ...scope, metric: 1, metricArg: 1 } as Scope;
+    const check = (name: string, ok: boolean) => {
+      if (ok) {
+        passed++;
+        console.log(`  ok    ${name}`);
+      } else {
+        failed++;
+        console.log(`  FAIL  ${name}`);
+      }
+    };
+    check('the second word of three reads as itself', valueOf(dataScope, three) === 1234567n);
+    let threw = false;
+    try {
+      valueOf(dataScope, three.slice(2));
+    } catch {
+      threw = true;
+    }
+    check('the same payload without its 0x is refused, not misread', threw);
+    check('a COUNT scope does not read the payload at all', valueOf({ ...dataScope, metric: 0 } as Scope, '0x') === 1n);
+    let short = false;
+    try {
+      valueOf({ ...dataScope, metricArg: 9 } as Scope, three);
+    } catch {
+      short = true;
+    }
+    check('a word past the end of the payload is refused', short);
   }
 
   // ------------------------------------------------------------------

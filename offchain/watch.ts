@@ -33,6 +33,8 @@ const LOG_CHUNK = Number(process.env.WATCH_LOG_CHUNK ?? 2_000);
 /// watcher that forgets a claim it failed to check is blind to it for good.
 type Verdict = 'settled' | 'refuted' | 'complete' | 'expired' | 'inconclusive';
 
+const NL = String.fromCharCode(10);
+
 async function main() {
   const once = process.argv.includes('--once');
   const dry = process.argv.includes('--dry');
@@ -58,7 +60,8 @@ async function main() {
   /// having managed to look at it.
   const pending = new Set<string>();
 
-  for (;;) {
+  /// Find newly sealed claims and order them by how soon their windows close.
+  async function discover(): Promise<bigint[]> {
     const to = await cc3.getBlockNumber();
     for (let start = from; start <= to; start += LOG_CHUNK) {
       const end = Math.min(start + LOG_CHUNK - 1, to);
@@ -66,10 +69,31 @@ async function main() {
       for (const log of sealed) pending.add(String((log as any).args[0]));
     }
     from = to + 1;
-
     // Soonest deadline first. A claim with three blocks left cannot wait behind one with five
     // thousand just because it was discovered second.
-    const queue = await byDeadline(registry, [...pending]);
+    return byDeadline(registry, [...pending]);
+  }
+
+  for (;;) {
+    // Discovery is three RPC calls — the head, the ClaimSealed sweep, and reading each queued
+    // claim's deadline — and none of them were protected. Inspection was: a lost race or an
+    // endpoint failing mid-sweep left the watcher running. But a single hiccup while *finding*
+    // claims escaped to the top and ended the process, which is the same failure the per-claim
+    // guard exists to prevent, in the half of the loop nobody wrapped.
+    //
+    // `from` only advances on a clean sweep, so a failure re-reads the range rather than skipping
+    // over claims sealed inside it, and `pending` is untouched.
+    let queue: bigint[];
+    try {
+      queue = await discover();
+    } catch (e: any) {
+      console.log(`${NL}looking for claims failed — ${e.shortMessage ?? e.message}`);
+      console.log(`  will re-read from block ${from}; ${pending.size} claim(s) still queued`);
+      if (once) break;
+      await new Promise((r) => setTimeout(r, POLL_MS));
+      continue;
+    }
+
 
     for (const claimId of queue) {
       let verdict: Verdict;
@@ -196,6 +220,13 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
 function statusName(s: bigint | number): string {
   return ['None', 'Open', 'Sealed', 'Finalized', 'Refuted'][Number(s)] ?? String(s);
 }
+
+// A watcher is the one thing here that has to stay up, and Node ends a process on an unhandled
+// rejection. Anything that escapes the loop's own guards would otherwise take the watcher down
+// between claims, silently. Logged and survived: the claim it belonged to is still in `pending`.
+process.on('unhandledRejection', (reason) => {
+  console.error(`${NL}unhandled rejection, still watching — ${(reason as any)?.message ?? reason}`);
+});
 
 main().catch((e) => {
   console.error('\n' + (e.stack ?? e.message));
