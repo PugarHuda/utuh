@@ -305,6 +305,18 @@ contract UtuhCreditTest is Test {
 
     /// @notice Sizing a line against the bond rather than the burn would carry twice the exposure
     ///         the deterrent covers, which is what this contract did at first.
+    /// Every rounding in this contract should land against the party carrying the risk. The
+    /// repayment rounds up so no draw owes nothing; the backing requirement rounds up so no limit
+    /// is backed by less than a tenth of itself. A limit of 19 asks for 2, not 1.
+    function testFuzz_backingRequiredIsNeverLessThanALimitImplies(uint128 limit) public view {
+        uint256 multiple = credit.BOND_MULTIPLE();
+        uint256 needed = credit.backingFor(limit);
+        assertGe(needed * multiple, limit, "the backing asked for is short of the limit");
+        if (limit > 0) assertGt(needed, 0, "a non-zero limit asked for no backing at all");
+        // And never more than one unit above what is strictly required.
+        if (limit > 0) assertLe((needed - 1) * multiple, limit, "the backing asked for overshoots");
+    }
+
     function test_bondMultipleAppliesToTheEnforceableHalf() public view {
         uint256 share = registry.REFUTER_SHARE_BPS();
         uint256 bond = 2 ether;

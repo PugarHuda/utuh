@@ -60,6 +60,14 @@ async function main() {
   /// having managed to look at it.
   const pending = new Set<string>();
 
+  /// What this watcher has done since it started.
+  ///
+  /// A daemon that only ever prints the claim in front of it cannot answer the question anyone
+  /// actually has of it — has it been working, and has it caught anything. `refuted` is the number
+  /// that matters: a watcher reporting zero refutations after a week is either watching an honest
+  /// world or is quietly broken, and the other counters are what tell those apart.
+  const tally = { seen: 0, refuted: 0, complete: 0, settled: 0, expired: 0, inconclusive: 0, sweeps: 0 };
+
   /// Find newly sealed claims and order them by how soon their windows close.
   async function discover(): Promise<bigint[]> {
     const to = await cc3.getBlockNumber();
@@ -96,6 +104,7 @@ async function main() {
 
 
     for (const claimId of queue) {
+      tally.seen++;
       let verdict: Verdict;
       try {
         verdict = await inspect(registry, wallet, claimId, dry);
@@ -106,12 +115,17 @@ async function main() {
 claim ${claimId}: inspection failed — ${e.shortMessage ?? e.message}`);
         verdict = 'inconclusive';
       }
+      tally[verdict]++;
       if (verdict !== 'inconclusive') pending.delete(String(claimId));
     }
+    tally.sweeps++;
 
+    console.log(
+      `${NL}${tally.sweeps} sweep(s): ${tally.seen} claim(s) seen, ${tally.refuted} refuted, ` +
+        `${tally.complete} complete, ${tally.settled} settled elsewhere, ${tally.expired} expired, ` +
+        `${tally.inconclusive} inconclusive, ${pending.size} still queued`,
+    );
     if (once) break;
-    if (pending.size > 0) console.log(`
-${pending.size} claim(s) still unresolved, will retry`);
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 }

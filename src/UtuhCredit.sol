@@ -466,9 +466,15 @@ contract UtuhCredit {
         if (limit == 0) revert NoCredit();
 
         // Now that the exposure is known, hold every claim it rests on to it.
-        _requireUsable(volumeClaimId, limit / BOND_MULTIPLE);
+        //
+        // Rounded up. Integer division here would ask each claim to back slightly less than the
+        // limit implies — at most BOND_MULTIPLE-1 wei, so never an exploit, but it is the one
+        // rounding in this contract that favoured the borrower rather than the party carrying the
+        // risk. {_repaymentFor} rounds up for the same reason; this now matches it.
+        uint256 backingNeeded = backingFor(limit);
+        _requireUsable(volumeClaimId, backingNeeded);
         for (uint256 i = 0; i < cleanClaimIds.length; i++) {
-            _requireUsable(cleanClaimIds[i], limit / BOND_MULTIPLE);
+            _requireUsable(cleanClaimIds[i], backingNeeded);
         }
 
         lineId = nextLineId++;
@@ -582,6 +588,14 @@ contract UtuhCredit {
 
     function repaymentFor(uint256 amount) external view returns (uint256) {
         return _repaymentFor(amount);
+    }
+
+    /// @notice How much enforceable loss every claim behind a line of `limit` must carry.
+    /// @dev Rounded up, so a limit is never backed by less than a {BOND_MULTIPLE}th of itself.
+    ///      Readable so a lender can check what a line will demand before opening it, and so the
+    ///      rounding is testable rather than inferred from a revert.
+    function backingFor(uint256 limit) public pure returns (uint256) {
+        return _ceilDiv(limit, BOND_MULTIPLE);
     }
 
     function _ceilDiv(uint256 a, uint256 b) private pure returns (uint256) {
