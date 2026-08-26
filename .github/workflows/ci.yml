@@ -143,6 +143,14 @@ jobs:
           pip install halmos
           halmos --contract EventScopeKeySymbolic
 
+      # The rounding proofs divide, and 256-bit division is what the solver finds hard — minutes
+      # rather than seconds, and narrowing the input does not help because the division happens at
+      # full width regardless. They run on the daily schedule, where minutes are affordable, rather
+      # than on every push.
+      - name: prove the roundings
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: halmos --contract CreditRoundingSymbolic --solver-timeout-assertion 600000
+
   live:
     # A daily check that the chain still behaves the way this is built on. It proves real Ethereum
     # mainnet transactions against the live Block Prover precompile through eth_call — no key, no

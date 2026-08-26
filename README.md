@@ -392,6 +392,8 @@ test/
   SettlementLedger.t.sol    what the source-chain ledger will and will not record as a payment
   EventScopeKey.symbolic.t.sol  halmos proofs of the ordering key, over every input rather
                             than 256 samples — `npm run symbolic`
+  CreditRounding.symbolic.t.sol proofs of the money roundings, and a note on the one the
+                            solver could not decide — `npm run symbolic:deep`
 offchain/
   deploy.ts                 deploy decoder, registry, credit
   e2e.ts                    honest claim finalized; dishonest claim refuted and slashed
@@ -441,6 +443,7 @@ npm run format              # prettier over offchain/  (--check variant: npm run
 npm run typecheck           # tsc, ten strictness flags past `strict`
 npm run deadcode            # knip: unused files, exports, dependencies
 npm run symbolic            # halmos proofs of the ordering key (needs `pip install halmos`)
+npm run symbolic:deep       # the rounding proofs; minutes, so CI runs these daily not per push
 npm run provers             # prove one transaction hosted and locally, and compare
 npm run gas                 # what the registry has really cost, fitted from its own receipts
 npm run slither             # static analysis; the config says which detectors are off and why
