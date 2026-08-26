@@ -12,10 +12,9 @@ import {
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
 import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
-import type { Scope } from './lib/scope';
 import { scopeFor, plainSpec, sameScope } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
-import { answersTheQuestion } from './lib/scope';
+import { answersTheQuestion, type Scope } from './lib/scope';
 import { Prover, isAbsence, type EventProofStruct, type ContinuityProofStruct } from './lib/proofs';
 import { calldataGas, modelledGas, isChainRejection } from './lib/gasLimit';
 

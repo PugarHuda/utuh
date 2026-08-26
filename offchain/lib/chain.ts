@@ -1,5 +1,4 @@
-import type { Provider } from 'ethers';
-import type { JsonRpcApiProvider } from 'ethers';
+import type { JsonRpcApiProvider, Provider } from 'ethers';
 import { chainInfo, blockProver } from '@gluwa/usc-sdk';
 import { CHAIN_INFO_ADDRESS } from '../config';
 

@@ -139,13 +139,17 @@ contract UtuhCreditTest is Test {
     function test_controlCommitmentLayout() public view {
         bytes memory c = credit.controlCommitment(BOB);
         assertEq(c.length, 32);
+        // forge-lint: disable-next-line(unsafe-typecast) — the commitment's first twelve bytes are the tag; truncating to read them is the assertion
         assertEq(bytes12(c), credit.CONTROL_TAG());
+        // forge-lint: disable-next-line(unsafe-typecast) — and its last twenty are the account; narrowing to uint160 is how an address is read
         assertEq(address(uint160(uint256(bytes32(c)))), BOB);
     }
 
     function testFuzz_controlCommitmentNamesTheAccount(address account) public view {
         bytes memory c = credit.controlCommitment(account);
+        // forge-lint: disable-next-line(unsafe-typecast) — same layout, asserted for an arbitrary account
         assertEq(address(uint160(uint256(bytes32(c)))), account);
+        // forge-lint: disable-next-line(unsafe-typecast) — same tag, asserted for an arbitrary account
         assertEq(bytes12(c), credit.CONTROL_TAG());
     }
 
@@ -472,6 +476,7 @@ contract ControlCommitmentTest is Test {
     }
 
     function test_theTagMustMatch() public view {
+        // forge-lint: disable-next-line(unsafe-typecast) — "utuh:CONTROL" is twelve bytes; the case is wrong on purpose, the width is not
         bytes memory data = abi.encodePacked(bytes12("utuh:CONTROL"), ACCOUNT);
         (bool ok, address read) = credit.readCommitment(data);
         assertFalse(ok, "a different tag was accepted");
@@ -517,6 +522,7 @@ contract ControlCommitmentTest is Test {
     /// still parses, against a tag that is no longer the one the constant reads as.
     function test_theTagIsExactlyTheTwelveBytesItReadsAs() public view {
         assertEq(bytes(string("utuh:control")).length, 12, "the tag is not twelve bytes");
+        // forge-lint: disable-next-line(unsafe-typecast) — bytes12 of a twelve-byte string truncates nothing, which is exactly what this asserts
         assertEq(credit.CONTROL_TAG(), bytes12(bytes("utuh:control")), "the tag was truncated or padded");
         // And the commitment is exactly those twelve bytes followed by twenty of address.
         bytes memory c = credit.controlCommitment(ACCOUNT);

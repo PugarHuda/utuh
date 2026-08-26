@@ -1,7 +1,5 @@
 import { Contract } from 'ethers';
-import type { Scope, ScopedEvent } from './scope';
-import { eventKey, scanScopeUnion } from './scope';
-import type { ScopedEvent as Ev } from './scope';
+import { eventKey, scanScopeUnion, type Scope, type ScopedEvent } from './scope';
 import { sources, withDeadline, SOURCE_TIMEOUT_MS } from '../config';
 import { Prover, planBatches } from './proofs';
 import { sendChecked, isChainRejection } from './gasLimit';
@@ -75,7 +73,7 @@ export class KeyMismatch extends Error {}
 /// `EventAppended` carries the key the chain computed, so the two can simply be compared. A
 /// mismatch means the sweep was wrong about position, and the claim is still Open at that point —
 /// abandoning it costs nothing.
-function assertKeysMatch(registry: Contract, receipt: any, expected: Ev[]): void {
+function assertKeysMatch(registry: Contract, receipt: any, expected: ScopedEvent[]): void {
   const got: bigint[] = [];
   for (const raw of receipt.logs) {
     try {

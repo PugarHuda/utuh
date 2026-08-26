@@ -2,7 +2,17 @@
   "name": "utuh",
   "version": "0.1.0",
   "description": "A completeness layer for the Attestcoin Protocol, and undercollateralized credit built on it.",
-  "main": "index.js",
+  "private": true,
+  "license": "MIT",
+  "author": "Pugar Huda Mantoro",
+  "keywords": [
+    "creditcoin",
+    "attestcoin",
+    "undercollateralized-credit",
+    "solidity",
+    "foundry"
+  ],
+  "type": "commonjs",
   "scripts": {
     "build": "forge build",
     "deploy": "tsx offchain/deploy.ts",
@@ -28,14 +38,9 @@
     "gas": "tsx offchain/gas.ts",
     "lint": "forge lint src/"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "@gluwa/usc-contracts": "^0.1.2",
     "@gluwa/usc-sdk": "^0.18.0",
-    "@openzeppelin/contracts": "^5.4.0",
     "dotenv": "^17.4.2",
     "ethers": "^6.17.0"
   },
@@ -43,6 +48,5 @@
     "@types/node": "^26.2.0",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
-  },
-  "private": true
+  }
 }
