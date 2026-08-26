@@ -254,6 +254,17 @@ The terms of a draw are the lender's, never the borrower's. `draw` takes an amou
 else; what must come back and by when are computed from policy, converting CTC back through the
 same rate that produced the limit and rounding up so no draw is small enough to owe nothing.
 
+Two things about the money are worth stating because both were wrong once. Every rounding in the
+contract lands against the party carrying the risk: `_repaymentFor` rounds up so no draw is small
+enough to owe nothing, and `backingFor` rounds up so no limit is backed by less than a
+`BOND_MULTIPLE`th of itself. That second one is asked at both ends of a line — when it opens and
+when it settles — and it was a bare division at both until it was not.
+
+And a lender can name where its own capital goes. `LENDER` is `msg.sender` at construction and
+immutable, so a lender that is a contract without a payable fallback could `fund` this and never
+get the money back out: `withdraw` would revert with `TransferFailed` forever. `withdrawTo` is the
+way out. The authority check is unchanged — only the lender may call it.
+
 Three smaller rules close the same class of hole. A finalized claim is **spent** when it opens a
 line, so one underwriting funds one line and the cap bounds aggregate exposure rather than each
 line separately. A line's deadline is fixed by its first draw and never moves — otherwise a
