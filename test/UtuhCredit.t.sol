@@ -328,6 +328,18 @@ contract UtuhCreditTest is Test {
 
     /// @notice Marking claims spent stops a claim being reused; it does not stop a payment being
     ///         reused. Two lines, two claims over overlapping ranges, one transfer inside both.
+    /// `finishLine.ts` reads a line before it knows whether one exists, so an unknown id has to
+    /// answer rather than revert — and it has to answer in a way that is distinguishable from a
+    /// real line.
+    function test_anUnknownLineReadsAsNothingRatherThanReverting() public view {
+        UtuhCredit.Line memory l = credit.line(999);
+        assertEq(uint8(l.status), uint8(UtuhCredit.LineStatus.None), "an unknown line looked active");
+        assertEq(l.borrower, address(0));
+        assertEq(l.subject, address(0));
+        assertEq(l.limit, 0);
+        assertEq(l.drawn, 0);
+    }
+
     function test_settlementWatermarkStartsUnset() public view {
         assertEq(credit.settledThrough(ALICE), 0);
         assertEq(credit.settledThrough(BOB), 0);
@@ -383,4 +395,123 @@ contract UtuhCreditTest is Test {
     }
 
     receive() external payable {}
+}
+
+/// @notice Reaches `_readCommitment`, which decides whether an address may be bound to an account.
+/// @dev Not a stand-in for anything: it inherits the real contract and calls the real function
+///      with the real constructor arguments. The only thing added is a way in.
+contract ExposedCredit is UtuhCredit {
+    constructor(
+        UtuhRegistry registry,
+        Policy memory policy,
+        HistorySpec memory volume,
+        HistorySpec[] memory clean,
+        HistorySpec memory repay
+    ) UtuhCredit(registry, policy, volume, clean, repay) {}
+
+    function readCommitment(bytes memory data) external pure returns (bool ok, address account) {
+        return _readCommitment(data);
+    }
+}
+
+/// @notice The control commitment, read the way `proveControl` reads it.
+/// @dev `proveControl` itself has to go through `0x0FD2`, which holds no bytecode and cannot run
+///      locally, so this is the only place the parser is exercised against anything but the demo's
+///      happy path. It is worth exercising: read too permissively and a stranger binds an address
+///      they do not hold, which is the one failure that would make every claim about a borrower's
+///      history meaningless.
+contract ControlCommitmentTest is Test {
+    ExposedCredit internal credit;
+
+    address constant AAVE = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
+    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address constant ACCOUNT = address(0xC0FFEE);
+
+    function setUp() public {
+        UtuhRegistry registry = new UtuhRegistry(25);
+        UtuhCredit.HistorySpec[] memory clean = new UtuhCredit.HistorySpec[](1);
+        clean[0] = _spec(3, 0);
+        credit = new ExposedCredit(
+            registry,
+            UtuhCredit.Policy({
+                volumeUnitInCtc: 15_000_000_000_000,
+                minUnderwritingWindow: 25,
+                minHistoryBlocks: 216_000,
+                maxStalenessBlocks: 50_400,
+                repaymentBps: 10_500,
+                repayWindowBlocks: 400
+            }),
+            _spec(2, 0),
+            clean,
+            _spec(1, 2)
+        );
+    }
+
+    function _spec(uint8 subjectTopic, uint8 counterpartyTopic)
+        internal
+        pure
+        returns (UtuhCredit.HistorySpec memory s)
+    {
+        s.chainKey = 3;
+        s.emitter = AAVE;
+        s.eventSig = keccak256("Repay(address,address,address,uint256,bool)");
+        s.subjectTopic = subjectTopic;
+        s.counterpartyTopic = counterpartyTopic;
+        s.counterparty = counterpartyTopic == 0 ? address(0) : USDC;
+        s.metric = EventScope.Metric.DATA_WORD;
+        s.metricArg = 0;
+    }
+
+    /// The builder and the reader have to agree, or a borrower who follows the instructions
+    /// exactly is refused. Nothing outside this contract enforces that they stay in step.
+    function testFuzz_whatTheContractTellsYouToSendIsWhatItAccepts(address account) public view {
+        bytes memory data = credit.controlCommitment(account);
+        (bool ok, address read) = credit.readCommitment(data);
+        assertTrue(ok, "the contract's own instructions were rejected");
+        assertEq(read, account, "bound the wrong account");
+    }
+
+    function test_theTagMustMatch() public view {
+        bytes memory data = abi.encodePacked(bytes12("utuh:CONTROL"), ACCOUNT);
+        (bool ok, address read) = credit.readCommitment(data);
+        assertFalse(ok, "a different tag was accepted");
+        assertEq(read, address(0));
+    }
+
+    /// A near miss is the dangerous case: eleven right bytes and one wrong one must not pass.
+    function test_aTagOffByOneByteIsRejected() public view {
+        bytes12 tag = credit.CONTROL_TAG();
+        bytes12 bent = bytes12(bytes32(tag) ^ bytes32(uint256(1) << 168));
+        (bool ok,) = credit.readCommitment(abi.encodePacked(bent, ACCOUNT));
+        assertFalse(ok, "a tag differing in one byte was accepted");
+    }
+
+    function test_shortCalldataIsRejected() public view {
+        (bool ok,) = credit.readCommitment(abi.encodePacked(credit.CONTROL_TAG(), bytes19(0)));
+        assertFalse(ok, "31 bytes was accepted");
+    }
+
+    function test_longCalldataIsRejected() public view {
+        (bool ok,) = credit.readCommitment(abi.encodePacked(credit.CONTROL_TAG(), ACCOUNT, bytes1(0xff)));
+        assertFalse(ok, "33 bytes was accepted");
+    }
+
+    function test_emptyCalldataIsRejected() public view {
+        (bool ok,) = credit.readCommitment("");
+        assertFalse(ok, "empty calldata was accepted");
+    }
+
+    /// An ordinary transfer is 32 bytes past the selector and must not read as a commitment.
+    function test_anUnrelatedThirtyTwoByteWordIsRejected() public view {
+        (bool ok,) = credit.readCommitment(abi.encode(uint256(1 ether)));
+        assertFalse(ok, "an unrelated word was read as a commitment");
+    }
+
+    /// The zero account is the one an unset controller compares equal to, so binding it would make
+    /// `controllerOf` unable to tell "never proven" from "proven to nobody".
+    function test_theZeroAccountRoundTripsAsZeroAndIsStillATag() public view {
+        (bool ok, address read) = credit.readCommitment(credit.controlCommitment(address(0)));
+        assertTrue(ok, "a well-formed commitment was rejected");
+        assertEq(read, address(0));
+    }
 }

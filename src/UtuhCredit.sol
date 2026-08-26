@@ -352,7 +352,13 @@ contract UtuhCredit {
     }
 
     /// @dev calldata is CONTROL_TAG (12 bytes) followed by a 20-byte address.
-    function _readCommitment(bytes memory data) private pure returns (bool ok, address account) {
+    ///
+    ///      `internal` rather than `private` so a test can reach it. This is the check that decides
+    ///      whether an address may be bound to an account, and getting it wrong in the permissive
+    ///      direction lets a stranger claim someone else's history — the worst failure the contract
+    ///      has. Reaching it through {proveControl} means going through `0x0FD2`, which no local
+    ///      test can execute, so it would otherwise be exercised only by the demo's happy path.
+    function _readCommitment(bytes memory data) internal pure returns (bool ok, address account) {
         if (data.length != 32) return (false, address(0));
         bytes32 word;
         assembly {

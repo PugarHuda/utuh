@@ -512,11 +512,21 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-55 tests over the half that can run in a plain EVM: ordering and scope matching in
-`EventScope.t.sol`, and in `UtuhCredit.t.sol` the guards that decide whose history a line may be
-opened against — deployment floors, the control commitment's layout, scope identity, and the
-lender's liquidity. Neither contract's constructor touches a precompile, so both deploy locally;
-what cannot run locally is anything that reaches one.
+71 tests, 7 of them fuzzed, over the half that can run in a plain EVM: ordering and scope matching
+in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
+record as a payment; and in `UtuhCredit.t.sol` the guards that decide whose history a line may be
+opened against — deployment floors, scope identity, the lender's liquidity, and the control
+commitment. Neither contract's constructor touches a precompile, so both deploy locally; what
+cannot run locally is anything that reaches one.
+
+`_readCommitment` is `internal` rather than `private` so a test can reach it, and that is worth the
+widened visibility. It is the check that decides whether an address may be bound to a Creditcoin
+account, and reading it too permissively lets a stranger claim someone else's history — the one
+failure that would make every other claim in this repo meaningless. Reaching it through
+`proveControl` means going through `0x0FD2`, so without a way in it would be exercised only by the
+demo's happy path. Eight tests now cover it, including a fuzzed round-trip asserting that what
+`controlCommitment` tells a borrower to send is exactly what the parser accepts, and a tag bent by
+a single byte.
 
 The proving half is **not** unit tested, deliberately. The Attestcoin precompiles at `0x0FD2` and
 `0x0FD3` are Creditcoin runtime natives — `eth_getCode` returns `0x` for both:
@@ -531,6 +541,13 @@ against the live CC3 Testnet with real proofs for real Ethereum mainnet transact
 e2e`, `npm run credit` and `npm run livetest` are the tests, and they either pass on the real chain
 or they do not pass at all.
 
+`forge coverage` says 100% of `EventScope.sol` and `SettlementLedger.sol`, 43% of
+`UtuhCredit.sol`, and **9.6% of `UtuhRegistry.sol`**. That last number is worth stating rather than
+leaving to be discovered: almost every path in the registry begins at `open`, `open` asks `0x0FD3`
+whether the range is attested, and that call cannot execute in a local EVM. Everything reachable
+without a precompile is covered; everything else is covered live, on chain, where a stub could not
+have lied about it.
+
 `npm run livetest` is the one that reaches furthest: 44 guards, most of them `staticCall`s that
 prove a revert without spending gas, plus the steps that have to be real for the later ones to
 mean anything. It underwrites whichever address the source chain says was busiest in its window,
@@ -541,7 +558,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 62 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 71 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings**, which is only worth stating alongside what it was allowed to look
 for.
 
