@@ -509,6 +509,28 @@ contract ControlCommitmentTest is Test {
 
     /// The zero account is the one an unset controller compares equal to, so binding it would make
     /// `controllerOf` unable to tell "never proven" from "proven to nobody".
+    /// A binding that can be replayed is not a binding. The subject can move theirs by sending a
+    /// second commitment; if the first proof stays usable, anyone can put it back, and the binding
+    /// becomes whichever proof was replayed most recently rather than whichever the subject meant.
+    function test_aControlIdIsOneTransactionOnOneChain() public view {
+        bytes memory txA = abi.encodePacked("transaction-a");
+        bytes memory txB = abi.encodePacked("transaction-b");
+
+        assertEq(credit.controlIdOf(1, txA), credit.controlIdOf(1, txA), "the same commitment got two ids");
+        assertTrue(credit.controlIdOf(1, txA) != credit.controlIdOf(1, txB), "two transactions share an id");
+        assertTrue(credit.controlIdOf(1, txA) != credit.controlIdOf(3, txA), "two chains share an id");
+    }
+
+    /// The height is deliberately not part of the id: a reorg that moved the same transaction must
+    /// not make the same commitment usable a second time.
+    function testFuzz_theIdDependsOnNothingButTheChainAndTheBytes(uint64 chainKey, bytes memory encoded) public view {
+        assertEq(credit.controlIdOf(chainKey, encoded), keccak256(abi.encode(chainKey, keccak256(encoded))));
+    }
+
+    function test_nothingIsMarkedUsedBeforeAnythingIsProven() public view {
+        assertFalse(credit.controlProofUsed(credit.controlIdOf(1, abi.encodePacked("anything"))));
+    }
+
     function test_theZeroAccountRoundTripsAsZeroAndIsStillATag() public view {
         (bool ok, address read) = credit.readCommitment(credit.controlCommitment(address(0)));
         assertTrue(ok, "a well-formed commitment was rejected");

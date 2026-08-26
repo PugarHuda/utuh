@@ -162,6 +162,10 @@ contract UtuhCredit {
     /// @notice Creditcoin account each source-chain address has bound itself to.
     mapping(address => address) public controllerOf;
 
+    /// @notice Control commitments already applied, so none can be applied twice.
+    /// @dev See {proveControl} for why a binding that could be replayed is not a binding.
+    mapping(bytes32 => bool) public controlProofUsed;
+
     /// @notice Claims already spent on a line, so one underwriting funds one line.
     /// @dev Without this the same finalized pair could open lines without limit, and the bond cap
     ///      would bound each line while bounding nothing in aggregate.
@@ -222,6 +226,7 @@ contract UtuhCredit {
     error BadTerms();
     error NoCleanSpecs();
     error WrongNumberOfCleanClaims(uint256 given, uint256 required);
+    error ControlProofAlreadyUsed(bytes32 controlId);
 
     /// @notice Thresholds the lender chooses, gathered so the constructor stays legible.
     struct Policy {
@@ -317,6 +322,15 @@ contract UtuhCredit {
     ///      Any supported source chain will do, because an EOA address is derived from its public
     ///      key and is the same on all of them. Sepolia gas is cheaper than mainnet gas and proves
     ///      exactly as much.
+    ///
+    ///      Each commitment may be applied once, and that is not a formality. A binding can be
+    ///      moved — the subject sends a second commitment naming a different account, which is how
+    ///      anyone rotates away from a Creditcoin account they no longer control. Without this
+    ///      guard the first proof stays valid forever and *anyone* may resubmit it, so the binding
+    ///      becomes whichever proof was replayed most recently. An attacker holding the account a
+    ///      subject rotated away from could put it back at will, including in front of the
+    ///      subject's own {openLine}. Creditcoin's own `USCBase` records processed queries for the
+    ///      same reason.
     // slither-disable-next-line reentrancy-benign,reentrancy-events
     function proveControl(ControlProof calldata p, IBlockProver.ContinuityProof calldata continuity)
         external
@@ -330,10 +344,23 @@ contract UtuhCredit {
                 continuity
             )) revert ProofRejected();
 
+        bytes32 controlId = controlIdOf(p.chainKey, p.encodedTransaction);
+        if (controlProofUsed[controlId]) revert ControlProofAlreadyUsed(controlId);
+        controlProofUsed[controlId] = true;
+
         (subject, account) = _readControlTx(p.encodedTransaction);
         controllerOf[subject] = account;
 
         emit ControlProven(subject, account, p.blockHeight);
+    }
+
+    /// @notice Identity of one control commitment: the chain it was sent on, and the transaction.
+    /// @dev The encoded transaction carries its own signature, so hashing it identifies exactly
+    ///      one transaction. The block height is deliberately *not* part of this — a reorg that
+    ///      moved the same transaction to a different height must not make the same commitment
+    ///      usable a second time.
+    function controlIdOf(uint64 chainKey, bytes memory encodedTransaction) public pure returns (bytes32) {
+        return keccak256(abi.encode(chainKey, keccak256(encodedTransaction)));
     }
 
     /// @dev Everything here is read out of bytes the prover has already vouched for.

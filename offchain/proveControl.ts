@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, source, requirePrivateKey } from './config';
 import { readDeployments, creditAt, signer } from './lib/contracts';
 import { Prover } from './lib/proofs';
+import { sendChecked } from './lib/gasLimit';
 
 /// Which source chain to send the commitment on.
 ///
@@ -66,17 +67,25 @@ async function main() {
   });
 
   console.log('proving control on Creditcoin...');
-  const tx = await credit.proveControl(
-    {
-      chainKey: SOURCE,
-      blockHeight: proof.blockHeight,
-      encodedTransaction: proof.encodedTransaction,
-      merkleRoot: proof.merkleRoot,
-      siblings: proof.siblings,
-    },
-    continuity,
+  // Same route as an append or a refutation: this reaches `0x0FD2`, so it is subject to the same
+  // estimation-mode problem, and being unable to bind an address is being unable to borrow at all.
+  const tx = await sendChecked(
+    credit,
+    'proveControl',
+    [
+      {
+        chainKey: SOURCE,
+        blockHeight: proof.blockHeight,
+        encodedTransaction: proof.encodedTransaction,
+        merkleRoot: proof.merkleRoot,
+        siblings: proof.siblings,
+      },
+      continuity,
+    ],
+    { members: 0, log: (m) => console.log(m) },
   );
   await tx.wait();
+  prover.close();
 
   const bound = await credit.controllerOf(subject);
   console.log(`\ncontrollerOf(${subject}) = ${bound}`);

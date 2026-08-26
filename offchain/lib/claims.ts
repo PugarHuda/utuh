@@ -4,7 +4,7 @@ import { eventKey, scanScopeUnion } from './scope';
 import type { ScopedEvent as Ev } from './scope';
 import { sources, withDeadline, SOURCE_TIMEOUT_MS } from '../config';
 import { Prover, planBatches } from './proofs';
-import { sendRegistryCall, isChainRejection } from './gasLimit';
+import { sendChecked, isChainRejection } from './gasLimit';
 import { attested } from './chain';
 
 export interface BuildOptions {
@@ -145,7 +145,7 @@ export async function buildClaim(
     for (let i = 0; i < batches.length; i++) {
       try {
         const { proofs, continuity } = await prover.proveBatch(batches[i]);
-        const tx = await sendRegistryCall(registry, 'appendBatch', [claimId, proofs, continuity], {
+        const tx = await sendChecked(registry, 'appendBatch', [claimId, proofs, continuity], {
           members: proofs.length,
           log,
         });
@@ -184,7 +184,7 @@ export async function buildClaim(
 
           try {
             const one = await (
-              await sendRegistryCall(registry, 'appendBatch', [claimId, [attempt.proof], attempt.continuity], {
+              await sendChecked(registry, 'appendBatch', [claimId, [attempt.proof], attempt.continuity], {
                 members: 1,
                 log,
               })
@@ -271,7 +271,7 @@ export async function refuteClaim(
 ): Promise<{ reward: bigint; key: bigint }> {
   const { proof, continuity } = await prover.proveOne(omission);
   // The one call in this repo that must go through even when the node will not estimate it.
-  const tx = await sendRegistryCall(registry, 'refute', [claimId, proof, continuity], { members: 0, log });
+  const tx = await sendChecked(registry, 'refute', [claimId, proof, continuity], { members: 0, log });
   const receipt = await tx.wait();
 
   for (const rawLog of receipt.logs) {

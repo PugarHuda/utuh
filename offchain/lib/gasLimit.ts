@@ -69,8 +69,11 @@ export interface SendOptions {
   log?: (message: string) => void;
 }
 
-/// Call `method` on `registry` with `args`, and get it mined whether or not the node will estimate.
-export async function sendRegistryCall(
+/// Call `method` on `contract` with `args`, and get it mined whether or not the node will estimate.
+///
+/// Every write in this repo that touches a precompile goes through here — the registry's appends
+/// and refutations, and the credit contract's control binding. They share the failure.
+export async function sendChecked(
   registry: Contract,
   method: string,
   args: unknown[],

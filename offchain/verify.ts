@@ -36,6 +36,24 @@ function forge(args: string[]): void {
   execFileSync('forge', args, { stdio: 'inherit' });
 }
 
+/// Blockscout indexes a deployment a little after the chain has it, and until it does it answers
+/// `Address is not a smart-contract` — which reads like the deployment failed rather than like the
+/// explorer has not caught up. Running verify straight after deploy hits this every time.
+async function waitUntilIndexed(explorerApi: string, address: string): Promise<void> {
+  const base = explorerApi.replace(/[/]api[/]?$/, '');
+  for (let i = 0; i < 30; i++) {
+    try {
+      const res = await fetch(`${base}/api/v2/addresses/${address}`);
+      if (res.ok && (await res.json()).is_contract === true) return;
+    } catch {
+      /* the explorer being unreachable is worth one more try, not a crash */
+    }
+    if (i === 0) console.log(`  waiting for the explorer to index ${address}...`);
+    await new Promise((r) => setTimeout(r, 10_000));
+  }
+  console.log(`  the explorer still does not see ${address} as a contract — trying anyway`);
+}
+
 function creditConstructorArgs(registry: string): string {
   // Rebuilt exactly as deploy.ts passes them. If those defaults are overridden by environment
   // when deploying, the same overrides have to be present here or the encoding will not match.
@@ -101,7 +119,7 @@ function argsFor(recorded: string | undefined, rebuild: () => string, what: stri
   return rebuild();
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const d = readDeployments();
   if (!d.decoder || !d.registry || !d.credit) throw new Error('no deployments.json — run: npm run deploy');
 
@@ -114,6 +132,15 @@ function main(): void {
     'blockscout',
     '--watch',
   ];
+
+  for (const [name, address] of [
+    ['decoder', d.decoder],
+    ['registry', d.registry],
+    ['credit', d.credit],
+  ] as const) {
+    if (address) await waitUntilIndexed(EXPLORER, address);
+    void name;
+  }
 
   console.log('EvmV1Decoder');
   forge(['verify-contract', d.decoder, DECODER_PATH, '--verifier-url', EXPLORER, ...common]);
@@ -168,4 +195,7 @@ function main(): void {
   console.log('\nhttps://creditcoin-testnet.blockscout.com/address/' + d.registry);
 }
 
-main();
+main().catch((e) => {
+  console.error('\n' + (e.message ?? e));
+  process.exit(1);
+});
