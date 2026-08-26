@@ -44,9 +44,7 @@ const MAX_BATCH_RANGE = 1000;
 export function planBatches(events: ScopedEvent[]): ScopedEvent[][] {
   const batches: ScopedEvent[][] = [];
   let current: ScopedEvent[] = [];
-  let txCount = 0;
   let firstBlock = 0;
-  let lastTx = '';
 
   for (const e of events) {
     const wouldExceedQueries = current.length + 1 > MAX_BATCH_SIZE;
@@ -55,14 +53,8 @@ export function planBatches(events: ScopedEvent[]): ScopedEvent[][] {
     if (current.length > 0 && (wouldExceedQueries || wouldExceedRange)) {
       batches.push(current);
       current = [];
-      txCount = 0;
-      lastTx = '';
     }
     if (current.length === 0) firstBlock = e.blockNumber;
-    if (e.txHash !== lastTx) {
-      txCount++;
-      lastTx = e.txHash;
-    }
     current.push(e);
   }
   if (current.length > 0) batches.push(current);

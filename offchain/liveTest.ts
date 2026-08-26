@@ -19,7 +19,7 @@ import { sweepForClaim } from './lib/claims';
 import { answersTheQuestion, valueOf, type Scope } from './lib/scope';
 import { supportedChains, verifyChainKeys } from './lib/chain';
 import { Prover, isAbsence } from './lib/proofs';
-import { calldataGas, modelledGas, isChainRejection, isTransportFailure } from './lib/gasLimit';
+import { calldataGas, modelledGas, isChainRejection, isTransportFailure, isPayloadTooLarge } from './lib/gasLimit';
 import { waitForBlock } from './lib/chain';
 import { claimStatus } from './lib/status';
 import { runScript } from './lib/cli';
@@ -395,6 +395,53 @@ async function main() {
       ['null', null, false],
       ['an object that is not an error', {}, false],
     ];
+    // A 413 is a SERVER_ERROR as well, so the narrowing has to read what the endpoint actually
+    // said rather than the code. CI found this one: a batch of ten queries whose ten in-scope logs
+    // all came from a single large transaction sends that transaction ten times over, and the
+    // proxy in front of the RPC refused the body before the precompile saw any of it. A timeout is
+    // worth retrying unchanged; this never is, because the same bytes get the same answer.
+    // ethers types SERVER_ERROR's info as { request, response }, but the object JsonRpcProvider
+    // actually throws carries requestUrl, responseStatus and responseBody — which is what the
+    // guard reads, so that is what these are built with.
+    const served = (message: string, responseStatus: string, responseBody: string): unknown =>
+      Object.assign(makeError(message, 'SERVER_ERROR'), {
+        info: { requestUrl: 'https://rpc.cc3-testnet.creditcoin.network', responseStatus, responseBody },
+      });
+
+    const oversize: [string, unknown, boolean][] = [
+      [
+        'nginx 413',
+        served(
+          'server response 413 Request Entity Too Large',
+          '413 Request Entity Too Large',
+          '<html><head><title>413 Request Entity Too Large</title></head></html>',
+        ),
+        true,
+      ],
+      ['a 502 is not too large', served('bad gateway', '502 Bad Gateway', ''), false],
+      // The status is read from its start for this reason: a body is arbitrary content and a bare
+      // 413 in it may be a block number, not a verdict on the request that carried it.
+      [
+        'a 500 whose body merely contains 413',
+        served('server error', '500 Internal Server Error', '{"error":"no block at height 413"}'),
+        false,
+      ],
+      ['a timeout is not too large', makeError('timed out', 'TIMEOUT'), false],
+      ['a revert is not too large', makeError('reverted', 'CALL_EXCEPTION'), false],
+      ['a SERVER_ERROR with no info', makeError('unknown', 'SERVER_ERROR'), false],
+      ['nothing at all', undefined, false],
+    ];
+    for (const [name, err, want] of oversize) {
+      const got = isPayloadTooLarge(err);
+      if (got === want) {
+        passed++;
+        console.log(`  ok    ${name} → ${got ? 'split and retry' : 'not a size problem'}`);
+      } else {
+        failed++;
+        console.log(`  FAIL  ${name} → ${got ? 'split and retry' : 'not a size problem'}, expected the opposite`);
+      }
+    }
+
     for (const [name, err, want] of transport) {
       const got = isTransportFailure(err);
       if (got === want) {

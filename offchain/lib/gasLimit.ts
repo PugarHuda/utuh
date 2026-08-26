@@ -68,6 +68,27 @@ export function isTransportFailure(e: unknown): boolean {
   return codes.some((code) => isError(e, code) === true);
 }
 
+/// Did the endpoint refuse the request for being too big, before the chain saw any of it?
+///
+/// A batch of ten queries carries ten whole encoded transactions, and how many bytes that is
+/// depends entirely on which transactions the source chain happened to put in range. Sweep a
+/// window whose busiest sender submits large transactions and the JSON body outgrows the reverse
+/// proxy in front of the RPC, which answers `413 Request Entity Too Large` in HTML. `MAX_BATCH` is
+/// a cap on queries and cannot see this coming.
+///
+/// This is a narrowing of {isTransportFailure} — a 413 is also a `SERVER_ERROR` — and the two
+/// deserve different handling: a timeout is worth retrying unchanged, and this one never is,
+/// because the same bytes will be refused the same way. Split and retry, or fail.
+export function isPayloadTooLarge(e: unknown): boolean {
+  if (isError(e, 'SERVER_ERROR') !== true) return false;
+  const info = (e as { info?: { responseStatus?: unknown; responseBody?: unknown } }).info ?? {};
+  const status = String(info.responseStatus ?? '').trim();
+  const body = String(info.responseBody ?? '');
+  // The status is matched at its start, not anywhere in the text: a body is arbitrary content and
+  // may carry a 413 that is a block number or a byte count rather than a verdict on this request.
+  return /^413\b/.test(status) || /entity too large|payload too large|body too large/i.test(`${status} ${body}`);
+}
+
 /// What the EVM charges for these bytes: 16 per non-zero, 4 per zero, per EIP-2028.
 export function calldataGas(data: string): bigint {
   const hex = data.startsWith('0x') ? data.slice(2) : data;
