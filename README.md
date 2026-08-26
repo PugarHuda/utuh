@@ -417,7 +417,7 @@ npm run finish -- <registry> <credit> <lineId>             # resume an interrupt
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
 npm run bait                # seal a deliberately short claim for the watcher to find
-npm run livetest            # 61 guards asserted against the live chain, refunds included
+npm run livetest            # 70 guards asserted against the live chain, refunds included
 
 npm run demo                # all three in sequence, for recording
 ```
@@ -641,7 +641,7 @@ whether the range is attested, and that call cannot execute in a local EVM. Ever
 without a precompile is covered; everything else is covered live, on chain, where a stub could not
 have lied about it.
 
-`npm run livetest` is the one that reaches furthest: 61 guards, most of them `staticCall`s that
+`npm run livetest` is the one that reaches furthest: 70 guards, most of them `staticCall`s that
 prove a revert without spending gas, plus the steps that have to be real for the later ones to
 mean anything. It underwrites whichever address the source chain says was busiest in its window,
 which is a deliberate change — it used to underwrite a wallet derived from the operator's key,
