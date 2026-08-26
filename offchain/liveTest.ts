@@ -1,4 +1,5 @@
 import {
+  makeError,
   Wallet,
   formatEther,
   keccak256,
@@ -16,7 +17,7 @@ import { scopeFor, plainSpec, sameScope } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
 import { answersTheQuestion, valueOf, type Scope } from './lib/scope';
 import { Prover, isAbsence, type EventProofStruct, type ContinuityProofStruct } from './lib/proofs';
-import { calldataGas, modelledGas, isChainRejection } from './lib/gasLimit';
+import { calldataGas, modelledGas, isChainRejection, isTransportFailure } from './lib/gasLimit';
 
 /// The half of the registry that unit tests cannot reach.
 ///
@@ -254,6 +255,28 @@ async function main() {
       ['the endpoint returned nonsense', { code: 'SERVER_ERROR', message: '502' }, false],
       ['nothing at all', undefined, false],
     ];
+    // ethers builds these, so the guards are checked against what it actually produces rather than
+    // against a hand-written idea of the shape.
+    const transport: [string, unknown, boolean][] = [
+      ['a timeout', makeError('timed out', 'TIMEOUT'), true],
+      ['an unreachable endpoint', makeError('no network', 'NETWORK_ERROR'), true],
+      ['a 502 from the endpoint', makeError('bad gateway', 'SERVER_ERROR'), true],
+      ['a malformed response', makeError('bad data', 'BAD_DATA'), true],
+      ['a destroyed provider', makeError('cancelled', 'CANCELLED'), true],
+      ['a revert', makeError('reverted', 'CALL_EXCEPTION'), false],
+      ['not enough funds', makeError('insufficient funds', 'INSUFFICIENT_FUNDS'), false],
+      ['nothing at all', undefined, false],
+    ];
+    for (const [name, err, want] of transport) {
+      const got = isTransportFailure(err);
+      if (got === want) {
+        passed++;
+        console.log(`  ok    ${name} → ${got ? 'never answered' : 'answered'}`);
+      } else {
+        failed++;
+        console.log(`  FAIL  ${name} → ${got ? 'never answered' : 'answered'}, expected the opposite`);
+      }
+    }
     for (const [name, err, want] of cases) {
       const got = isChainRejection(registry, err);
       if (got === want) {

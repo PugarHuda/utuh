@@ -1,3 +1,4 @@
+import { isCallException, isError } from 'ethers';
 import type { Contract } from 'ethers';
 
 /// Send a registry call even when gas estimation refuses to answer.
@@ -39,14 +40,33 @@ const MAX_GAS_CAP = 75_000_000n;
 ///
 /// Only a decoded revert counts. `CALL_EXCEPTION` with no revert data is what ethers also returns
 /// for a call to an address holding no code, which is a misconfiguration rather than a verdict.
-export function isChainRejection(contract: Contract, e: any): boolean {
-  if (e?.code !== 'CALL_EXCEPTION') return false;
+export function isChainRejection(contract: Contract, e: unknown): boolean {
+  // ethers ships the type guard this used to hand-roll as `e?.code !== 'CALL_EXCEPTION'`, and it
+  // narrows to CallExceptionError — so `revert` and `data` are typed here rather than read off an
+  // `any`. Its own definition of a call exception is also the one to trust over a copy of it.
+  if (!isCallException(e)) return false;
   if (e.revert != null) return true;
   try {
     return e.data != null && e.data !== '0x' && contract.interface.parseError(e.data) != null;
   } catch {
     return false;
   }
+}
+
+/// Did this fail because the endpoint never answered?
+///
+/// Distinct from a rejection: nothing was decided. ethers classifies its own transport failures,
+/// which is more reliable than matching on message text and covers codes a hand-written list
+/// would miss — `SERVER_ERROR` for a 502, `BAD_DATA` for a malformed response, `CANCELLED` for a
+/// destroyed provider.
+export function isTransportFailure(e: unknown): boolean {
+  return (
+    isError(e, 'TIMEOUT') ||
+    isError(e, 'NETWORK_ERROR') ||
+    isError(e, 'SERVER_ERROR') ||
+    isError(e, 'BAD_DATA') ||
+    isError(e, 'CANCELLED')
+  );
 }
 
 /// What the EVM charges for these bytes: 16 per non-zero, 4 per zero, per EIP-2028.

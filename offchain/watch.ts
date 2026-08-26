@@ -6,6 +6,7 @@ import { scanScopeUnion, eventKey, type Scope } from './lib/scope';
 import { toScope } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { refuteClaim } from './lib/claims';
+import { isTransportFailure } from './lib/gasLimit';
 
 /// The watcher.
 ///
@@ -111,8 +112,8 @@ async function main() {
       } catch (e: any) {
         // A lost race, a reverted refutation, an endpoint failing mid-sweep. None of these are
         // reasons to stop watching, and none of them settle anything.
-        console.log(`
-claim ${claimId}: inspection failed — ${e.shortMessage ?? e.message}`);
+        const kind = isTransportFailure(e) ? 'an endpoint never answered' : 'inspection failed';
+        console.log(`${NL}claim ${claimId}: ${kind} — ${e.shortMessage ?? e.message}`);
         verdict = 'inconclusive';
       }
       tally[verdict]++;

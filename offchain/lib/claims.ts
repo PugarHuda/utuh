@@ -2,7 +2,7 @@ import { Contract } from 'ethers';
 import { eventKey, scanScopeUnion, type Scope, type ScopedEvent } from './scope';
 import { sources, withDeadline, SOURCE_TIMEOUT_MS } from '../config';
 import { Prover, planBatches } from './proofs';
-import { sendChecked, isChainRejection } from './gasLimit';
+import { sendChecked, isChainRejection, isTransportFailure } from './gasLimit';
 import { attested } from './chain';
 
 export interface BuildOptions {
@@ -201,8 +201,12 @@ export async function buildClaim(
             // the event. Dropping there would seal a claim short of a real member and forfeit the
             // bond for it. An unbuilt claim costs nothing; the same trade as the prover's 404.
             if (!isChainRejection(registry, inner)) {
+              // Say which kind of not-knowing it was. "The endpoint never answered" and "something
+              // unexpected happened" call for different things from whoever reads this.
+              const why = isTransportFailure(inner) ? 'the endpoint never answered' : 'unexpected failure';
               throw new Error(
-                `could not establish whether the registry accepts ${where}: ${inner.shortMessage ?? inner.message}`,
+                `could not establish whether the registry accepts ${where} — ${why}: ` +
+                  `${inner.shortMessage ?? inner.message}`,
               );
             }
             dropped.push(event);
