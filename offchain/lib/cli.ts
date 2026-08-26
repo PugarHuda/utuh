@@ -12,9 +12,16 @@
 ///
 /// The error path prints the stack when there is one, because these fail against a live chain and
 /// the line number is usually the whole story.
+///
+/// The success path exits with `process.exitCode`, not with 0, and the difference is not academic.
+/// `liveTest.ts` ends with `if (failed > 0) process.exitCode = 1` and then returns normally, having
+/// reported its own failures rather than thrown — and `process.exit(0)` overrides that, so
+/// `npm run livetest` returned success no matter how many of its assertions failed. Measured: a
+/// script that sets exitCode 1 and returns exited 0. Anything reading the exit code rather than the
+/// output was being told the suite passed.
 export function runScript(main: () => Promise<unknown>): void {
   main()
-    .then(() => process.exit(0))
+    .then(() => process.exit(Number(process.exitCode ?? 0)))
     .catch((e: unknown) => {
       const err = e as { stack?: string; message?: string };
       console.error('\n' + (err?.stack ?? err?.message ?? String(e)));
