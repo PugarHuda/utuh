@@ -448,7 +448,8 @@ npm run provers             # prove one transaction hosted and locally, and comp
 npm run gas                 # what the registry has really cost, fitted from its own receipts
 npm run slither             # static analysis; the config says which detectors are off and why
 npm run check               # everything CI runs: fmt, tests, typecheck, slither
-npm run deploy
+npm run deploy              # refuses without REDEPLOY=1 once a deployment is recorded
+npm run redeploy:credit     # replace only the UtuhCredit a record points at, keeping its registry
 npm run e2e                 # the registry, both outcomes
 npm run credit              # the credit line, on a real Aave borrower
 npm run control             # bind your own address (needs a little source-chain gas)
@@ -461,6 +462,12 @@ npm run livetest            # 95 guards asserted against the live chain, refunds
 
 npm run demo                # e2e then credit, against the deployment already recorded
 ```
+
+Run one of the chain-writing ones at a time. They all sign with `PRIVATE_KEY`, so two at once means
+two transactions competing for one nonce, and the second is refused with `replacement transaction
+underpriced` — from the node, partway through, after the first few steps have already spent CTC.
+The long ones overlap easily: `npm run livetest` waits out two challenge windows and `npm run full`
+waits on attestation, which is plenty of time to start something else by mistake.
 
 CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 
