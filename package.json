@@ -39,7 +39,8 @@
     "lint": "forge lint src/",
     "format": "prettier --write \"offchain/**/*.ts\"",
     "format:check": "prettier --check \"offchain/**/*.ts\"",
-    "deadcode": "knip"
+    "deadcode": "knip",
+    "symbolic": "halmos --contract EventScopeKeySymbolic"
   },
   "dependencies": {
     "@gluwa/usc-contracts": "^0.1.2",

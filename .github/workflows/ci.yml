@@ -108,6 +108,31 @@ jobs:
           fail-on: medium
           slither-args: --filter-paths "node_modules|lib" --exclude-dependencies
 
+      # Symbolic proof of the ordering key. `forge test` fuzzes it with 256 draws a run; halmos
+      # explores the whole input space and either returns a counterexample or proves there is
+      # none. Refutation is a binary search over strictly ascending keys, so a collision or an
+      # order that disagreed with chronology would let a claim appear to contain an event it does
+      # not hold — the one thing `contains` must never say.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: symbolic proofs
+        run: |
+          pip install halmos
+          halmos --contract EventScopeKeySymbolic
+
   live:
     # A daily check that the chain still behaves the way this is built on. It proves real Ethereum
     # mainnet transactions against the live Block Prover precompile through eth_call — no key, no
