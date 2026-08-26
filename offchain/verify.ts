@@ -28,8 +28,12 @@ const DECODER_PATH = 'node_modules/@gluwa/usc-contracts/contracts/decoding/EvmV1
 
 const Metric = { COUNT: 0, DATA_WORD: 1 } as const;
 
+/// No `shell: true`. Node deprecated passing arguments through a shell (DEP0190) precisely because
+/// they are concatenated rather than escaped, and constructor arguments are the sort of long
+/// attacker-influenced string that should never be pasted into a command line. `forge` resolves
+/// without one on every platform this runs on.
 function forge(args: string[]): void {
-  execFileSync('forge', args, { stdio: 'inherit', shell: true });
+  execFileSync('forge', args, { stdio: 'inherit' });
 }
 
 function creditConstructorArgs(registry: string): string {
@@ -84,6 +88,19 @@ function creditConstructorArgs(registry: string): string {
   ]);
 }
 
+/// Prefer what the deployment recorded over what this environment would guess.
+///
+/// Blockscout needs the constructor arguments byte for byte. Rebuilding them from environment
+/// defaults works right up until someone deploys with `VOLUME_UNIT_IN_CTC` set and verifies
+/// without it, at which point verification fails for a reason nothing in the output mentions.
+/// `deploy.ts` now writes them down; the fallback is only for deployment files written before it
+/// did, and it says so when it is used.
+function argsFor(recorded: string | undefined, rebuild: () => string, what: string): string {
+  if (recorded) return recorded;
+  console.log(`  (no ${what} recorded in deployments.json — rebuilding from the environment)`);
+  return rebuild();
+}
+
 function main(): void {
   const d = readDeployments();
   if (!d.decoder || !d.registry || !d.credit) throw new Error('no deployments.json — run: npm run deploy');
@@ -109,7 +126,11 @@ function main(): void {
     '--verifier-url',
     EXPLORER,
     '--constructor-args',
-    AbiCoder.defaultAbiCoder().encode(['uint64'], [Number(process.env.MIN_CHALLENGE_WINDOW ?? 25)]),
+    argsFor(
+      d.registryArgs,
+      () => AbiCoder.defaultAbiCoder().encode(['uint64'], [Number(process.env.MIN_CHALLENGE_WINDOW ?? 25)]),
+      'registry arguments',
+    ),
     '--libraries',
     `${DECODER_PATH}:${d.decoder}`,
     ...common,
@@ -123,7 +144,7 @@ function main(): void {
     '--verifier-url',
     EXPLORER,
     '--constructor-args',
-    creditConstructorArgs(d.registry),
+    argsFor(d.creditArgs, () => creditConstructorArgs(d.registry!), 'credit arguments'),
     '--libraries',
     `${DECODER_PATH}:${d.decoder}`,
     ...common,

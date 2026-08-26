@@ -2,7 +2,8 @@ import { Contract, JsonRpcProvider, formatEther } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, sources, withDeadline, SOURCE_TIMEOUT_MS, requirePrivateKey } from './config';
 import { readDeployments, registryAt, signer } from './lib/contracts';
-import { scanScopeUnion, eventKey, type Scope, type Metric } from './lib/scope';
+import { scanScopeUnion, eventKey, type Scope } from './lib/scope';
+import { toScope } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { refuteClaim } from './lib/claims';
 
@@ -120,15 +121,11 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
     return 'expired';
   }
 
-  const scope: Scope = {
-    chainKey: Number(claim.scope.chainKey),
-    emitter: claim.scope.emitter,
-    eventSig: claim.scope.eventSig,
-    topics: [claim.scope.topics[0], claim.scope.topics[1], claim.scope.topics[2]],
-    topicMask: Number(claim.scope.topicMask),
-    metric: Number(claim.scope.metric) as Metric,
-    metricArg: Number(claim.scope.metricArg),
-  };
+  // Rebuilt from what the chain holds, through the same conversion every other script uses. This
+  // was a second copy of `toScope` written out by hand, which is one more place for the watcher's
+  // idea of a scope to drift from the claimant's — and a watcher sweeping a slightly different
+  // scope than the one bonded finds gaps that are not there, or misses ones that are.
+  const scope: Scope = toScope(claim.scope);
 
   // Sweep every endpoint we have, and take the union rather than a vote.
   //

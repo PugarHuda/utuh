@@ -1,4 +1,4 @@
-import { formatEther, id, ZeroAddress } from 'ethers';
+import { AbiCoder, formatEther, id, ZeroAddress } from 'ethers';
 import 'dotenv/config';
 import {
   CC3_RPC,
@@ -129,14 +129,32 @@ async function main() {
   console.log(`  terms: repay ${REPAYMENT_BPS / 100}% within ${REPAY_WINDOW_BLOCKS} CC3 blocks`);
   console.log('  adverse classes: 1 (Aave V3 LiquidationCall) — add more to require more');
 
+  // Record what was actually passed, so verification does not have to guess it back out of the
+  // environment it happened to be run in.
+  const creditAbi = artifact('UtuhCredit.sol', 'UtuhCredit').abi.find((f: any) => f.type === 'constructor');
   writeDeployments({
     chainId: CC3_CHAIN_ID,
     deployer: wallet.address,
     decoder: decoderAddress,
     registry: registryAddress,
     credit: creditAddress,
+    registryArgs: AbiCoder.defaultAbiCoder().encode(['uint64'], [MIN_CHALLENGE_WINDOW]),
+    creditArgs: AbiCoder.defaultAbiCoder().encode(creditAbi.inputs as any, [
+      registryAddress,
+      {
+        volumeUnitInCtc: VOLUME_UNIT_IN_CTC,
+        minUnderwritingWindow: MIN_CHALLENGE_WINDOW,
+        minHistoryBlocks: MIN_HISTORY_BLOCKS,
+        maxStalenessBlocks: MAX_STALENESS_BLOCKS,
+        repaymentBps: REPAYMENT_BPS,
+        repayWindowBlocks: REPAY_WINDOW_BLOCKS,
+      },
+      volumeSpec,
+      [cleanSpec],
+      repaySpec,
+    ]),
   });
-  console.log('\nwrote deployments.json');
+  console.log('\nwrote deployments.json, constructor arguments included');
 }
 
 main().catch((e) => {

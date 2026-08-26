@@ -62,6 +62,14 @@ export interface Deployments {
   credit?: string;
   chainId?: number;
   deployer?: string;
+  /// ABI-encoded constructor arguments, exactly as they were passed.
+  ///
+  /// `npm run verify` has to reproduce these byte for byte or Blockscout rejects the source. It
+  /// used to rebuild them from the same environment defaults `deploy.ts` reads, which works right
+  /// up until someone deploys with `VOLUME_UNIT_IN_CTC` set and verifies without it — at which
+  /// point verification fails and nothing says why. A deployment should remember what it was.
+  registryArgs?: string;
+  creditArgs?: string;
 }
 
 export function readDeployments(): Deployments {

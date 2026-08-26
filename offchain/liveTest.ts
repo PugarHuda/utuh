@@ -13,7 +13,7 @@ import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
 import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
 import type { Scope } from './lib/scope';
-import { scopeFor, plainSpec } from './lib/specs';
+import { scopeFor, plainSpec, sameScope } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
 import { answersTheQuestion } from './lib/scope';
 import { Prover, isAbsence, type EventProofStruct, type ContinuityProofStruct } from './lib/proofs';
@@ -148,6 +148,42 @@ async function main() {
       } else {
         failed++;
         console.log(`  FAIL  ${name} → ${got ? 'accepted' : 'discarded'}, expected the opposite`);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Scope equality, checked against scopes the contract itself built. `finishLine` uses this to
+  // decide whether the claim it is resuming already exists; say no when the answer is yes and it
+  // stakes a second bond on a duplicate.
+  console.log('');
+  console.log('deciding whether two scopes are the same one');
+  {
+    const other = new Wallet(keccak256(concat([master, toUtf8Bytes('utuh/other-subject')]))).address;
+    const mine = await credit.expectedScope(spec, subject);
+    const again = await credit.expectedScope(spec, subject);
+    const theirs = await credit.expectedScope(spec, other);
+    const repay = await credit.expectedScope(plainSpec(await credit.repaySpec()), subject);
+
+    const cases: [string, boolean, boolean][] = [
+      ['the same scope, asked for twice', sameScope(mine, again), true],
+      ['a different subject', sameScope(mine, theirs), false],
+      ['a different spec for the same subject', sameScope(mine, repay), false],
+      // ethers hands a struct back named or positional depending on the ABI, and a node may
+      // checksum an address the previous one returned lowercase. Neither is a different scope.
+      ['the same scope, positionally', sameScope(mine, [...mine]), true],
+      ['the same scope, emitter lowercased', sameScope(mine, { ...toPlain(mine), emitter: String(mine.emitter).toLowerCase() }), true],
+      ['the same scope, eventSig uppercased', sameScope(mine, { ...toPlain(mine), eventSig: String(mine.eventSig).toUpperCase().replace('0X', '0x') }), true],
+      ['one topic changed', sameScope(mine, { ...toPlain(mine), topics: ['0x' + '22'.repeat(32), mine.topics[1], mine.topics[2]] }), false],
+      ['a different metric', sameScope(mine, { ...toPlain(mine), metric: Number(mine.metric) === 0 ? 1 : 0 }), false],
+    ];
+    for (const [name, got, want] of cases) {
+      if (got === want) {
+        passed++;
+        console.log(`  ok    ${name} → ${got ? 'same' : 'different'}`);
+      } else {
+        failed++;
+        console.log(`  FAIL  ${name} → ${got ? 'same' : 'different'}, expected the opposite`);
       }
     }
   }
@@ -494,6 +530,19 @@ async function busiestSubject(
     );
   }
   return getAddress('0x' + best[0].slice(26));
+}
+
+/// ethers `Result` objects are frozen, so a case that varies one field has to copy first.
+function toPlain(s: any) {
+  return {
+    chainKey: s.chainKey,
+    emitter: s.emitter,
+    eventSig: s.eventSig,
+    topics: [s.topics[0], s.topics[1], s.topics[2]],
+    topicMask: s.topicMask,
+    metric: s.metric,
+    metricArg: s.metricArg,
+  };
 }
 
 function statusName(s: bigint | number): string {

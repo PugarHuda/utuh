@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
 import { registryAt, creditAt, signer } from './lib/contracts';
 import type { Scope } from './lib/scope';
-import { scopeFor, plainSpec } from './lib/specs';
+import { scopeFor, plainSpec, sameScope } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { buildClaim, sweepForClaim } from './lib/claims';
 
@@ -69,30 +69,30 @@ async function main() {
   console.log('history, repaid on the source chain, and settled on Creditcoin. Nothing bridged.');
 }
 
+/// How many claims back to look for one this line already built. A registry that has seen ten
+/// thousand claims should not cost ten thousand round trips to resume a line, and a claim built
+/// for *this* line is by construction one of the most recent.
+const RESUME_SCAN = Number(process.env.RESUME_SCAN ?? 200);
+
 /// A claim already built for this line, if the run got that far before stopping.
 async function findRepayClaim(registry: any, credit: any, line: any): Promise<bigint> {
   const next: bigint = await registry.nextClaimId();
-  for (let id = next - 1n; id >= 1n; id--) {
+  // The scope does not change between iterations, and asking the contract for it inside the loop
+  // doubled the round trips for no reason.
+  const want = await credit.expectedScope(plainSpec(await credit.repaySpec()), line.subject);
+
+  const stop = next - 1n - BigInt(RESUME_SCAN) > 0n ? next - 1n - BigInt(RESUME_SCAN) : 0n;
+  for (let id = next - 1n; id > stop; id--) {
     const c = await registry.claim(id);
     if (Number(c.status) !== 2 && Number(c.status) !== 3) continue;
     if (c.fromBlock < line.repayFrom) continue;
-    const scopeId = await credit.expectedScope(plainSpec(await credit.repaySpec()), line.subject);
-    // Compare the aggregate's scope by rebuilding the id the contract would compute.
-    if (scopeIdOf(c.scope) === scopeIdOf(scopeId)) return id;
+    if (sameScope(c.scope, want)) return id;
+  }
+  // Say what was not looked at. A bound nobody is told about reads as "there is nothing there".
+  if (stop > 0n) {
+    console.log(`  (looked at claims ${stop + 1n}..${next - 1n}; raise RESUME_SCAN to go further back)`);
   }
   return 0n;
-}
-
-function scopeIdOf(s: any): string {
-  return JSON.stringify([
-    Number(s.chainKey ?? s[0]),
-    String(s.emitter ?? s[1]).toLowerCase(),
-    String(s.eventSig ?? s[2]),
-    [...(s.topics ?? s[3])].map(String),
-    Number(s.topicMask ?? s[4]),
-    Number(s.metric ?? s[5]),
-    Number(s.metricArg ?? s[6]),
-  ]);
 }
 
 async function buildRepayClaim(registry: any, registryAsBorrower: any, credit: any, line: any): Promise<bigint> {
