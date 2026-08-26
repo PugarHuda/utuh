@@ -1,10 +1,33 @@
 import { AbiCoder, formatEther } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, requirePrivateKey } from './config';
-import { artifact, deploy, signer, writeDeployments } from './lib/contracts';
+import { artifact, deploy, signer, writeDeployments, readDeployments } from './lib/contracts';
 import { MIN_CHALLENGE_WINDOW, LENDER_MAINNET, policy, creditConstructorArgs } from './lib/policy';
 
 async function main() {
+  // Deploying overwrites the record every other script reads, and the addresses in the README, the
+  // deck and the submission are the ones currently in it — all seven verified on Blockscout.
+  // `npm run demo` used to begin here, so following the README to record a demonstration replaced
+  // them with fresh, unverified ones and nothing said so. Redeploying is a deliberate act now.
+  const existing = readDeployments();
+  if (existing.registry && !process.env.REDEPLOY) {
+    console.error(`deployments.json already points at a deployment:
+
+  registry ${existing.registry}
+  credit   ${existing.credit}
+  decoder  ${existing.decoder}
+
+Deploying again replaces it, and anything published about those addresses stops being about the
+contracts this repo points at. If that is what you want:
+
+  REDEPLOY=1 npm run deploy
+
+To deploy alongside it instead, write elsewhere:
+
+  DEPLOYMENTS=deployments.next.json REDEPLOY=1 npm run deploy`);
+    process.exit(1);
+  }
+
   const wallet = signer(CC3_RPC, CC3_CHAIN_ID, requirePrivateKey());
   const balance = await wallet.provider!.getBalance(wallet.address);
   console.log(`deployer ${wallet.address}`);

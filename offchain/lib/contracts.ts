@@ -4,7 +4,13 @@ import { Contract, ContractFactory, Wallet, JsonRpcProvider } from 'ethers';
 
 const ROOT = join(__dirname, '..', '..');
 const OUT = join(ROOT, 'out');
-const DEPLOYMENTS = join(ROOT, 'deployments.json');
+/// Which deployment record to read and write.
+///
+/// `npm run full` writes its own to deployments.full.json, and until now nothing could read it —
+/// so verifying that deployment meant reconstructing its constructor arguments by hand, which is
+/// exactly what recording them was supposed to prevent. `DEPLOYMENTS=deployments.full.json npm run
+/// verify` now works.
+const DEPLOYMENTS = join(ROOT, process.env.DEPLOYMENTS ?? 'deployments.json');
 
 export interface Artifact {
   abi: any[];
@@ -70,6 +76,12 @@ export interface Deployments {
   /// point verification fails and nothing says why. A deployment should remember what it was.
   registryArgs?: string;
   creditArgs?: string;
+  /// Written by `npm run full`, which also deploys a SettlementLedger on the source chain and
+  /// records which chain that was. `npm run verify` reads them so verifying that deployment does
+  /// not mean remembering an address and a chain key by hand.
+  ledger?: string;
+  sourceChainKey?: number;
+  challengeWindow?: number;
 }
 
 export function readDeployments(): Deployments {

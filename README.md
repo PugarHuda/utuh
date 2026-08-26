@@ -285,7 +285,13 @@ it. Silence is the default condition, not an inference.
 Every contract below is **verified on Blockscout** — source, ABI and decoded constructor arguments
 are readable at its address. An unverified address is a wall of bytecode, and "the source is on
 GitHub" is a different claim from "this address runs that source". `npm run verify` republishes
-them after a redeploy.
+them after a redeploy, reading whichever record `DEPLOYMENTS` names — so
+`DEPLOYMENTS=deployments.full.json npm run verify` covers the Sepolia-sourced set including its
+ledger, with nothing reconstructed by hand.
+
+Deploying refuses to overwrite an existing record without `REDEPLOY=1`. The addresses below are
+the ones in it, all verified; `npm run demo` used to begin by replacing them, so following this
+file to record a demonstration quietly made everything published about them false.
 
 Blockscout reports a *partial* match: the runtime bytecode agrees and the trailing metadata hash
 does not, which is what happens when the compilation environment is not reproduced byte for byte.
@@ -450,7 +456,7 @@ npm run watch               # the watcher; --once to sweep and exit, --dry to lo
 npm run bait                # seal a deliberately short claim for the watcher to find
 npm run livetest            # 88 guards asserted against the live chain, refunds included
 
-npm run demo                # all three in sequence, for recording
+npm run demo                # e2e then credit, against the deployment already recorded
 ```
 
 CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
@@ -490,7 +496,9 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `WATCH_STATE` | `.watch-state.json` | where the watcher records how far it has read and what is still unresolved — one file per watcher, or two will overwrite each other's mark |
 | `BOND` / `BAIT_FROM` | `2` CTC / `toBlock−3000` | what `npm run bait` stakes, and where it looks for an event to hide |
 | `SUBJECT` / `RANGE_BLOCKS` / `MAX_MEMBERS` | derived / `60` / `12` | who and how much `npm run e2e` builds a claim over |
-| `LEDGER` | — | set it and `npm run verify` publishes the source-chain contract too |
+| `DEPLOYMENTS` | `deployments.json` | which deployment record to read and write — `deployments.full.json` holds the one `npm run full` made |
+| `REDEPLOY` | unset | required to overwrite an existing deployment record |
+| `LEDGER` | — | a source-chain ledger to verify, when the record does not name one |
 | `EXPLORER_URL` / `SEPOLIA_EXPLORER_URL` | Blockscout | where `npm run verify` submits |
 
 Two endpoints per chain is the floor for sealing a claim, not a comfortable margin — lose one and

@@ -17,6 +17,7 @@ import { MIN_CHALLENGE_WINDOW, creditConstructorArgs } from './lib/policy';
 ///   npm run verify
 const EXPLORER = process.env.EXPLORER_URL ?? 'https://creditcoin-testnet.blockscout.com/api';
 const SEPOLIA_EXPLORER = process.env.SEPOLIA_EXPLORER_URL ?? 'https://eth-sepolia.blockscout.com/api';
+const DEPLOYMENTS_FILE = process.env.DEPLOYMENTS ?? 'deployments.json';
 const DECODER_PATH = 'node_modules/@gluwa/usc-contracts/contracts/decoding/EvmV1Decoder.sol:EvmV1Decoder';
 
 function forge(args: string[]): void {
@@ -58,9 +59,28 @@ function encodeCreditArgs(registry: string): string {
 /// without it, at which point verification fails for a reason nothing in the output mentions.
 /// `deploy.ts` now writes them down; the fallback is only for deployment files written before it
 /// did, and it says so when it is used.
-function argsFor(recorded: string | undefined, rebuild: () => string, what: string): string {
+function argsFor(
+  recorded: string | undefined,
+  rebuild: () => string,
+  what: string,
+  ledger?: string,
+  from = 'the environment',
+): string {
   if (recorded) return recorded;
-  console.log(`  (no ${what} recorded in deployments.json — rebuilding from the environment)`);
+  // The rebuild reads lib/policy.ts, which describes a lender underwriting Aave on Ethereum
+  // mainnet. A deployment that carries a `ledger` is a full-flow one: its specs point at that
+  // SettlementLedger on a testnet instead, so the rebuild is not merely unrecorded, it is known to
+  // be wrong. Blockscout would reject the result for a byte mismatch and say nothing about why.
+  if (ledger) {
+    throw new Error(
+      `no ${what} recorded in ${DEPLOYMENTS_FILE}, and this deployment carries a ledger ` +
+        `(${ledger}) — so its specs point at that contract, not at Aave, and rebuilding them from ` +
+        `lib/policy.ts would produce arguments that are simply not the ones it was deployed with. ` +
+        `Redeploy with \`npm run full\`, which records them, or pass --constructor-args to forge ` +
+        `verify-contract by hand.`,
+    );
+  }
+  console.log(`  (no ${what} recorded in ${DEPLOYMENTS_FILE} — rebuilding from ${from})`);
   return rebuild();
 }
 
@@ -100,8 +120,12 @@ async function main(): Promise<void> {
     '--constructor-args',
     argsFor(
       d.registryArgs,
-      () => AbiCoder.defaultAbiCoder().encode(['uint64'], [MIN_CHALLENGE_WINDOW]),
+      // The registry takes one argument and the record carries it, so this is reconstruction from
+      // what was written down rather than from the ambient environment.
+      () => AbiCoder.defaultAbiCoder().encode(['uint64'], [d.challengeWindow ?? MIN_CHALLENGE_WINDOW]),
       'registry arguments',
+      d.challengeWindow === undefined ? d.ledger : undefined,
+      d.challengeWindow === undefined ? 'the environment' : `the recorded challenge window of ${d.challengeWindow}`,
     ),
     '--libraries',
     `${DECODER_PATH}:${d.decoder}`,
@@ -116,13 +140,15 @@ async function main(): Promise<void> {
     '--verifier-url',
     EXPLORER,
     '--constructor-args',
-    argsFor(d.creditArgs, () => encodeCreditArgs(d.registry!), 'credit arguments'),
+    argsFor(d.creditArgs, () => encodeCreditArgs(d.registry!), 'credit arguments', d.ledger),
     '--libraries',
     `${DECODER_PATH}:${d.decoder}`,
     ...common,
   ]);
 
-  const ledger = process.env.LEDGER;
+  // Recorded by `npm run full`; the environment variable is the fallback for a deployment made
+  // before that was written down.
+  const ledger = d.ledger ?? process.env.LEDGER;
   if (ledger) {
     console.log('\nSettlementLedger (source chain)');
     forge([
