@@ -1,0 +1,8 @@
+# Foundry and Prettier both normalise to LF, and Git on Windows checks out CRLF by default — so a
+# `git checkout` of a source file was enough to make `forge fmt --check` report every line of it as
+# changed, locally and only locally. Pin the endings for the files those two tools own.
+*.sol text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf

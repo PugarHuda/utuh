@@ -16,6 +16,7 @@
   "scripts": {
     "build": "forge build",
     "deploy": "tsx offchain/deploy.ts",
+    "redeploy:credit": "tsx offchain/redeployCredit.ts",
     "e2e": "tsx offchain/e2e.ts",
     "credit": "tsx offchain/creditDemo.ts",
     "balance": "tsx offchain/balance.ts",

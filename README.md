@@ -302,7 +302,7 @@ The code is readable and the functions are callable.
 | Contract       | Address                                                                                                                                                   |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `UtuhRegistry` | [`0x8FA0BD5301D998Be873E31453E53d114929a5Fac`](https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac?tab=contract) |
-| `UtuhCredit`   | [`0x94fC0579701c62a271EC128D904d2A2F8796c86c`](https://creditcoin-testnet.blockscout.com/address/0x94fC0579701c62a271EC128D904d2A2F8796c86c?tab=contract) |
+| `UtuhCredit`   | [`0xaF20895A1a130e4C6C3f6fa0238073Aa42fA080d`](https://creditcoin-testnet.blockscout.com/address/0xaF20895A1a130e4C6C3f6fa0238073Aa42fA080d?tab=contract) |
 | `EvmV1Decoder` | [`0x5cab00c032D7d4436f312Dd51ef59Dc5b860df3F`](https://creditcoin-testnet.blockscout.com/address/0x5cab00c032D7d4436f312Dd51ef59Dc5b860df3F?tab=contract) |
 
 `npm run credit` runs against these, on Ethereum mainnet data.
@@ -312,7 +312,7 @@ The code is readable and the functions are callable.
 | Contract                     | Address                                                                                                                                                   |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `UtuhRegistry`               | [`0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac`](https://creditcoin-testnet.blockscout.com/address/0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac?tab=contract) |
-| `UtuhCredit`                 | [`0x17299EC7B75B1B148C4d61B6503bde73B70aaddd`](https://creditcoin-testnet.blockscout.com/address/0x17299EC7B75B1B148C4d61B6503bde73B70aaddd?tab=contract) |
+| `UtuhCredit`                 | [`0x1C6d88eb6a40Ef2dBB8cFAF8A1aBe5641eAe9Ea8`](https://creditcoin-testnet.blockscout.com/address/0x1C6d88eb6a40Ef2dBB8cFAF8A1aBe5641eAe9Ea8?tab=contract) |
 | `EvmV1Decoder`               | [`0xEEF4094b3848eD261478310a949c4A1E42d28571`](https://creditcoin-testnet.blockscout.com/address/0xEEF4094b3848eD261478310a949c4A1E42d28571?tab=contract) |
 | `SettlementLedger` (Sepolia) | [`0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D`](https://eth-sepolia.blockscout.com/address/0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D?tab=contract)        |
 
