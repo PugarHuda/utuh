@@ -511,17 +511,25 @@ async function main() {
 
   await waitForBlock(owner.provider!, Number(await registry.challengeUntil(honestId)) + 1, { label: 'CC3 block' });
 
+  // What finalizing adds, not what the account happens to be owed.
+  //
+  // This compared `withdrawable` against the bond outright, which is only the same number when
+  // nothing else is owed. The registry is shared — `npm run credit` finalising two claims of its
+  // own an hour earlier is enough to make it read 6 CTC instead of 2 — so the assertion passed or
+  // failed on history that has nothing to do with what it is checking.
+  const owedBefore: bigint = await registry.withdrawable(owner.address);
   await expectOk('finalize after the window', async () => {
     await (await registry.finalize(honestId)).wait();
   });
 
-  const credited: bigint = await registry.withdrawable(owner.address);
+  const owedAfter: bigint = await registry.withdrawable(owner.address);
+  const credited = owedAfter - owedBefore;
   if (credited === bond) {
     passed++;
     console.log(`  ok    the bond was credited, not sent (${formatEther(credited)} CTC)`);
   } else {
     failed++;
-    console.log(`  FAIL  credited ${formatEther(credited)} CTC, expected ${formatEther(bond)}`);
+    console.log(`  FAIL  finalizing credited ${formatEther(credited)} CTC, expected ${formatEther(bond)}`);
   }
 
   const balBefore = await owner.provider!.getBalance(owner.address);
