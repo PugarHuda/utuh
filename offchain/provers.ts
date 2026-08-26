@@ -1,9 +1,8 @@
-import { Contract, JsonRpcProvider } from 'ethers';
+import { JsonRpcProvider } from 'ethers';
 import 'dotenv/config';
 import {
   CC3_RPC,
   CC3_CHAIN_ID,
-  CHAIN_INFO_ADDRESS,
   CHAIN_KEY,
   PROVER_URL,
   sources,

@@ -60,13 +60,12 @@ export function isChainRejection(contract: Contract, e: unknown): boolean {
 /// would miss — `SERVER_ERROR` for a 502, `BAD_DATA` for a malformed response, `CANCELLED` for a
 /// destroyed provider.
 export function isTransportFailure(e: unknown): boolean {
-  return (
-    isError(e, 'TIMEOUT') ||
-    isError(e, 'NETWORK_ERROR') ||
-    isError(e, 'SERVER_ERROR') ||
-    isError(e, 'BAD_DATA') ||
-    isError(e, 'CANCELLED')
-  );
+  // `isError` is declared as a type predicate, so TypeScript believes it returns a boolean. For a
+  // nullish argument it returns the argument — `isError(undefined, 'TIMEOUT')` is `undefined`, not
+  // `false` — and an `||` chain of those yields `undefined` from a function whose signature
+  // promises otherwise. Truthiness hides it; `=== false` does not. Coerced once, here.
+  const codes = ['TIMEOUT', 'NETWORK_ERROR', 'SERVER_ERROR', 'BAD_DATA', 'CANCELLED'] as const;
+  return codes.some((code) => isError(e, code) === true);
 }
 
 /// What the EVM charges for these bytes: 16 per non-zero, 4 per zero, per EIP-2028.

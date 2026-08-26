@@ -16,7 +16,7 @@ import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
 import { scopeFor, plainSpec, sameScope } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
 import { answersTheQuestion, valueOf, type Scope } from './lib/scope';
-import { Prover, isAbsence, type EventProofStruct, type ContinuityProofStruct } from './lib/proofs';
+import { Prover, isAbsence } from './lib/proofs';
 import { calldataGas, modelledGas, isChainRejection, isTransportFailure } from './lib/gasLimit';
 
 /// The half of the registry that unit tests cannot reach.
@@ -265,7 +265,13 @@ async function main() {
       ['a destroyed provider', makeError('cancelled', 'CANCELLED'), true],
       ['a revert', makeError('reverted', 'CALL_EXCEPTION'), false],
       ['not enough funds', makeError('insufficient funds', 'INSUFFICIENT_FUNDS'), false],
+      // Nullish input is the case that found the bug: ethers' isError is a type predicate, so
+      // TypeScript believes it returns a boolean, and for a nullish argument it returns the
+      // argument. An `||` chain of those yielded `undefined` from a function typed `boolean`.
+      // Compared with `===` here rather than for truthiness, which is why it showed up at all.
       ['nothing at all', undefined, false],
+      ['null', null, false],
+      ['an object that is not an error', {}, false],
     ];
     for (const [name, err, want] of transport) {
       const got = isTransportFailure(err);

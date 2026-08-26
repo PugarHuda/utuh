@@ -1,4 +1,4 @@
-import { Contract, formatEther, formatUnits, parseEther, getAddress, zeroPadValue } from 'ethers';
+import { formatEther, formatUnits, parseEther, getAddress, zeroPadValue } from 'ethers';
 import 'dotenv/config';
 import {
   CC3_RPC,
@@ -13,11 +13,10 @@ import {
 } from './config';
 import { readDeployments, registryAt, creditAt, signer } from './lib/contracts';
 import { chainInfoAt } from './lib/chain';
-import { scopeFor, scanScope, Metric, type Scope, type ScopedEvent } from './lib/scope';
+import { scopeFor, scanScope, Metric, type Scope } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, refuteClaim } from './lib/claims';
 
-const CHAIN_INFO = '0x0000000000000000000000000000000000000fD3';
 const BOND = parseEther(process.env.BOND ?? '2');
 
 /// Mirrors UtuhCredit.MIN_HISTORY_BLOCKS: a clean window shorter than this says very little.
@@ -65,10 +64,29 @@ async function main() {
   });
   console.log(`  ${allRepays.length} USDC Repay events, ${allLiquidations.length} LiquidationCall events`);
 
-  const liquidatedUsers = new Set(allLiquidations.map((l) => getAddress('0x' + l.topics[3].slice(26))));
+  // Read an indexed address out of a log, or nothing.
+  //
+  // These logs come from an endpoint, filtered only by signature, and reading `topics[3]` off one
+  // that carries three topics throws `Cannot read properties of undefined` from inside a `.slice`
+  // — a crash with nothing in it about what went wrong. A log that does not carry the topic this
+  // scope is about is not a log this scope can use, so it is skipped and counted.
+  let skipped = 0;
+  const addressAt = (log: { topics: readonly string[] }, index: number): string | null => {
+    const topic = log.topics[index];
+    if (typeof topic !== 'string' || topic.length !== 66) {
+      skipped++;
+      return null;
+    }
+    return getAddress('0x' + topic.slice(26));
+  };
+
+  const liquidatedUsers = new Set(
+    allLiquidations.map((l) => addressAt(l, 3)).filter((a): a is string => a !== null),
+  );
   const repayCount = new Map<string, number>();
   for (const l of allRepays) {
-    const user = getAddress('0x' + l.topics[2].slice(26));
+    const user = addressAt(l, 2);
+    if (user === null) continue;
     repayCount.set(user, (repayCount.get(user) ?? 0) + 1);
   }
 

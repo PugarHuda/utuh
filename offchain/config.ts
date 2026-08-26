@@ -16,9 +16,30 @@ export const CHAIN_KEY = {
   mainnet: 3,
 } as const;
 
+/// The chain keys this is configured for. Typing the tables below with this rather than `number`
+/// is what makes an unsupported key a question the compiler asks instead of a provider quietly
+/// built for `undefined`.
+export type ChainKey = (typeof CHAIN_KEY)[keyof typeof CHAIN_KEY];
+
+/// Narrow an arbitrary number to a configured chain key, or say which ones there are.
+///
+/// `scope.chainKey` arrives from a contract as a plain number, so this is the boundary where it
+/// becomes something the rest of the file can index with. Before it existed, a scope carrying an
+/// unconfigured key produced `new FetchRequest(undefined)` several calls later, and the error came
+/// out of ethers with nothing in it about chain keys.
+export function requireChainKey(chainKey: number): ChainKey {
+  if (chainKey !== CHAIN_KEY.sepolia && chainKey !== CHAIN_KEY.mainnet) {
+    const known = Object.entries(CHAIN_KEY)
+      .map(([name, key]) => `${key} (${name})`)
+      .join(', ');
+    throw new Error(`chain key ${chainKey} is not configured — this build knows ${known}`);
+  }
+  return chainKey;
+}
+
 /// Source-chain RPCs. Mainnet is the interesting one: CC3 testnet attests Ethereum mainnet, so
 /// contracts on a free testnet can be underwritten on real history.
-export const SOURCE_RPC: Record<number, string> = {
+export const SOURCE_RPC: Record<ChainKey, string> = {
   // Tenderly's public gateway is the one free endpoint tested here that serves a 216,000-block
   // filtered eth_getLogs in a single call. Watchers need that sweep, so it is the default.
   [CHAIN_KEY.mainnet]: process.env.MAINNET_RPC ?? 'https://gateway.tenderly.co/public/mainnet',
@@ -29,14 +50,17 @@ export const SOURCE_RPC: Record<number, string> = {
 export const CHAIN_INFO_ADDRESS = '0x0000000000000000000000000000000000000fD3';
 
 export const cc3 = () => new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
-export const source = (chainKey: number) => new JsonRpcProvider(SOURCE_RPC[chainKey]);
+export const source = (chainKey: number) => {
+  const key = requireChainKey(chainKey);
+  return new JsonRpcProvider(SOURCE_RPC[key], SOURCE_CHAIN_ID[key], { staticNetwork: true });
+};
 
 /// Independent endpoints for the same chain, for anything that needs a second opinion.
 ///
 /// A watcher concluding "this claim is complete" is trusting one node to have told it about every
 /// log. That is the protocol's own problem reappearing one layer down, and one endpoint cannot
 /// detect it. Set MAINNET_RPCS / SEPOLIA_RPCS to comma-separated URLs to widen it.
-const DEFAULT_RPCS: Record<number, string[]> = {
+const DEFAULT_RPCS: Record<ChainKey, string[]> = {
   [CHAIN_KEY.mainnet]: [SOURCE_RPC[CHAIN_KEY.mainnet], 'https://rpc.mevblocker.io'],
   [CHAIN_KEY.sepolia]: [
     SOURCE_RPC[CHAIN_KEY.sepolia],
@@ -64,7 +88,7 @@ const list = (v?: string) =>
 /// An earlier version only ever appended, which meant an operator who knew the bundled public
 /// endpoints were rate-limited — or worse, that one of them was the claimant's — had no way to
 /// drop them. Widening a trust set has to come with the ability to narrow it.
-export const SOURCE_RPCS: Record<number, string[]> = {
+export const SOURCE_RPCS: Record<ChainKey, string[]> = {
   [CHAIN_KEY.mainnet]: [
     ...(list(process.env.MAINNET_RPCS).length ? list(process.env.MAINNET_RPCS) : DEFAULT_RPCS[CHAIN_KEY.mainnet]),
     ...list(process.env.MAINNET_RPCS_EXTRA),
@@ -86,20 +110,22 @@ export const SOURCE_TIMEOUT_MS = Number(process.env.SOURCE_TIMEOUT_MS ?? 25_000)
 /// retries that probe once a second forever — in the background, after the caller has already
 /// given up. The abandoned timer then keeps the process alive and floods stderr, which is how a
 /// watcher ends up unable to exit. Declaring the network removes the probe entirely.
-export const SOURCE_CHAIN_ID: Record<number, number> = {
+export const SOURCE_CHAIN_ID: Record<ChainKey, number> = {
   [CHAIN_KEY.mainnet]: 1,
   [CHAIN_KEY.sepolia]: 11155111,
 };
 
-export const sources = (chainKey: number) =>
-  [...new Set(SOURCE_RPCS[chainKey] ?? [SOURCE_RPC[chainKey]])].map((url) => {
+export const sources = (chainKey: number) => {
+  const key = requireChainKey(chainKey);
+  return [...new Set(SOURCE_RPCS[key])].map((url) => {
     const request = new FetchRequest(url);
     request.timeout = SOURCE_TIMEOUT_MS;
     return {
       url,
-      provider: new JsonRpcProvider(request, SOURCE_CHAIN_ID[chainKey], { staticNetwork: true }),
+      provider: new JsonRpcProvider(request, SOURCE_CHAIN_ID[key], { staticNetwork: true }),
     };
   });
+};
 
 /// Give up on `work` after `ms`, so one unresponsive endpoint cannot stall a sweep.
 export async function withDeadline<T>(ms: number, work: Promise<T>): Promise<T> {

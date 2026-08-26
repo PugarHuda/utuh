@@ -1,4 +1,4 @@
-import { AbiCoder, formatEther, id, ZeroAddress } from 'ethers';
+import { AbiCoder, formatEther, ZeroAddress } from 'ethers';
 import 'dotenv/config';
 import {
   CC3_RPC,

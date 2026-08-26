@@ -1,4 +1,4 @@
-import { formatEther, Contract } from 'ethers';
+import { formatEther } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, requirePrivateKey } from './config';
 import { signer, readDeployments } from './lib/contracts';

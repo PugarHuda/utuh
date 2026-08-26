@@ -57,7 +57,8 @@ async function main() {
   console.log(`\nrange ${fromBlock}..${toBlock}: ${events.length} in-scope event(s)`);
   if (events.length < 2) throw new Error('need at least 2 events to hide one — widen BAIT_FROM');
 
-  const hidden = events[events.length - 1];
+  const hidden = events.at(-1);
+  if (!hidden) throw new Error('no event to hide — the sweep came back empty');
   console.log(`hiding block ${hidden.blockNumber} tx#${hidden.txIndex} log#${hidden.logIndexInTx}`);
 
   await prover.waitAttested(toBlock);

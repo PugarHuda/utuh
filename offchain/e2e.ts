@@ -1,4 +1,4 @@
-import { Contract, formatEther, parseEther } from 'ethers';
+import { formatEther, parseEther } from 'ethers';
 import 'dotenv/config';
 import {
   CC3_RPC,
@@ -15,7 +15,6 @@ import { scopeFor, scanScope, eventKey, Metric } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, findOmission, refuteClaim } from './lib/claims';
 
-const CHAIN_INFO = '0x0000000000000000000000000000000000000fD3';
 
 /// Left unset, the demo picks whichever mainnet address moved the most USDC inside the window,
 /// so a short range still yields enough in-scope events to hide one among.
@@ -81,7 +80,8 @@ async function main() {
 
   // ------------------------------------------------------------------
   console.log('\n=== 2. a dishonest claim ===');
-  const hidden = events[events.length - 1];
+  const hidden = events.at(-1);
+  if (!hidden) throw new Error('no event to hide — the sweep came back empty');
   console.log(`  hiding block ${hidden.blockNumber} tx#${hidden.txIndex} log#${hidden.logIndexInTx} (value ${hidden.value})`);
 
   const liar = await buildClaim(registry, prover, scope, fromBlock, toBlock, events, {

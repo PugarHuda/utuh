@@ -1,12 +1,11 @@
-import { Contract, JsonRpcProvider, formatEther } from 'ethers';
+import { JsonRpcProvider, formatEther } from 'ethers';
 import 'dotenv/config';
 import {
   CC3_RPC,
   CC3_CHAIN_ID,
-  CHAIN_INFO_ADDRESS,
   CHAIN_KEY,
+  type ChainKey,
   PROVER_URL,
-  SOURCE_RPCS,
   SOURCE_TIMEOUT_MS,
   sources,
   withDeadline,
@@ -39,9 +38,10 @@ import { Prover } from './lib/proofs';
 const PROVER_TIMEOUT_MS = Number(process.env.PROVER_TIMEOUT_MS ?? 30_000);
 /// How far back to ask. Deep enough to cross a typical archive cutoff, shallow enough to answer.
 const PROBE_DEPTH = Number(process.env.PROBE_DEPTH ?? 60_000);
-const ZERO_TOPIC = '0x' + '00'.repeat(32);
 const TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-const PROBE: Record<number, { address: string; topics: string[]; narrow: number; wide: number }> = {
+/// Keyed by ChainKey rather than number, so adding a chain to CHAIN_KEY without giving it a probe
+/// is a compile error rather than doctor crashing on `probe.address` at the moment someone runs it.
+const PROBE: Record<ChainKey, { address: string; topics: string[]; narrow: number; wide: number }> = {
   [CHAIN_KEY.mainnet]: {
     address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC, never quiet
     topics: [TRANSFER],
