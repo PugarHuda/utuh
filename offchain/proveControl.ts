@@ -67,25 +67,36 @@ async function main() {
   });
 
   console.log('proving control on Creditcoin...');
+  // Submitting a proof is permissionless, so someone can front-run this with the very proof we are
+  // about to send. The binding they produce is the one we wanted — same bytes, same subject, same
+  // account — but our transaction then reverts, and reporting that as a failure would be wrong.
+  const alreadyBound = async () => (await credit.controllerOf(subject)).toLowerCase() === account.toLowerCase();
   // Same route as an append or a refutation: this reaches `0x0FD2`, so it is subject to the same
   // estimation-mode problem, and being unable to bind an address is being unable to borrow at all.
-  const tx = await sendChecked(
-    credit,
-    'proveControl',
-    [
-      {
-        chainKey: SOURCE,
-        blockHeight: proof.blockHeight,
-        encodedTransaction: proof.encodedTransaction,
-        merkleRoot: proof.merkleRoot,
-        siblings: proof.siblings,
-      },
-      continuity,
-    ],
-    { members: 0, log: (m) => console.log(m) },
-  );
-  await tx.wait();
-  prover.close();
+  try {
+    const tx = await sendChecked(
+      credit,
+      'proveControl',
+      [
+        {
+          chainKey: SOURCE,
+          blockHeight: proof.blockHeight,
+          encodedTransaction: proof.encodedTransaction,
+          merkleRoot: proof.merkleRoot,
+          siblings: proof.siblings,
+        },
+        continuity,
+      ],
+      { members: 0, log: (m) => console.log(m) },
+    );
+    await tx.wait();
+  } catch (e: any) {
+    const named = String(e.revert?.name ?? e.shortMessage ?? e.message);
+    if (!named.includes('ControlProofAlreadyUsed') || !(await alreadyBound())) throw e;
+    console.log('  someone else submitted this same proof first — the binding it made is ours');
+  } finally {
+    prover.close();
+  }
 
   const bound = await credit.controllerOf(subject);
   console.log(`\ncontrollerOf(${subject}) = ${bound}`);
