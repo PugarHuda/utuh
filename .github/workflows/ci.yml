@@ -25,6 +25,17 @@ jobs:
         with:
           version: stable
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # EvmV1Decoder is a Solidity dependency that arrives through npm, and foundry.toml lists
+      # node_modules as a lib directory. Without this the compiler cannot find it and every
+      # contract fails to parse.
+      - name: solidity dependencies
+        run: npm ci
+
       - name: formatting
         run: forge fmt --check
 
