@@ -41,3 +41,41 @@ export async function attested(
   const frontier = Number((await chainInfoAt(provider).getLatestAttestedHeightAndHash(chainKey)).height);
   return { ok: height <= frontier, frontier };
 }
+
+/// Block until the chain reaches `target`, saying so in a way the destination can read.
+///
+/// There were five copies of this, in three variants that had already drifted: one forgot to clear
+/// its progress line and left it in the output, one used `console.log` and a ten-second poll so it
+/// printed a line per attempt, the rest updated in place every five seconds. The visible symptom
+/// was captured logs that were either one enormous line or a hundred near-identical ones.
+///
+/// A carriage return is right for a terminal and wrong for a pipe, and this is run both ways —
+/// by hand, and by CI. So it updates in place when stdout is a TTY, and otherwise prints only when
+/// there is something new to say: once on starting to wait, then at a slow interval, then nothing.
+export async function waitForBlock(
+  provider: Provider,
+  target: number,
+  opts: { label?: string; pollMs?: number; quietMs?: number } = {},
+): Promise<void> {
+  const { label = 'block', pollMs = 5000, quietMs = 60_000 } = opts;
+  const tty = process.stdout.isTTY === true;
+  let announced = false;
+  let lastPrinted = 0;
+
+  for (;;) {
+    const now = await provider.getBlockNumber();
+    if (now >= target) {
+      if (tty && announced) process.stdout.write('\r'.padEnd(72) + '\r');
+      return;
+    }
+    if (tty) {
+      process.stdout.write(`\r  waiting for ${label} ${target}, at ${now}   `);
+      announced = true;
+    } else if (!announced || Date.now() - lastPrinted >= quietMs) {
+      console.log(`  waiting for ${label} ${target}, at ${now} (${target - now} to go)`);
+      announced = true;
+      lastPrinted = Date.now();
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+}

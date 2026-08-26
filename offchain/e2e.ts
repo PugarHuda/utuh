@@ -1,20 +1,11 @@
 import { formatEther, parseEther } from 'ethers';
 import 'dotenv/config';
-import {
-  CC3_RPC,
-  CC3_CHAIN_ID,
-  CHAIN_KEY,
-  USDC,
-  TRANSFER_SIG,
-  source,
-  requirePrivateKey,
-} from './config';
+import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, USDC, TRANSFER_SIG, source, requirePrivateKey } from './config';
 import { readDeployments, registryAt, signer } from './lib/contracts';
-import { chainInfoAt } from './lib/chain';
+import { chainInfoAt, waitForBlock } from './lib/chain';
 import { scopeFor, scanScope, eventKey, Metric } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, findOmission, refuteClaim } from './lib/claims';
-
 
 /// Left unset, the demo picks whichever mainnet address moved the most USDC inside the window,
 /// so a short range still yields enough in-scope events to hide one among.
@@ -75,14 +66,18 @@ async function main() {
   console.log(`  members ${await registry.memberCount(honest.claimId)}  aggregate ${honestClaim.aggregate}`);
 
   const stillMissing = await findOmission(registry, honest.claimId, events);
-  console.log(`  watcher swept it: ${stillMissing === null ? 'nothing omitted — no refutation exists' : 'FOUND A GAP'}`);
+  console.log(
+    `  watcher swept it: ${stillMissing === null ? 'nothing omitted — no refutation exists' : 'FOUND A GAP'}`,
+  );
   if (stillMissing !== null) throw new Error('honest claim should be complete');
 
   // ------------------------------------------------------------------
   console.log('\n=== 2. a dishonest claim ===');
   const hidden = events.at(-1);
   if (!hidden) throw new Error('no event to hide — the sweep came back empty');
-  console.log(`  hiding block ${hidden.blockNumber} tx#${hidden.txIndex} log#${hidden.logIndexInTx} (value ${hidden.value})`);
+  console.log(
+    `  hiding block ${hidden.blockNumber} tx#${hidden.txIndex} log#${hidden.logIndexInTx} (value ${hidden.value})`,
+  );
 
   const liar = await buildClaim(registry, prover, scope, fromBlock, toBlock, events, {
     bond: BOND,
@@ -91,7 +86,9 @@ async function main() {
     log: (m) => console.log(m),
   });
   const liarClaim = await registry.claim(liar.claimId);
-  console.log(`  members ${await registry.memberCount(liar.claimId)}  aggregate ${liarClaim.aggregate}  (understated)`);
+  console.log(
+    `  members ${await registry.memberCount(liar.claimId)}  aggregate ${liarClaim.aggregate}  (understated)`,
+  );
 
   console.log('\n  watcher sweeps the same range...');
   const omission = await findOmission(registry, liar.claimId, events);
@@ -113,7 +110,7 @@ async function main() {
   console.log('\n=== 3. finalizing the honest claim ===');
   const until = Number(await registry.challengeUntil(honest.claimId));
   console.log(`  window closes at Creditcoin block ${until}`);
-  await waitForBlock(wallet, until + 1);
+  await waitForBlock(wallet.provider!, until + 1, { label: 'block' });
 
   await (await registry.finalize(honest.claimId)).wait();
   const finalized = await registry.claim(honest.claimId);
@@ -137,7 +134,9 @@ async function main() {
   // who front-runs their own refutation from a second address; only the burned half is guaranteed.
   const enforceable = await registry.enforceableLoss(honest.claimId);
   console.log(`  bond ${formatEther(finalized.bondPosted)} CTC, but enforceableLoss ${formatEther(enforceable)} CTC`);
-  console.log(`  usable at exposure ${formatEther(enforceable)} CTC: ${await registry.isUsable(honest.claimId, enforceable)}`);
+  console.log(
+    `  usable at exposure ${formatEther(enforceable)} CTC: ${await registry.isUsable(honest.claimId, enforceable)}`,
+  );
   console.log(`  usable at one wei more than that: ${await registry.isUsable(honest.claimId, enforceable + 1n)}`);
 
   console.log('\nDone. Presence proven by Attestcoin; absence held up by a bond nobody could take.');
@@ -159,15 +158,6 @@ async function busiestSender(eth: any, fromBlock: number, toBlock: number): Prom
 
 function statusName(s: bigint | number): string {
   return ['None', 'Open', 'Sealed', 'Finalized', 'Refuted'][Number(s)] ?? String(s);
-}
-
-async function waitForBlock(wallet: any, target: number): Promise<void> {
-  for (;;) {
-    const now = await wallet.provider.getBlockNumber();
-    if (now >= target) return;
-    process.stdout.write(`\r  waiting for block ${target}, at ${now}   `);
-    await new Promise((r) => setTimeout(r, 5000));
-  }
 }
 
 main()

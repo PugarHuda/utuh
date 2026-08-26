@@ -20,7 +20,7 @@ export function artifact(file: string, name: string): Artifact {
 /// EvmV1Decoder exposes `public` library functions, so it is a deployed library reached by
 /// delegatecall rather than inlined code. Its address has to be patched into the consumer's
 /// bytecode at the offsets the compiler recorded.
-export function link(art: Artifact, libraries: Record<string, string>): string {
+function link(art: Artifact, libraries: Record<string, string>): string {
   let hex = art.bytecode.object;
   const refs = art.bytecode.linkReferences ?? {};
   for (const [, byName] of Object.entries(refs)) {

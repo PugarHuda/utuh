@@ -42,11 +42,7 @@ export async function scopeFor(credit: Contract, which: SpecName, subject: strin
   return toScope(await credit.expectedScope(spec, subject));
 }
 
-/// One of the configured adverse-event classes, by index.
-export async function cleanScopeFor(credit: Contract, index: number, subject: string): Promise<Scope> {
-  const spec = plainSpec(await credit.cleanSpecAt(index));
-  return toScope(await credit.expectedScope(spec, subject));
-}
+
 
 /// Are these the same scope?
 ///

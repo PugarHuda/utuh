@@ -1,15 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { AbiCoder, ZeroAddress } from 'ethers';
+import { AbiCoder } from 'ethers';
 import 'dotenv/config';
-import {
-  CHAIN_KEY,
-  USDC,
-  AAVE_V3_POOL,
-  TRANSFER_SIG,
-  AAVE_REPAY_SIG,
-  AAVE_LIQUIDATION_SIG,
-} from './config';
 import { artifact, readDeployments } from './lib/contracts';
+import { MIN_CHALLENGE_WINDOW, creditConstructorArgs } from './lib/policy';
 
 /// Publish the source of every deployed contract to the block explorer.
 ///
@@ -26,12 +19,6 @@ const EXPLORER = process.env.EXPLORER_URL ?? 'https://creditcoin-testnet.blocksc
 const SEPOLIA_EXPLORER = process.env.SEPOLIA_EXPLORER_URL ?? 'https://eth-sepolia.blockscout.com/api';
 const DECODER_PATH = 'node_modules/@gluwa/usc-contracts/contracts/decoding/EvmV1Decoder.sol:EvmV1Decoder';
 
-const Metric = { COUNT: 0, DATA_WORD: 1 } as const;
-
-/// No `shell: true`. Node deprecated passing arguments through a shell (DEP0190) precisely because
-/// they are concatenated rather than escaped, and constructor arguments are the sort of long
-/// attacker-influenced string that should never be pasted into a command line. `forge` resolves
-/// without one on every platform this runs on.
 function forge(args: string[]): void {
   execFileSync('forge', args, { stdio: 'inherit' });
 }
@@ -54,56 +41,14 @@ async function waitUntilIndexed(explorerApi: string, address: string): Promise<v
   console.log(`  the explorer still does not see ${address} as a contract — trying anyway`);
 }
 
-function creditConstructorArgs(registry: string): string {
-  // Rebuilt exactly as deploy.ts passes them. If those defaults are overridden by environment
-  // when deploying, the same overrides have to be present here or the encoding will not match.
-  const volumeSpec = {
-    chainKey: CHAIN_KEY.mainnet,
-    emitter: AAVE_V3_POOL,
-    eventSig: AAVE_REPAY_SIG,
-    subjectTopic: 2,
-    counterpartyTopic: 1,
-    counterparty: USDC,
-    metric: Metric.DATA_WORD,
-    metricArg: 0,
-  };
-  const cleanSpec = {
-    chainKey: CHAIN_KEY.mainnet,
-    emitter: AAVE_V3_POOL,
-    eventSig: AAVE_LIQUIDATION_SIG,
-    subjectTopic: 3,
-    counterpartyTopic: 0,
-    counterparty: ZeroAddress,
-    metric: Metric.COUNT,
-    metricArg: 0,
-  };
-  const repaySpec = {
-    chainKey: CHAIN_KEY.mainnet,
-    emitter: USDC,
-    eventSig: TRANSFER_SIG,
-    subjectTopic: 1,
-    counterpartyTopic: 2,
-    counterparty: process.env.LENDER_MAINNET ?? '0x28C6c06298d514Db089934071355E5743bf21d60',
-    metric: Metric.DATA_WORD,
-    metricArg: 0,
-  };
-  const policy = {
-    volumeUnitInCtc: BigInt(process.env.VOLUME_UNIT_IN_CTC ?? '15000000000000'),
-    minUnderwritingWindow: Number(process.env.MIN_CHALLENGE_WINDOW ?? 25),
-    minHistoryBlocks: Number(process.env.MIN_HISTORY_BLOCKS ?? 216_000),
-    maxStalenessBlocks: Number(process.env.MAX_STALENESS_BLOCKS ?? 50_400),
-    repaymentBps: Number(process.env.REPAYMENT_BPS ?? 10_500),
-    repayWindowBlocks: Number(process.env.REPAY_WINDOW_BLOCKS ?? 5_760),
-  };
-
+/// Encode UtuhCredit's constructor arguments the way deploy.ts passed them.
+///
+/// The specs and the policy come from lib/policy.ts, which deploy.ts reads too. They used to be
+/// thirty-three duplicated lines here whose only job was to stay byte-identical to that file, and
+/// Blockscout rejects a verification whose constructor arguments differ by one byte.
+function encodeCreditArgs(registry: string): string {
   const ctor = artifact('UtuhCredit.sol', 'UtuhCredit').abi.find((f: any) => f.type === 'constructor');
-  return AbiCoder.defaultAbiCoder().encode(ctor.inputs as any, [
-    registry,
-    policy,
-    volumeSpec,
-    [cleanSpec],
-    repaySpec,
-  ]);
+  return AbiCoder.defaultAbiCoder().encode(ctor.inputs as any, creditConstructorArgs(registry));
 }
 
 /// Prefer what the deployment recorded over what this environment would guess.
@@ -155,7 +100,7 @@ async function main(): Promise<void> {
     '--constructor-args',
     argsFor(
       d.registryArgs,
-      () => AbiCoder.defaultAbiCoder().encode(['uint64'], [Number(process.env.MIN_CHALLENGE_WINDOW ?? 25)]),
+      () => AbiCoder.defaultAbiCoder().encode(['uint64'], [MIN_CHALLENGE_WINDOW]),
       'registry arguments',
     ),
     '--libraries',
@@ -171,7 +116,7 @@ async function main(): Promise<void> {
     '--verifier-url',
     EXPLORER,
     '--constructor-args',
-    argsFor(d.creditArgs, () => creditConstructorArgs(d.registry!), 'credit arguments'),
+    argsFor(d.creditArgs, () => encodeCreditArgs(d.registry!), 'credit arguments'),
     '--libraries',
     `${DECODER_PATH}:${d.decoder}`,
     ...common,

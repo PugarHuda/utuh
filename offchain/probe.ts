@@ -73,7 +73,13 @@ async function main() {
     const blocks = new Set(heights).size;
     const txCount = new Set(batch.map((e) => e.txHash)).size;
 
-    const ok = await bp.verifyBatch(ck, heights, proofs.map((p) => p.encodedTransaction), merkleProofs, continuity);
+    const ok = await bp.verifyBatch(
+      ck,
+      heights,
+      proofs.map((p) => p.encodedTransaction),
+      merkleProofs,
+      continuity,
+    );
     console.log(
       `\nbatch ${i + 1}: ${proofs.length} queries across ${txCount} tx and ${blocks} block(s), ` +
         `${continuity.roots.length} shared continuity roots -> verify=${ok}`,

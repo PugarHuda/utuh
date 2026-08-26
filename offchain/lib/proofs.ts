@@ -26,15 +26,15 @@ export interface ProvenBatch {
 /// Attestcoin's batch endpoint shares one continuity proof across a batch, but only within these
 /// bounds. Both come from the SDK's own limits and are the reason claims are built incrementally
 /// rather than in one shot.
-export const MAX_BATCH_SIZE = 10;
+const MAX_BATCH_SIZE = 10;
 
 /// How long to wait for the attestation frontier to reach a block, in milliseconds.
 ///
 /// Attestation runs about seventy blocks behind the source-chain head, so a claim that ends near
 /// the tip has a real wait in front of it. Fifteen minutes is the hosted builder's own default and
 /// is generous enough for both source chains.
-export const WAIT_ATTESTED_MS = Number(process.env.WAIT_ATTESTED_MS ?? 900_000);
-export const MAX_BATCH_RANGE = 1000;
+const WAIT_ATTESTED_MS = Number(process.env.WAIT_ATTESTED_MS ?? 900_000);
+const MAX_BATCH_RANGE = 1000;
 
 /// Split events into batches the Block Prover will actually accept.
 ///

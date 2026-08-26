@@ -62,10 +62,7 @@ export const source = (chainKey: number) => {
 /// detect it. Set MAINNET_RPCS / SEPOLIA_RPCS to comma-separated URLs to widen it.
 const DEFAULT_RPCS: Record<ChainKey, string[]> = {
   [CHAIN_KEY.mainnet]: [SOURCE_RPC[CHAIN_KEY.mainnet], 'https://rpc.mevblocker.io'],
-  [CHAIN_KEY.sepolia]: [
-    SOURCE_RPC[CHAIN_KEY.sepolia],
-    'https://sepolia.gateway.tenderly.co',
-  ],
+  [CHAIN_KEY.sepolia]: [SOURCE_RPC[CHAIN_KEY.sepolia], 'https://sepolia.gateway.tenderly.co'],
 };
 
 const list = (v?: string) =>

@@ -6,6 +6,7 @@ import type { Scope } from './lib/scope';
 import { scopeFor, plainSpec, sameScope } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { buildClaim, sweepForClaim } from './lib/claims';
+import { waitForBlock } from './lib/chain';
 
 /// Resume a line from wherever `npm run full` stopped.
 ///
@@ -54,7 +55,7 @@ async function main() {
 
   if (Number(claim.status) === 2) {
     const until = Number(await registryRead.challengeUntil(claimId));
-    await waitForBlock(cc3, until + 1);
+    await waitForBlock(cc3, until + 1, { label: 'CC3 block' });
     await (await registryAsBorrower.finalize(claimId)).wait();
     console.log(`  finalized: ${statusName((await registryRead.claim(claimId)).status)}`);
   }
@@ -120,18 +121,6 @@ async function buildRepayClaim(registry: any, registryAsBorrower: any, credit: a
     log: (m) => console.log('   ' + m),
   });
   return built.claimId;
-}
-
-async function waitForBlock(provider: JsonRpcProvider, target: number): Promise<void> {
-  for (;;) {
-    const now = await provider.getBlockNumber();
-    if (now >= target) {
-      process.stdout.write('\r');
-      return;
-    }
-    process.stdout.write(`\r  waiting for CC3 block ${target}, at ${now}   `);
-    await new Promise((r) => setTimeout(r, 5000));
-  }
 }
 
 function statusName(s: bigint | number): string {

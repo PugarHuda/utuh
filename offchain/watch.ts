@@ -103,7 +103,6 @@ async function main() {
       continue;
     }
 
-
     for (const claimId of queue) {
       tally.seen++;
       let verdict: Verdict;

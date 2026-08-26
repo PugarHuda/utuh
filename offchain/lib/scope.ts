@@ -285,7 +285,7 @@ export function answersTheQuestion(scope: Scope, log: any, fromBlock: number, to
 }
 
 /// A `0x`-prefixed hex string of whole bytes, or nothing.
-export function isHexData(data: unknown): data is string {
+function isHexData(data: unknown): data is string {
   return typeof data === 'string' && /^0x([0-9a-fA-F]{2})*$/.test(data);
 }
 

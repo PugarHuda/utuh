@@ -34,9 +34,12 @@
     "provers": "tsx offchain/provers.ts",
     "slither": "slither .",
     "fmt": "forge fmt",
-    "check": "forge fmt --check && forge lint src/ && forge test && tsc --noEmit -p tsconfig.json && slither .",
+    "check": "forge fmt --check && forge lint src/ && forge test && prettier --check \"offchain/**/*.ts\" && tsc --noEmit -p tsconfig.json && slither .",
     "gas": "tsx offchain/gas.ts",
-    "lint": "forge lint src/"
+    "lint": "forge lint src/",
+    "format": "prettier --write \"offchain/**/*.ts\"",
+    "format:check": "prettier --check \"offchain/**/*.ts\"",
+    "deadcode": "knip"
   },
   "dependencies": {
     "@gluwa/usc-contracts": "^0.1.2",
@@ -46,6 +49,8 @@
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "knip": "^6.32.2",
+    "prettier": "^3.9.6",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
   }

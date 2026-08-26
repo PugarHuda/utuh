@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "offchain/*.ts"
+  ],
+  "project": [
+    "offchain/**/*.ts"
+  ],
+  "ignoreBinaries": [
+    "forge",
+    "slither"
+  ],
+  "ignoreDependencies": [
+    "@gluwa/usc-contracts"
+  ],
+  "ignoreExportsUsedInFile": true
+}

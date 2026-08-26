@@ -84,8 +84,16 @@ jobs:
       - name: build artifacts
         run: forge build
 
+      - name: formatting
+        run: npx prettier --check "offchain/**/*.ts"
+
       - name: typecheck
         run: npx tsc --noEmit -p tsconfig.json
+
+      # Unused files, exports and dependencies. @gluwa/usc-contracts is ignored because it is
+      # imported from Solidity, which a TypeScript analyser cannot see.
+      - name: dead code
+        run: npx knip
 
   analysis:
     name: static analysis

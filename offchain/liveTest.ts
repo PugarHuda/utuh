@@ -18,6 +18,7 @@ import { sweepForClaim } from './lib/claims';
 import { answersTheQuestion, valueOf, type Scope } from './lib/scope';
 import { Prover, isAbsence } from './lib/proofs';
 import { calldataGas, modelledGas, isChainRejection, isTransportFailure } from './lib/gasLimit';
+import { waitForBlock } from './lib/chain';
 
 /// The half of the registry that unit tests cannot reach.
 ///
@@ -189,7 +190,10 @@ async function main() {
       threw = true;
     }
     check('the same payload without its 0x is refused, not misread', threw);
-    check('a COUNT scope does not read the payload at all', valueOf({ ...dataScope, metric: 0 } as Scope, '0x') === 1n);
+    check(
+      'a COUNT scope does not read the payload at all',
+      valueOf({ ...dataScope, metric: 0 } as Scope, '0x') === 1n,
+    );
     let short = false;
     try {
       valueOf({ ...dataScope, metricArg: 9 } as Scope, three);
@@ -219,9 +223,21 @@ async function main() {
       // ethers hands a struct back named or positional depending on the ABI, and a node may
       // checksum an address the previous one returned lowercase. Neither is a different scope.
       ['the same scope, positionally', sameScope(mine, [...mine]), true],
-      ['the same scope, emitter lowercased', sameScope(mine, { ...toPlain(mine), emitter: String(mine.emitter).toLowerCase() }), true],
-      ['the same scope, eventSig uppercased', sameScope(mine, { ...toPlain(mine), eventSig: String(mine.eventSig).toUpperCase().replace('0X', '0x') }), true],
-      ['one topic changed', sameScope(mine, { ...toPlain(mine), topics: ['0x' + '22'.repeat(32), mine.topics[1], mine.topics[2]] }), false],
+      [
+        'the same scope, emitter lowercased',
+        sameScope(mine, { ...toPlain(mine), emitter: String(mine.emitter).toLowerCase() }),
+        true,
+      ],
+      [
+        'the same scope, eventSig uppercased',
+        sameScope(mine, { ...toPlain(mine), eventSig: String(mine.eventSig).toUpperCase().replace('0X', '0x') }),
+        true,
+      ],
+      [
+        'one topic changed',
+        sameScope(mine, { ...toPlain(mine), topics: ['0x' + '22'.repeat(32), mine.topics[1], mine.topics[2]] }),
+        false,
+      ],
       ['a different metric', sameScope(mine, { ...toPlain(mine), metric: Number(mine.metric) === 0 ? 1 : 0 }), false],
     ];
     for (const [name, got, want] of cases) {
@@ -244,7 +260,11 @@ async function main() {
   console.log('telling a rejection apart from a failure to ask');
   {
     const rejection = { code: 'CALL_EXCEPTION', revert: { name: 'EventOutOfScope' } };
-    const encoded = { code: 'CALL_EXCEPTION', revert: null, data: registry.interface.encodeErrorResult('NotClaimant') };
+    const encoded = {
+      code: 'CALL_EXCEPTION',
+      revert: null,
+      data: registry.interface.encodeErrorResult('NotClaimant'),
+    };
     const cases: [string, any, boolean][] = [
       ['a decoded revert', rejection, true],
       ['revert data this ABI can parse', encoded, true],
@@ -342,9 +362,24 @@ async function main() {
       ['hosted refused', 'hosted', 'Failed to fetch proof: Error: connect ECONNREFUSED 127.0.0.1:1', false],
       ['hosted 503', 'hosted', 'Failed to fetch proof: AxiosError: Request failed with status code 503', false],
       ['local absent', 'local', `Failed to generate merkle proof: Transaction ${hash} not found`, true],
-      ['local sibling missing', 'local', `Failed to generate merkle proof: Transaction ${hash} not found in block 25834280`, false],
-      ['local block missing', 'local', `Failed to generate merkle proof: Block 25834280 not found for transaction ${hash}`, false],
-      ['local pending', 'local', `Failed to generate merkle proof: Transaction ${hash} is pending and not yet included in a block`, false],
+      [
+        'local sibling missing',
+        'local',
+        `Failed to generate merkle proof: Transaction ${hash} not found in block 25834280`,
+        false,
+      ],
+      [
+        'local block missing',
+        'local',
+        `Failed to generate merkle proof: Block 25834280 not found for transaction ${hash}`,
+        false,
+      ],
+      [
+        'local pending',
+        'local',
+        `Failed to generate merkle proof: Transaction ${hash} is pending and not yet included in a block`,
+        false,
+      ],
       ['local unreachable', 'local', 'getBlockWithReceipts: fetch failed', false],
     ];
     for (const [name, prover, message, want] of cases) {
@@ -401,9 +436,7 @@ async function main() {
   await expectRevert('a stranger appends', 'NotClaimant', () =>
     asStranger.appendBatch.staticCall(claimId, proofs, continuity),
   );
-  await expectRevert('an empty batch', 'EmptyBatch', () =>
-    registry.appendBatch.staticCall(claimId, [], continuity),
-  );
+  await expectRevert('an empty batch', 'EmptyBatch', () => registry.appendBatch.staticCall(claimId, [], continuity));
   await expectRevert('a member outside the claimed range', 'BlockOutOfRange', () =>
     registry.appendBatch.staticCall(claimId, [{ ...proofs[0], blockHeight: fromBlock - 1 }], continuity),
   );
@@ -476,7 +509,7 @@ async function main() {
   await (await registry.seal(honestId)).wait();
   console.log(`  claim ${honestId} sealed complete with ${whole.proofs.length} member(s)`);
 
-  await waitForBlock(owner.provider!, Number(await registry.challengeUntil(honestId)) + 1);
+  await waitForBlock(owner.provider!, Number(await registry.challengeUntil(honestId)) + 1, { label: 'CC3 block' });
 
   await expectOk('finalize after the window', async () => {
     await (await registry.finalize(honestId)).wait();
@@ -548,19 +581,9 @@ async function main() {
     console.log('  FAIL  an unreachable prover was treated as a definite answer');
   }
 
-
   // ------------------------------------------------------------------
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exitCode = 1;
-}
-
-async function waitForBlock(provider: any, target: number): Promise<void> {
-  for (;;) {
-    const now = await provider.getBlockNumber();
-    if (now >= target) return;
-    console.log(`  waiting for CC3 block ${target}, at ${now}`);
-    await new Promise((r) => setTimeout(r, 10000));
-  }
 }
 
 function readClaimId(registry: any, receipt: any): bigint {
@@ -580,12 +603,7 @@ function readClaimId(registry: any, receipt: any): bigint {
 /// Only the emitter, the signature and the spec's pinned counterparty are filtered on — the
 /// subject slot is left open, which is the one query a real claim never makes. Nothing here is
 /// asserted; it only picks the fixture the rest of the suite then treats as untrusted input.
-async function busiestSubject(
-  eth: JsonRpcProvider,
-  spec: any,
-  fromBlock: number,
-  toBlock: number,
-): Promise<string> {
+async function busiestSubject(eth: JsonRpcProvider, spec: any, fromBlock: number, toBlock: number): Promise<string> {
   const subjectSlot = Number(spec.subjectTopic);
   const counterpartySlot = Number(spec.counterpartyTopic);
   const topics: (string | null)[] = [spec.eventSig, null, null, null];
@@ -600,9 +618,7 @@ async function busiestSubject(
   }
   const best = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
   if (!best || best[1] < 2) {
-    throw new Error(
-      `no address has 2+ events in ${fromBlock}..${toBlock} — widen LIVE_SPAN or set LIVE_SUBJECT`,
-    );
+    throw new Error(`no address has 2+ events in ${fromBlock}..${toBlock} — widen LIVE_SPAN or set LIVE_SUBJECT`);
   }
   return getAddress('0x' + best[0].slice(26));
 }

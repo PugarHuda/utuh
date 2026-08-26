@@ -1,12 +1,6 @@
 import { JsonRpcProvider } from 'ethers';
 import 'dotenv/config';
-import {
-  CC3_RPC,
-  CC3_CHAIN_ID,
-  CHAIN_KEY,
-  PROVER_URL,
-  sources,
-} from './config';
+import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, PROVER_URL, sources } from './config';
 import { Prover } from './lib/proofs';
 import { chainInfoAt } from './lib/chain';
 

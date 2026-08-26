@@ -171,7 +171,9 @@ async function main() {
       }
       if (row.scoped !== null && row.scoped < best) {
         problems++;
-        console.log(`  WRONG ${host(row.url)}  ${row.narrow} unfiltered, but only ${row.scoped} of ${best} with a topic pinned`);
+        console.log(
+          `  WRONG ${host(row.url)}  ${row.narrow} unfiltered, but only ${row.scoped} of ${best} with a topic pinned`,
+        );
         console.log('        It answers, and what it answers is untrue. Redundancy that includes');
         console.log('        this endpoint is smaller than it looks.');
         continue;
@@ -216,7 +218,9 @@ async function main() {
           console.log(`  ...   ${host(url)}  eth_getBlockReceipts returned nothing usable`);
         }
       } catch (e: any) {
-        console.log(`  ...   ${host(url)}  no eth_getBlockReceipts (${(e.shortMessage ?? e.message ?? '').slice(0, 40)})`);
+        console.log(
+          `  ...   ${host(url)}  no eth_getBlockReceipts (${(e.shortMessage ?? e.message ?? '').slice(0, 40)})`,
+        );
       }
       provider.destroy();
     }
@@ -239,7 +243,8 @@ async function main() {
         // The recorded constructor arguments are a kilobyte of hex. Printing them in full buries
         // the findings this whole report exists to surface.
         // Above an address's 42 characters, so addresses still print in full.
-        const shown = typeof v === 'string' && v.length > 44 ? `${v.slice(0, 12)}…${v.slice(-6)} (${v.length} chars)` : v;
+        const shown =
+          typeof v === 'string' && v.length > 44 ? `${v.slice(0, 12)}…${v.slice(-6)} (${v.length} chars)` : v;
         console.log(`  ...  ${k.padEnd(12)} ${shown}`);
         continue;
       }

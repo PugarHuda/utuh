@@ -12,7 +12,7 @@ import {
   requirePrivateKey,
 } from './config';
 import { readDeployments, registryAt, creditAt, signer } from './lib/contracts';
-import { chainInfoAt } from './lib/chain';
+import { chainInfoAt, waitForBlock } from './lib/chain';
 import { scopeFor, scanScope, Metric, type Scope } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, refuteClaim } from './lib/claims';
@@ -80,9 +80,7 @@ async function main() {
     return getAddress('0x' + topic.slice(26));
   };
 
-  const liquidatedUsers = new Set(
-    allLiquidations.map((l) => addressAt(l, 3)).filter((a): a is string => a !== null),
-  );
+  const liquidatedUsers = new Set(allLiquidations.map((l) => addressAt(l, 3)).filter((a): a is string => a !== null));
   const repayCount = new Map<string, number>();
   for (const l of allRepays) {
     const user = addressAt(l, 2);
@@ -91,11 +89,11 @@ async function main() {
   }
 
   const goodBorrower =
-    (process.env.BORROWER && getAddress(process.env.BORROWER)) ||
-    pickBorrower(repayCount, liquidatedUsers);
+    (process.env.BORROWER && getAddress(process.env.BORROWER)) || pickBorrower(repayCount, liquidatedUsers);
   if (!goodBorrower) throw new Error('no borrower with 2-6 repayments and no liquidation in this window');
 
-  const liquidatedBorrower = [...liquidatedUsers].find((u) => (repayCount.get(u) ?? 0) > 0) ?? [...liquidatedUsers][0];
+  const liquidatedBorrower =
+    [...liquidatedUsers].find((u) => (repayCount.get(u) ?? 0) > 0) ?? [...liquidatedUsers][0];
 
   console.log(`\n  clean borrower     ${goodBorrower}  (${repayCount.get(goodBorrower)} repayments, 0 liquidations)`);
   console.log(`  liquidated address ${liquidatedBorrower}  (appears in LiquidationCall)`);
@@ -132,11 +130,19 @@ async function main() {
   console.log(`  clean:  ${cleanEvents.length} liquidations — the claim asserts this set is empty`);
 
   console.log('\n  building volume claim (each member verified by the Block Prover)...');
-  const volumeClaim = await buildClaim(registry, prover, volumeScope(goodBorrower), fromBlock, toBlock, volumeEvents, {
-    bond: BOND,
-    challengeWindow: minWindow,
-    log: (m) => console.log('   ' + m),
-  });
+  const volumeClaim = await buildClaim(
+    registry,
+    prover,
+    volumeScope(goodBorrower),
+    fromBlock,
+    toBlock,
+    volumeEvents,
+    {
+      bond: BOND,
+      challengeWindow: minWindow,
+      log: (m) => console.log('   ' + m),
+    },
+  );
 
   console.log('  building clean claim (empty set, bonded)...');
   const cleanClaim = await buildClaim(registry, prover, cleanScope(goodBorrower), fromBlock, toBlock, cleanEvents, {
@@ -147,25 +153,15 @@ async function main() {
 
   // ------------------------------------------------------------------
   console.log('\n=== 2. a false clean claim, and what happens to it ===');
-  const realLiquidations = await scanScope(
-    eth,
-    cleanScope(liquidatedBorrower),
-    fromBlock,
-    toBlock,
-    HISTORY_BLOCKS,
-  );
+  const realLiquidations = await scanScope(eth, cleanScope(liquidatedBorrower), fromBlock, toBlock, HISTORY_BLOCKS);
   console.log(`  ${liquidatedBorrower} was liquidated ${realLiquidations.length} time(s) in this window`);
   console.log('  filing a clean claim anyway — asserting the set is empty');
 
-  const falseClaim = await buildClaim(
-    registry,
-    prover,
-    cleanScope(liquidatedBorrower),
-    fromBlock,
-    toBlock,
-    [],
-    { bond: BOND, challengeWindow: minWindow, log: (m) => console.log('   ' + m) },
-  );
+  const falseClaim = await buildClaim(registry, prover, cleanScope(liquidatedBorrower), fromBlock, toBlock, [], {
+    bond: BOND,
+    challengeWindow: minWindow,
+    log: (m) => console.log('   ' + m),
+  });
 
   const before = await wallet.provider!.getBalance(wallet.address);
   const { reward, key } = await refuteClaim(registry, prover, falseClaim.claimId, realLiquidations[0]);
@@ -180,7 +176,7 @@ async function main() {
   // ------------------------------------------------------------------
   console.log('\n=== 3. finalizing the honest claims ===');
   const until = Number(await registry.challengeUntil(cleanClaim.claimId));
-  await waitForBlock(wallet, until + 1);
+  await waitForBlock(wallet.provider!, until + 1, { label: 'CC3 block' });
   for (const [name, id] of [
     ['volume', volumeClaim.claimId],
     ['clean', cleanClaim.claimId],
@@ -209,9 +205,7 @@ async function main() {
   const cleanBond: bigint = (await registry.claim(cleanClaim.claimId)).bondPosted;
 
   console.log(`  proven volume ${formatUnits(volumeAggregate, 6)} USDC at ${rate} wei/unit`);
-  console.log(
-    `  ${Number(ltvBps) / 100}% of that = ${formatEther((volumeAggregate * rate * ltvBps) / 10_000n)} CTC`,
-  );
+  console.log(`  ${Number(ltvBps) / 100}% of that = ${formatEther((volumeAggregate * rate * ltvBps) / 10_000n)} CTC`);
   console.log(
     `  bond cap    = ${formatEther(enforceable * multiple)} CTC  ` +
       `(${multiple}x enforceableLoss ${formatEther(enforceable)}, not the ${formatEther(cleanBond)} CTC bond)`,
@@ -248,18 +242,6 @@ function pickBorrower(repayCount: Map<string, number>, liquidated: Set<string>):
 
 function statusName(s: bigint | number): string {
   return ['None', 'Open', 'Sealed', 'Finalized', 'Refuted'][Number(s)] ?? String(s);
-}
-
-async function waitForBlock(wallet: any, target: number): Promise<void> {
-  for (;;) {
-    const now = await wallet.provider.getBlockNumber();
-    if (now >= target) {
-      process.stdout.write('\r');
-      return;
-    }
-    process.stdout.write(`\r  waiting for CC3 block ${target}, at ${now}   `);
-    await new Promise((r) => setTimeout(r, 5000));
-  }
 }
 
 main()

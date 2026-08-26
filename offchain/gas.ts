@@ -37,7 +37,7 @@ interface Row {
 
 async function main() {
   const args = process.argv.slice(2);
-  const registries = args.length ? args : [readDeployments().registry].filter(Boolean) as string[];
+  const registries = args.length ? args : ([readDeployments().registry].filter(Boolean) as string[]);
   if (!registries.length) throw new Error('no registry — pass one, or run npm run deploy');
 
   const cc3 = new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
@@ -213,16 +213,18 @@ function solve3(rows: Row[]): [number, number, number] | null {
 
 function nameToMethod(event: string): string {
   return (
-    {
-      ClaimOpened: 'open',
-      ClaimSealed: 'seal',
-      ClaimFinalized: 'finalize',
-      ClaimRefuted: 'refute',
-      ClaimAbandoned: 'abandon',
-      Withdrawn: 'withdraw',
-      EventAppended: 'appendBatch',
-    } as Record<string, string>
-  )[event] ?? event;
+    (
+      {
+        ClaimOpened: 'open',
+        ClaimSealed: 'seal',
+        ClaimFinalized: 'finalize',
+        ClaimRefuted: 'refute',
+        ClaimAbandoned: 'abandon',
+        Withdrawn: 'withdraw',
+        EventAppended: 'appendBatch',
+      } as Record<string, string>
+    )[event] ?? event
+  );
 }
 
 main().catch((e) => {

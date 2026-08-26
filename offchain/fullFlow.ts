@@ -19,6 +19,7 @@ import { sendChecked } from './lib/gasLimit';
 import { scopeFor, scanScope, Metric, type Scope } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, refuteClaim, sweepForClaim } from './lib/claims';
+import { waitForBlock } from './lib/chain';
 
 /// The whole product, end to end, with two parties who actually act.
 ///
@@ -310,7 +311,7 @@ async function main() {
 
   // ------------------------------------------------------------------
   console.log('\n=== 6. finalizing ===');
-  await waitForBlock(cc3, Number(await registry.challengeUntil(cleanClaim.claimId)) + 1);
+  await waitForBlock(cc3, Number(await registry.challengeUntil(cleanClaim.claimId)) + 1, { label: 'CC3 block' });
   for (const [name, cid] of [
     ['volume', volumeClaim.claimId],
     ['clean', cleanClaim.claimId],
@@ -337,7 +338,9 @@ async function main() {
   console.log(`  lender funded ${formatEther(line.limit)} CTC`);
 
   const owed: bigint = await credit.repaymentFor(line.limit);
-  console.log(`  drawing ${formatEther(line.limit)} CTC obliges ${formatEther(owed)} ETH back, at the lender's terms`);
+  console.log(
+    `  drawing ${formatEther(line.limit)} CTC obliges ${formatEther(owed)} ETH back, at the lender's terms`,
+  );
 
   const before = await cc3.getBalance(borrower.address);
   await (await creditAsBorrower.draw(lineId, line.limit)).wait();
@@ -350,7 +353,9 @@ async function main() {
   console.log('\n=== 8. repayment, proven back ===');
   const repayTx = await asBorrower.settle(lender.address, { value: line.repayRequired });
   const repayReceipt = await repayTx.wait();
-  console.log(`  paid ${formatEther(line.repayRequired)} ETH to the lender, Sepolia block ${repayReceipt.blockNumber}`);
+  console.log(
+    `  paid ${formatEther(line.repayRequired)} ETH to the lender, Sepolia block ${repayReceipt.blockNumber}`,
+  );
 
   const repayFrom = Number(line.repayFrom);
   const repayTo = repayReceipt.blockNumber + 2;
@@ -364,10 +369,12 @@ async function main() {
     log: (m) => console.log('   ' + m),
   });
 
-  await waitForBlock(cc3, Number(await registry.challengeUntil(repayClaim.claimId)) + 1);
+  await waitForBlock(cc3, Number(await registry.challengeUntil(repayClaim.claimId)) + 1, { label: 'CC3 block' });
   await (await registryAsBorrower.finalize(repayClaim.claimId)).wait();
   const rc = await registry.claim(repayClaim.claimId);
-  console.log(`  repay claim ${repayClaim.claimId}: ${statusName(rc.status)}  aggregate ${formatEther(rc.aggregate)} ETH`);
+  console.log(
+    `  repay claim ${repayClaim.claimId}: ${statusName(rc.status)}  aggregate ${formatEther(rc.aggregate)} ETH`,
+  );
 
   await (await creditAsBorrower.settle(lineId, repayClaim.claimId)).wait();
   line = await credit.line(lineId);
@@ -400,18 +407,6 @@ async function topUpCtc(from: Wallet, to: string, target: bigint): Promise<void>
   const tx = await from.sendTransaction({ to, value: target - have });
   await tx.wait();
   console.log(`  sent ${formatEther(target - have)} CTC to ${to}`);
-}
-
-async function waitForBlock(provider: JsonRpcProvider, target: number): Promise<void> {
-  for (;;) {
-    const now = await provider.getBlockNumber();
-    if (now >= target) {
-      process.stdout.write('\r');
-      return;
-    }
-    process.stdout.write(`\r  waiting for CC3 block ${target}, at ${now}   `);
-    await new Promise((r) => setTimeout(r, 5000));
-  }
 }
 
 function statusName(s: bigint | number): string {
