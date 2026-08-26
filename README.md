@@ -531,8 +531,14 @@ setting to underwrite against.
 Two details decide whether the fallback is real or decorative. It needs whole blocks *with
 receipts*, and `eth_getBlockReceipts` is a method plenty of public endpoints decline — so the
 local builder reads through every configured endpoint rather than one, and `npm run doctor` asks
-each of them for that method by name. On Sepolia the answer today is that `publicnode` does not
-serve it and Tenderly does, which is a thing worth knowing before a bond is on the line.
+each of them for that method by name, every run.
+
+Every run, because the answer moves. An earlier version of this paragraph said publicnode does not
+serve it on Sepolia and Tenderly does, which is what `doctor` reported that morning; the same
+command a few hours later had both serving it. That is the same endpoint whose deep `eth_getLogs`
+returns 0 where Tenderly returns 22, intermittently. The useful fact is not which endpoint is good
+— it is that an endpoint's capabilities are not a property you can write down once, which is
+precisely why `doctor` asks rather than remembering.
 
 The second is that absence now arrives in two dialects. A claimant may drop a candidate only when
 the chain definitely does not have it, and the hosted service says that with a `404` while the
@@ -668,6 +674,16 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 | `get_attestation_genesis_height` | lower bound on claimable ranges |
 | `PrecompileChainInfoProvider` | waiting for attestation without asking a hosted service |
 | `RawProofBuilder` over source RPCs | proofs built locally when the hosted Proof Builder is down |
+| `PrecompileBlockProver` | `npm run probe` — the `view` twin of `verifyAndEmit`, over `eth_call` |
+| `utils.gas.MAX_GAS_CAP` / `gasAsPercentageOfMax` | `npm run gas` — what a call costs against a 75M block |
+
+Two SDK modules are deliberately unused, which is worth saying so it does not read as an oversight.
+`queryBuilder` builds ABIs for the oracle's query subsystem, and Utuh does not go through it — it
+calls the Block Prover precompile directly, which is a layer below. `utils.decoder` decodes EVM v1
+transactions off-chain; Utuh decodes them *on*-chain through `EvmV1Decoder`, because an off-chain
+decode is a claim about bytes and an on-chain one is a check of them. The one thing an off-chain
+decode would have bought — knowing a call will succeed before paying for it — is bought more
+cheaply by the `eth_call` in `sendRegistryCall`.
 | Ethereum mainnet as source chain (`chainKey 3`) | all demos |
 
 ## Known limits
