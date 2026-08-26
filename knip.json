@@ -8,7 +8,8 @@
   ],
   "ignoreBinaries": [
     "forge",
-    "slither"
+    "slither",
+    "halmos"
   ],
   "ignoreDependencies": [
     "@gluwa/usc-contracts"

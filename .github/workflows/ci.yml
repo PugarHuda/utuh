@@ -108,14 +108,20 @@ jobs:
           fail-on: medium
           slither-args: --filter-paths "node_modules|lib" --exclude-dependencies
 
-      # Symbolic proof of the ordering key. `forge test` fuzzes it with 256 draws a run; halmos
-      # explores the whole input space and either returns a counterexample or proves there is
-      # none. Refutation is a binary search over strictly ascending keys, so a collision or an
-      # order that disagreed with chronology would let a claim appear to contain an event it does
-      # not hold — the one thing `contains` must never say.
-      - uses: actions/setup-python@v5
+  symbolic:
+    # Its own job: crytic/slither-action runs in a container as root and leaves a node_modules
+    # behind that a later `npm ci` in the same job cannot remove (EACCES on node_modules/.bin).
+    #
+    # `forge test` fuzzes the ordering key with 256 draws a run; halmos explores the whole input
+    # space and either returns a counterexample or proves there is none. Refutation is a binary
+    # search over strictly ascending keys, so a collision — or an order that disagreed with
+    # chronology — would let a claim appear to contain an event it does not hold.
+    name: symbolic proofs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
         with:
-          python-version: '3.12'
+          submodules: recursive
 
       - uses: foundry-rs/foundry-toolchain@v1
         with:
@@ -126,9 +132,13 @@ jobs:
           node-version: 22
           cache: npm
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - run: npm ci
 
-      - name: symbolic proofs
+      - name: prove the ordering key
         run: |
           pip install halmos
           halmos --contract EventScopeKeySymbolic
