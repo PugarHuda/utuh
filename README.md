@@ -316,7 +316,9 @@ to.
 
 ```
 .github/workflows/ci.yml    fmt, build, tests, gas snapshot, typecheck, slither — and a daily
-                            eth_call against the live precompile, which needs no key
+                            job that proves real mainnet events against the live precompile,
+                            checks the hosted and local provers still agree, and reports what the
+                            registry has cost. All three need no key and write nothing.
 slither.config.json         which detectors are off, with the reasons next to the code
 .gas-snapshot               committed, and CI fails if gas moves more than 5%
 src/

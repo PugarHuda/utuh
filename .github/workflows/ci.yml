@@ -118,3 +118,12 @@ jobs:
       - run: forge build
       - name: verify real mainnet events against 0x0FD2
         run: npm run probe
+
+      # Also keyless: both read the chain and neither writes to it. `provers` is the one that
+      # would catch the hosted Proof Builder and the local path drifting apart, which is the whole
+      # basis for claiming refutation does not depend on a hosted service.
+      - name: hosted and local proofs still agree
+        run: npm run provers
+
+      - name: what the registry has cost
+        run: npm run gas

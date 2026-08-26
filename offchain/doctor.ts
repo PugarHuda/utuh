@@ -12,7 +12,7 @@ import {
   withDeadline,
   requirePrivateKey,
 } from './config';
-import { signer, readDeployments } from './lib/contracts';
+import { signer, readDeployments, creditAt } from './lib/contracts';
 import { chainInfoAt } from './lib/chain';
 import { Prover } from './lib/proofs';
 
@@ -244,6 +244,28 @@ async function main() {
       const code = await cc3.getCode(v);
       if (code === '0x') problems++;
       console.log(`  ${code === '0x' ? 'FAIL' : 'ok  '} ${k.padEnd(9)} ${v}`);
+    }
+
+    // A credit contract holds the registry it was deployed against, and nothing keeps that in step
+    // with this file. Redeploy the registry alone — which `npm run deploy` will happily do — and
+    // every script reads the new one while the credit contract still checks claims against the
+    // old, so a perfectly good finalized claim comes back `ClaimNotUsable` and nothing says why.
+    // The contracts cannot drift on their precompiles, which come from a hardcoded library, but
+    // this pointer is a constructor argument and drifts silently.
+    if (d.credit && d.registry) {
+      try {
+        const wired = await creditAt(d.credit, wallet).REGISTRY();
+        const same = wired.toLowerCase() === d.registry.toLowerCase();
+        if (!same) problems++;
+        console.log(`  ${same ? 'ok  ' : 'FAIL'} credit -> registry ${wired}`);
+        if (!same) {
+          console.log('        The credit contract checks claims against a different registry than');
+          console.log('        the one every script here files them with. Redeploy both together.');
+        }
+      } catch (e: any) {
+        problems++;
+        console.log(`  FAIL  credit does not answer REGISTRY(): ${(e.shortMessage ?? e.message ?? '').slice(0, 60)}`);
+      }
     }
   }
 
