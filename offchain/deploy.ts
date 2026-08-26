@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, requirePrivateKey } from './config';
 import { artifact, deploy, signer, writeDeployments, readDeployments } from './lib/contracts';
 import { MIN_CHALLENGE_WINDOW, LENDER_MAINNET, policy, creditConstructorArgs } from './lib/policy';
+import { runScript } from './lib/cli';
 
 async function main() {
   // Deploying overwrites the record every other script reads, and the addresses in the README, the
@@ -81,7 +82,4 @@ To deploy alongside it instead, write elsewhere:
   console.log('\nwrote deployments.json, constructor arguments included');
 }
 
-main().catch((e) => {
-  console.error(e.message);
-  process.exit(1);
-});
+runScript(main);

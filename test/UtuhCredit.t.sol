@@ -347,6 +347,25 @@ contract UtuhCreditTest is Test {
     /// `finishLine.ts` reads a line before it knows whether one exists, so an unknown id has to
     /// answer rather than revert — and it has to answer in a way that is distinguishable from a
     /// real line.
+    /// @notice Pins the numbering that offchain/lib/status.ts assumes.
+    /// @dev Solidity enums reach an ABI as a bare uint8, so the names live only here and something
+    ///      off-chain has to mirror them. Six files each carried their own copy once, and one of
+    ///      them called LineStatus 2 "Repaid" — a status this system does not have — which reached
+    ///      the deck and the submission notes before anyone compared it with the contract.
+    ///      Reordering either enum now breaks this, and this says where to look.
+    function test_theEnumsAreWhatTheOffchainMirrorSays() public pure {
+        assertEq(uint8(UtuhRegistry.Status.None), 0, "Status.None moved");
+        assertEq(uint8(UtuhRegistry.Status.Open), 1, "Status.Open moved");
+        assertEq(uint8(UtuhRegistry.Status.Sealed), 2, "Status.Sealed moved");
+        assertEq(uint8(UtuhRegistry.Status.Finalized), 3, "Status.Finalized moved");
+        assertEq(uint8(UtuhRegistry.Status.Refuted), 4, "Status.Refuted moved");
+
+        assertEq(uint8(UtuhCredit.LineStatus.None), 0, "LineStatus.None moved");
+        assertEq(uint8(UtuhCredit.LineStatus.Active), 1, "LineStatus.Active moved");
+        assertEq(uint8(UtuhCredit.LineStatus.Settled), 2, "LineStatus.Settled moved");
+        assertEq(uint8(UtuhCredit.LineStatus.Defaulted), 3, "LineStatus.Defaulted moved");
+    }
+
     function test_anUnknownLineReadsAsNothingRatherThanReverting() public view {
         UtuhCredit.Line memory l = credit.line(999);
         assertEq(uint8(l.status), uint8(UtuhCredit.LineStatus.None), "an unknown line looked active");

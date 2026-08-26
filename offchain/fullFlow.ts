@@ -20,6 +20,8 @@ import { scopeFor, scanScope, Metric, type Scope } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, refuteClaim, sweepForClaim } from './lib/claims';
 import { waitForBlock } from './lib/chain';
+import { claimStatus, lineStatus } from './lib/status';
+import { runScript } from './lib/cli';
 
 /// The whole product, end to end, with two parties who actually act.
 ///
@@ -318,7 +320,7 @@ async function main() {
   ] as const) {
     await (await registryAsBorrower.finalize(cid)).wait();
     const c = await registry.claim(cid);
-    console.log(`  ${name} claim ${cid}: ${statusName(c.status)}  aggregate ${c.aggregate}`);
+    console.log(`  ${name} claim ${cid}: ${claimStatus(c.status)}  aggregate ${c.aggregate}`);
   }
 
   // Refunds are credited, not sent — finalize is permissionless and pays the claimant, so pushing
@@ -373,12 +375,12 @@ async function main() {
   await (await registryAsBorrower.finalize(repayClaim.claimId)).wait();
   const rc = await registry.claim(repayClaim.claimId);
   console.log(
-    `  repay claim ${repayClaim.claimId}: ${statusName(rc.status)}  aggregate ${formatEther(rc.aggregate)} ETH`,
+    `  repay claim ${repayClaim.claimId}: ${claimStatus(rc.status)}  aggregate ${formatEther(rc.aggregate)} ETH`,
   );
 
   await (await creditAsBorrower.settle(lineId, repayClaim.claimId)).wait();
   line = await credit.line(lineId);
-  console.log(`  line ${lineId}: ${lineStatusName(line.status)}`);
+  console.log(`  line ${lineId}: ${lineStatus(line.status)}`);
   if (Number(line.status) !== 2) throw new Error('line should be Settled');
 
   console.log('\nThe loop is closed. Credit issued on Creditcoin against proven Sepolia history,');
@@ -409,17 +411,4 @@ async function topUpCtc(from: Wallet, to: string, target: bigint): Promise<void>
   console.log(`  sent ${formatEther(target - have)} CTC to ${to}`);
 }
 
-function statusName(s: bigint | number): string {
-  return ['None', 'Open', 'Sealed', 'Finalized', 'Refuted'][Number(s)] ?? String(s);
-}
-
-function lineStatusName(s: bigint | number): string {
-  return ['None', 'Active', 'Settled', 'Defaulted'][Number(s)] ?? String(s);
-}
-
-main()
-  .then(() => process.exit(0))
-  .catch((e) => {
-    console.error('\n' + (e.stack ?? e.message));
-    process.exit(1);
-  });
+runScript(main);

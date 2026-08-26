@@ -3,6 +3,7 @@ import { AbiCoder } from 'ethers';
 import 'dotenv/config';
 import { artifact, readDeployments } from './lib/contracts';
 import { MIN_CHALLENGE_WINDOW, creditConstructorArgs } from './lib/policy';
+import { runScript } from './lib/cli';
 
 /// Publish the source of every deployed contract to the block explorer.
 ///
@@ -166,7 +167,4 @@ async function main(): Promise<void> {
   console.log('\nhttps://creditcoin-testnet.blockscout.com/address/' + d.registry);
 }
 
-main().catch((e) => {
-  console.error('\n' + (e.message ?? e));
-  process.exit(1);
-});
+runScript(main);

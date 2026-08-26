@@ -6,6 +6,7 @@ import { eventKey, type Scope } from './lib/scope';
 import { scopeFor } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { buildClaim, sweepForClaim } from './lib/claims';
+import { runScript } from './lib/cli';
 
 /// File a claim that is deliberately incomplete, so a watcher has something real to catch.
 ///
@@ -75,9 +76,4 @@ async function main() {
   console.log('nobody has been told. run: npm run watch');
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((e) => {
-    console.error('\n' + (e.stack ?? e.message));
-    process.exit(1);
-  });
+runScript(main);

@@ -7,6 +7,8 @@ import { scopeFor, plainSpec, sameScope } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { buildClaim, sweepForClaim } from './lib/claims';
 import { waitForBlock } from './lib/chain';
+import { claimStatus, lineStatus } from './lib/status';
+import { runScript } from './lib/cli';
 
 /// Resume a line from wherever `npm run full` stopped.
 ///
@@ -36,7 +38,7 @@ async function main() {
   const creditAsBorrower = creditAt(creditAddress, borrower);
 
   let line = await creditRead.line(lineId);
-  console.log(`line ${lineId}: ${lineStatusName(line.status)}  drawn ${formatEther(line.drawn)} CTC`);
+  console.log(`line ${lineId}: ${lineStatus(line.status)}  drawn ${formatEther(line.drawn)} CTC`);
   if (Number(line.status) !== 1) {
     console.log('nothing to do.');
     return;
@@ -51,18 +53,18 @@ async function main() {
   }
 
   const claim = await registryRead.claim(claimId);
-  console.log(`\nrepay claim ${claimId}: ${statusName(claim.status)}  aggregate ${formatEther(claim.aggregate)}`);
+  console.log(`\nrepay claim ${claimId}: ${claimStatus(claim.status)}  aggregate ${formatEther(claim.aggregate)}`);
 
   if (Number(claim.status) === 2) {
     const until = Number(await registryRead.challengeUntil(claimId));
     await waitForBlock(cc3, until + 1, { label: 'CC3 block' });
     await (await registryAsBorrower.finalize(claimId)).wait();
-    console.log(`  finalized: ${statusName((await registryRead.claim(claimId)).status)}`);
+    console.log(`  finalized: ${claimStatus((await registryRead.claim(claimId)).status)}`);
   }
 
   await (await creditAsBorrower.settle(lineId, claimId)).wait();
   line = await creditRead.line(lineId);
-  console.log(`\nline ${lineId}: ${lineStatusName(line.status)}`);
+  console.log(`\nline ${lineId}: ${lineStatus(line.status)}`);
   console.log(`settledThrough(${line.subject}) = ${await creditRead.settledThrough(line.subject)}`);
   if (Number(line.status) !== 2) throw new Error('line should be Settled');
 
@@ -123,17 +125,4 @@ async function buildRepayClaim(registry: any, registryAsBorrower: any, credit: a
   return built.claimId;
 }
 
-function statusName(s: bigint | number): string {
-  return ['None', 'Open', 'Sealed', 'Finalized', 'Refuted'][Number(s)] ?? String(s);
-}
-
-function lineStatusName(s: bigint | number): string {
-  return ['None', 'Active', 'Settled', 'Defaulted'][Number(s)] ?? String(s);
-}
-
-main()
-  .then(() => process.exit(0))
-  .catch((e) => {
-    console.error('\n' + (e.stack ?? e.message));
-    process.exit(1);
-  });
+runScript(main);

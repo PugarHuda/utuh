@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, requirePrivateKey } from './config';
 import { signer, readDeployments } from './lib/contracts';
 import { chainInfoAt } from './lib/chain';
+import { runScript } from './lib/cli';
 
 async function main() {
   const wallet = signer(CC3_RPC, CC3_CHAIN_ID, requirePrivateKey());
@@ -36,7 +37,4 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e.message);
-  process.exit(1);
-});
+runScript(main);

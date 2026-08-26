@@ -4,6 +4,7 @@ import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, source, requirePrivateKey } from './c
 import { readDeployments, creditAt, signer } from './lib/contracts';
 import { Prover } from './lib/proofs';
 import { sendChecked } from './lib/gasLimit';
+import { runScript } from './lib/cli';
 
 /// Which source chain to send the commitment on.
 ///
@@ -124,9 +125,4 @@ async function main() {
   console.log('bound. openLine will now accept this subject from this account.');
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((e) => {
-    console.error('\n' + (e.message ?? e));
-    process.exit(1);
-  });
+runScript(main);

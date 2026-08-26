@@ -3,6 +3,7 @@ import { utils } from '@gluwa/usc-sdk';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID } from './config';
 import { artifact, readDeployments } from './lib/contracts';
+import { runScript } from './lib/cli';
 
 /// What the registry actually costs, measured rather than reasoned about.
 ///
@@ -227,7 +228,4 @@ function nameToMethod(event: string): string {
   );
 }
 
-main().catch((e) => {
-  console.error('\n' + (e.stack ?? e.message));
-  process.exit(1);
-});
+runScript(main);

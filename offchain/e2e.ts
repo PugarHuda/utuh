@@ -6,6 +6,8 @@ import { chainInfoAt, waitForBlock } from './lib/chain';
 import { scopeFor, scanScope, eventKey, Metric } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, findOmission, refuteClaim } from './lib/claims';
+import { claimStatus } from './lib/status';
+import { runScript } from './lib/cli';
 
 /// Left unset, the demo picks whichever mainnet address moved the most USDC inside the window,
 /// so a short range still yields enough in-scope events to hide one among.
@@ -101,7 +103,7 @@ async function main() {
 
   const refuted = await registry.claim(liar.claimId);
   console.log(`  refuted with one proof. key ${key}`);
-  console.log(`  status ${statusName(refuted.status)}  reward ${formatEther(reward)} CTC`);
+  console.log(`  status ${claimStatus(refuted.status)}  reward ${formatEther(reward)} CTC`);
   console.log(`  burned so far ${formatEther(await registry.burned())} CTC`);
   console.log(`  refuter balance ${formatEther(before)} -> ${formatEther(after)} CTC`);
   if (Number(refuted.status) !== 4) throw new Error('claim should be Refuted');
@@ -114,7 +116,7 @@ async function main() {
 
   await (await registry.finalize(honest.claimId)).wait();
   const finalized = await registry.claim(honest.claimId);
-  console.log(`  status ${statusName(finalized.status)}  aggregate ${finalized.aggregate}`);
+  console.log(`  status ${claimStatus(finalized.status)}  aggregate ${finalized.aggregate}`);
 
   // finalize credits, it does not send. A claimant that cannot receive ether would otherwise have
   // left its own claim stuck in Sealed forever, and anything waiting on that claim with it — so
@@ -156,13 +158,4 @@ async function busiestSender(eth: any, fromBlock: number, toBlock: number): Prom
   return ranked[0][0];
 }
 
-function statusName(s: bigint | number): string {
-  return ['None', 'Open', 'Sealed', 'Finalized', 'Refuted'][Number(s)] ?? String(s);
-}
-
-main()
-  .then(() => process.exit(0))
-  .catch((e) => {
-    console.error('\n' + (e.stack ?? e.message));
-    process.exit(1);
-  });
+runScript(main);

@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, PROVER_URL, sources } from './config';
 import { Prover } from './lib/proofs';
 import { chainInfoAt } from './lib/chain';
+import { runScript } from './lib/cli';
 
 /// Prove the same transaction both ways, and time it.
 ///
@@ -83,7 +84,4 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error('\n' + (e.stack ?? e.message));
-  process.exit(1);
-});
+runScript(main);

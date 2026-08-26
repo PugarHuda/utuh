@@ -14,6 +14,7 @@ import {
 import { signer, readDeployments, creditAt } from './lib/contracts';
 import { chainInfoAt } from './lib/chain';
 import { Prover } from './lib/proofs';
+import { runScript } from './lib/cli';
 
 /// Check that the things this depends on are actually there.
 ///
@@ -292,7 +293,4 @@ function host(url: string): string {
   }
 }
 
-main().catch((e) => {
-  console.error('\n' + (e.stack ?? e.message));
-  process.exit(1);
-});
+runScript(main);

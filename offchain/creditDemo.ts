@@ -16,6 +16,8 @@ import { chainInfoAt, waitForBlock } from './lib/chain';
 import { scopeFor, scanScope, Metric, type Scope } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, refuteClaim } from './lib/claims';
+import { claimStatus } from './lib/status';
+import { runScript } from './lib/cli';
 
 const BOND = parseEther(process.env.BOND ?? '2');
 
@@ -169,7 +171,7 @@ async function main() {
   const refuted = await registry.claim(falseClaim.claimId);
 
   console.log(`  refuted with one real liquidation proof. key ${key}`);
-  console.log(`  status ${statusName(refuted.status)}  reward ${formatEther(reward)} CTC`);
+  console.log(`  status ${claimStatus(refuted.status)}  reward ${formatEther(reward)} CTC`);
   console.log(`  watcher balance ${formatEther(before)} -> ${formatEther(after)} CTC`);
   if (Number(refuted.status) !== 4) throw new Error('false clean claim should be Refuted');
 
@@ -185,7 +187,7 @@ async function main() {
     await tx.wait();
     const c = await registry.claim(id);
     const shown = name === 'volume' ? `${formatUnits(c.aggregate, 6)} USDC` : `${c.aggregate}`;
-    console.log(`  ${name} claim ${id}: ${statusName(c.status)}  aggregate ${shown}`);
+    console.log(`  ${name} claim ${id}: ${claimStatus(c.status)}  aggregate ${shown}`);
   }
 
   // ------------------------------------------------------------------
@@ -240,13 +242,4 @@ function pickBorrower(repayCount: Map<string, number>, liquidated: Set<string>):
   return null;
 }
 
-function statusName(s: bigint | number): string {
-  return ['None', 'Open', 'Sealed', 'Finalized', 'Refuted'][Number(s)] ?? String(s);
-}
-
-main()
-  .then(() => process.exit(0))
-  .catch((e) => {
-    console.error('\n' + (e.stack ?? e.message));
-    process.exit(1);
-  });
+runScript(main);

@@ -8,6 +8,8 @@ import { toScope } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { refuteClaim } from './lib/claims';
 import { isTransportFailure } from './lib/gasLimit';
+import { claimStatus } from './lib/status';
+import { runScript } from './lib/cli';
 
 /// The watcher.
 ///
@@ -196,7 +198,7 @@ async function byDeadline(registry: Contract, ids: string[]): Promise<bigint[]> 
 async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: boolean): Promise<Verdict> {
   const claim = await registry.claim(claimId);
   if (Number(claim.status) !== 2) {
-    console.log(`\nclaim ${claimId}: ${statusName(claim.status)} — nothing to check`);
+    console.log(`\nclaim ${claimId}: ${claimStatus(claim.status)} — nothing to check`);
     return Number(claim.status) === 4 ? 'refuted' : 'settled';
   }
 
@@ -285,10 +287,6 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
   return 'refuted';
 }
 
-function statusName(s: bigint | number): string {
-  return ['None', 'Open', 'Sealed', 'Finalized', 'Refuted'][Number(s)] ?? String(s);
-}
-
 // A watcher is the one thing here that has to stay up, and Node ends a process on an unhandled
 // rejection. Anything that escapes the loop's own guards would otherwise take the watcher down
 // between claims, silently. Logged and survived: the claim it belonged to is still in `pending`.
@@ -296,7 +294,4 @@ process.on('unhandledRejection', (reason) => {
   console.error(`${NL}unhandled rejection, still watching — ${(reason as any)?.message ?? reason}`);
 });
 
-main().catch((e) => {
-  console.error('\n' + (e.stack ?? e.message));
-  process.exit(1);
-});
+runScript(main);

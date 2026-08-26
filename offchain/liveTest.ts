@@ -19,6 +19,8 @@ import { answersTheQuestion, valueOf, type Scope } from './lib/scope';
 import { Prover, isAbsence } from './lib/proofs';
 import { calldataGas, modelledGas, isChainRejection, isTransportFailure } from './lib/gasLimit';
 import { waitForBlock } from './lib/chain';
+import { claimStatus } from './lib/status';
+import { runScript } from './lib/cli';
 
 /// The half of the registry that unit tests cannot reach.
 ///
@@ -51,6 +53,18 @@ async function expectRevert(name: string, error: string, fn: () => Promise<unkno
       failed++;
       console.log(`  FAIL  ${name} — expected ${error}, got ${got}`);
     }
+  }
+}
+
+/// Report a plain boolean check. `expectOk` and `expectRevert` cover calls; this covers the pure
+/// decisions — was this hex accepted, did that classifier answer the way it must.
+function check(name: string, ok: boolean): void {
+  if (ok) {
+    passed++;
+    console.log(`  ok    ${name}`);
+  } else {
+    failed++;
+    console.log(`  FAIL  ${name}`);
   }
 }
 
@@ -173,15 +187,6 @@ async function main() {
     const three = '0x' + word(0xaan) + word(1234567n) + word(0n);
     // valueOf reads nothing from a scope but its metric and which word to take.
     const dataScope = { ...scope, metric: 1, metricArg: 1 } as Scope;
-    const check = (name: string, ok: boolean) => {
-      if (ok) {
-        passed++;
-        console.log(`  ok    ${name}`);
-      } else {
-        failed++;
-        console.log(`  FAIL  ${name}`);
-      }
-    };
     check('the second word of three reads as itself', valueOf(dataScope, three) === 1234567n);
     let threw = false;
     try {
@@ -321,15 +326,6 @@ async function main() {
   console.log('');
   console.log('the fallback gas model');
   {
-    const check = (name: string, ok: boolean) => {
-      if (ok) {
-        passed++;
-        console.log(`  ok    ${name}`);
-      } else {
-        failed++;
-        console.log(`  FAIL  ${name}`);
-      }
-    };
     check('empty calldata costs nothing', calldataGas('0x') === 0n);
     check('a zero byte costs 4', calldataGas('0x00') === 4n);
     check('a non-zero byte costs 16', calldataGas('0xff') === 16n);
@@ -482,7 +478,7 @@ async function main() {
   const burnedAfter: bigint = await registry.burned();
 
   const claim = await registry.claim(claimId);
-  console.log(`  claim ${claimId} is now ${statusName(claim.status)}`);
+  console.log(`  claim ${claimId} is now ${claimStatus(claim.status)}`);
   console.log(`  burned ${formatEther(burnedBefore)} -> ${formatEther(burnedAfter)} CTC`);
   console.log(`  enforceableLoss ${formatEther(await registry.enforceableLoss(claimId))} CTC`);
 
@@ -551,7 +547,7 @@ async function main() {
   );
 
   const settled = await registry.claim(honestId);
-  console.log(`  claim ${honestId}: ${statusName(settled.status)}`);
+  console.log(`  claim ${honestId}: ${claimStatus(settled.status)}`);
 
   // Sweeping the union of independent endpoints means a claimant can be handed a candidate no
   // chain has. Appending everything swept would then abort the claim, so one misbehaving endpoint
@@ -644,11 +640,4 @@ function toPlain(s: any) {
   };
 }
 
-function statusName(s: bigint | number): string {
-  return ['None', 'Open', 'Sealed', 'Finalized', 'Refuted'][Number(s)] ?? String(s);
-}
-
-main().catch((e) => {
-  console.error('\n' + (e.stack ?? e.message));
-  process.exit(1);
-});
+runScript(main);

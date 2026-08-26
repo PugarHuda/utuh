@@ -4,6 +4,7 @@ import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, USDC, TRANSFER_SIG, source } from './
 import { chainInfoAt, blockProverAt } from './lib/chain';
 import { scopeFor, scanScope, Metric } from './lib/scope';
 import { Prover, planBatches } from './lib/proofs';
+import { runScript } from './lib/cli';
 
 const BLOCK_PROVER = '0x0000000000000000000000000000000000000FD2';
 
@@ -98,7 +99,4 @@ async function main() {
   console.log('No CTC spent — every call above was an eth_call against the live CC3 testnet.');
 }
 
-main().catch((e) => {
-  console.error('ERR', e.shortMessage ?? e.message);
-  process.exit(1);
-});
+runScript(main);
