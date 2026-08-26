@@ -276,9 +276,9 @@ The code is readable and the functions are callable.
 
 | Contract | Address |
 |---|---|
-| `UtuhRegistry` | [`0xA7b5aCf4E4654596471b364C22E1bb31509B6896`](https://creditcoin-testnet.blockscout.com/address/0xA7b5aCf4E4654596471b364C22E1bb31509B6896?tab=contract) |
-| `UtuhCredit` | [`0x6227da68BF8B098825deA05CBC2767C1EfFAa50F`](https://creditcoin-testnet.blockscout.com/address/0x6227da68BF8B098825deA05CBC2767C1EfFAa50F?tab=contract) |
-| `EvmV1Decoder` | [`0x693A9f495b450622611Dfb6E391Dbd4d8910c49E`](https://creditcoin-testnet.blockscout.com/address/0x693A9f495b450622611Dfb6E391Dbd4d8910c49E?tab=contract) |
+| `UtuhRegistry` | [`0x8FA0BD5301D998Be873E31453E53d114929a5Fac`](https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac?tab=contract) |
+| `UtuhCredit` | [`0x94fC0579701c62a271EC128D904d2A2F8796c86c`](https://creditcoin-testnet.blockscout.com/address/0x94fC0579701c62a271EC128D904d2A2F8796c86c?tab=contract) |
+| `EvmV1Decoder` | [`0x5cab00c032D7d4436f312Dd51ef59Dc5b860df3F`](https://creditcoin-testnet.blockscout.com/address/0x5cab00c032D7d4436f312Dd51ef59Dc5b860df3F?tab=contract) |
 
 `npm run credit` runs against these, on Ethereum mainnet data.
 
@@ -286,10 +286,10 @@ The code is readable and the functions are callable.
 
 | Contract | Address |
 |---|---|
-| `UtuhRegistry` | [`0x769b5e6b038C69F139b00102E8361F722b22f9dA`](https://creditcoin-testnet.blockscout.com/address/0x769b5e6b038C69F139b00102E8361F722b22f9dA?tab=contract) |
-| `UtuhCredit` | [`0xE9ADF49adc442fc93385FDEc8D9F9B0722518Dc3`](https://creditcoin-testnet.blockscout.com/address/0xE9ADF49adc442fc93385FDEc8D9F9B0722518Dc3?tab=contract) |
-| `EvmV1Decoder` | [`0x2884e2A39fBad20524759F3B9416E71b68D11490`](https://creditcoin-testnet.blockscout.com/address/0x2884e2A39fBad20524759F3B9416E71b68D11490?tab=contract) |
-| `SettlementLedger` (Sepolia) | [`0xc52a4810606f0846bF508C625198B57A35E8489d`](https://eth-sepolia.blockscout.com/address/0xc52a4810606f0846bF508C625198B57A35E8489d?tab=contract) |
+| `UtuhRegistry` | [`0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac`](https://creditcoin-testnet.blockscout.com/address/0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac?tab=contract) |
+| `UtuhCredit` | [`0x17299EC7B75B1B148C4d61B6503bde73B70aaddd`](https://creditcoin-testnet.blockscout.com/address/0x17299EC7B75B1B148C4d61B6503bde73B70aaddd?tab=contract) |
+| `EvmV1Decoder` | [`0xEEF4094b3848eD261478310a949c4A1E42d28571`](https://creditcoin-testnet.blockscout.com/address/0xEEF4094b3848eD261478310a949c4A1E42d28571?tab=contract) |
+| `SettlementLedger` (Sepolia) | [`0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D`](https://eth-sepolia.blockscout.com/address/0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D?tab=contract) |
 
 Everything below is readable at those addresses rather than taken on trust — `claim(id)`,
 `memberCount(id)`, `enforceableLoss(id)`, `line(1)` and `settledThrough(subject)` all answer to
@@ -719,6 +719,11 @@ cheaply by the `eth_call` in `sendRegistryCall`.
   messaging.
 - Completeness here is economic, not cryptographic. A bond makes lying expensive; it does not make
   it impossible.
+- **An endpoint conflict is reported, not resolved.** When two endpoints describe the same event
+  position differently, the sweep says so and keeps the first answer. Nothing here can tell which
+  of them is lying — only that one of them is. It does not affect what a claim records, because
+  that comes from bytes the Block Prover verified, but it is a signal an operator has to act on
+  themselves.
 - **The independent proof path is slow enough to matter.** Building a proof locally costs tens of
   seconds against roughly one for the hosted service, because it re-fetches every sibling
   transaction in the block and every block in the continuity range. It is correct, and it is what

@@ -1,4 +1,5 @@
 import {
+  AbiCoder,
   Contract,
   ContractFactory,
   JsonRpcProvider,
@@ -129,25 +130,23 @@ async function main() {
     metricArg: 0,
   };
 
-  const creditContract = await deploy(
-    lender,
-    artifact('UtuhCredit.sol', 'UtuhCredit'),
-    [
-      registryAddress,
-      {
-        volumeUnitInCtc: RATE,
-        minUnderwritingWindow: CHALLENGE_WINDOW,
-        minHistoryBlocks: 5,
-        maxStalenessBlocks: 5000,
-        repaymentBps: 10_500, // 105% — principal plus the lender's spread
-        repayWindowBlocks: 400,
-      },
-      volumeSpec,
-      [cleanSpec],
-      volumeSpec, // repayment is the same relationship, later in time
-    ],
-    { EvmV1Decoder: decoderAddress },
-  );
+  const creditArgs = [
+    registryAddress,
+    {
+      volumeUnitInCtc: RATE,
+      minUnderwritingWindow: CHALLENGE_WINDOW,
+      minHistoryBlocks: 5,
+      maxStalenessBlocks: 5000,
+      repaymentBps: 10_500, // 105% — principal plus the lender's spread
+      repayWindowBlocks: 400,
+    },
+    volumeSpec,
+    [cleanSpec],
+    volumeSpec, // repayment is the same relationship, later in time
+  ];
+  const creditContract = await deploy(lender, artifact('UtuhCredit.sol', 'UtuhCredit'), creditArgs, {
+    EvmV1Decoder: decoderAddress,
+  });
   const creditAddress = await creditContract.getAddress();
   console.log(`  UtuhRegistry ${registryAddress}`);
   console.log(`  UtuhCredit   ${creditAddress}`);
@@ -169,6 +168,13 @@ async function main() {
         sourceChainKey: SOURCE,
         challengeWindow: CHALLENGE_WINDOW,
         deployer: lender.address,
+        // The same reason deploy.ts records these: verifying this deployment otherwise means
+        // reconstructing the specs by hand from a script, which is how a byte gets away from you.
+        registryArgs: AbiCoder.defaultAbiCoder().encode(['uint64'], [CHALLENGE_WINDOW]),
+        creditArgs: AbiCoder.defaultAbiCoder().encode(
+          artifact('UtuhCredit.sol', 'UtuhCredit').abi.find((f: any) => f.type === 'constructor').inputs as any,
+          creditArgs,
+        ),
       },
       null,
       2,
