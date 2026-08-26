@@ -439,6 +439,7 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `REPAYMENT_BPS` | `10500` | lender policy: what a draw must repay, in basis points |
 | `REPAY_WINDOW_BLOCKS` | `5760` | lender policy: how long the borrower has |
 | `LENDER_MAINNET` | Binance hot wallet | where repayment must land on Ethereum |
+| `RESUME_SCAN` | `200` | how many claims back `npm run finish` looks for one this line already built |
 | `FORCE_MODELLED_GAS` | unset | skip estimation entirely, so the fallback gas model is the one under test |
 | `WAIT_ATTESTED_MS` | `900000` | how long to wait for the attestation frontier to reach a block |
 | `GAS_LOOKBACK` / `GAS_LOG_CHUNK` | `100000` / `2000` | how far back `npm run gas` reads, and its chunk size |
