@@ -16,6 +16,7 @@ import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, source, requirePrivateKey } from './config';
 import { writeFileSync } from 'node:fs';
 import { artifact, deploy, signer, registryAt, creditAt } from './lib/contracts';
+import { sendChecked } from './lib/gasLimit';
 import { scopeFor, scanScope, Metric, type Scope } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, refuteClaim, sweepForClaim } from './lib/claims';
@@ -199,8 +200,31 @@ async function main() {
     logIndexInTx: 0,
     value: 0n,
   });
+  // Through the same checked sender as every other precompile write: eth_call first, then
+  // estimate, then the measured gas model. Being unable to bind is being unable to borrow.
   await (
-    await creditAsBorrower.proveControl(
+    await sendChecked(
+      creditAsBorrower,
+      'proveControl',
+      [
+        {
+          chainKey: SOURCE,
+          blockHeight: bindProof.proof.blockHeight,
+          encodedTransaction: bindProof.proof.encodedTransaction,
+          merkleRoot: bindProof.proof.merkleRoot,
+          siblings: bindProof.proof.siblings,
+        },
+        bindProof.continuity,
+      ],
+      { members: 0, log: (m) => console.log(m) },
+    )
+  ).wait();
+  console.log(`  controllerOf(${borrower.address}) = ${await credit.controllerOf(borrower.address)}`);
+
+  // A binding that can be replayed is not a binding: anyone could put back an account the subject
+  // rotated away from. Checked here rather than asserted in prose.
+  try {
+    await creditAsBorrower.proveControl.staticCall(
       {
         chainKey: SOURCE,
         blockHeight: bindProof.proof.blockHeight,
@@ -209,9 +233,13 @@ async function main() {
         siblings: bindProof.proof.siblings,
       },
       bindProof.continuity,
-    )
-  ).wait();
-  console.log(`  controllerOf(${borrower.address}) = ${await credit.controllerOf(borrower.address)}`);
+    );
+    throw new Error('the same commitment could be applied twice');
+  } catch (e: any) {
+    const named = String(e.revert?.name ?? e.shortMessage ?? e.message);
+    if (!named.includes('ControlProofAlreadyUsed')) throw e;
+    console.log('  replaying that same commitment → ControlProofAlreadyUsed');
+  }
 
   // ------------------------------------------------------------------
   console.log('\n=== 5. claims ===');

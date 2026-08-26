@@ -44,6 +44,9 @@ export async function sweepForClaim(
   );
 
   log(`swept ${sweep.answered}/${sweep.attempted} endpoints: ${sweep.perSource.join('  ')}`);
+  // Counts differing is normal — that is what the union is for. The same event described two
+  // different ways is not, and means one of these endpoints is wrong about something it can see.
+  for (const c of sweep.conflicts) log(`  ENDPOINT CONFLICT: ${c}`);
   if (sweep.answered < minSources) {
     throw new Error(
       `only ${sweep.answered} endpoint(s) answered and ${minSources} were required — ` +

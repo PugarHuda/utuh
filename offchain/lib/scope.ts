@@ -156,6 +156,10 @@ export interface UnionSweep {
   answered: number;
   attempted: number;
   perSource: string[];
+  /// Events two endpoints described differently. The union is about presence — any endpoint
+  /// surfacing an event is enough to include it — but two endpoints reporting the same position
+  /// with different contents is not a union, it is a disagreement, and one of them is wrong.
+  conflicts: string[];
 }
 
 /// Sweep a scope across every endpoint available and union what comes back.
@@ -177,6 +181,7 @@ export async function scanScopeUnion(
 ): Promise<UnionSweep> {
   const byKey = new Map<bigint, ScopedEvent>();
   const perSource: string[] = [];
+  const conflicts: string[] = [];
   let answered = 0;
 
   for (const { url, provider } of endpoints) {
@@ -185,7 +190,21 @@ export async function scanScopeUnion(
       const seen = deadline ? await deadline(work) : await work;
       answered++;
       perSource.push(`${hostOf(url)}=${seen.length}`);
-      for (const e of seen) byKey.set(eventKey(e), e);
+      for (const e of seen) {
+        const key = eventKey(e);
+        const had = byKey.get(key);
+        // Last write used to win, silently. What the chain finally records comes from bytes the
+        // Block Prover verified, so a wrong value here cannot corrupt a claim — but an endpoint
+        // that disagrees with another about an event it can see is broken or hostile, and that is
+        // worth saying out loud rather than resolving by iteration order.
+        if (had && (had.txHash !== e.txHash || had.value !== e.value)) {
+          conflicts.push(
+            `${hostOf(url)} disagrees at block ${e.blockNumber} tx#${e.txIndex} log#${e.logIndexInTx}: ` +
+              `${had.txHash} value ${had.value} vs ${e.txHash} value ${e.value}`,
+          );
+        }
+        if (!had) byKey.set(key, e);
+      }
     } catch {
       perSource.push(`${hostOf(url)}=err`);
     } finally {
@@ -194,7 +213,7 @@ export async function scanScopeUnion(
   }
 
   const events = [...byKey.values()].sort((a, b) => (eventKey(a) < eventKey(b) ? -1 : 1));
-  return { events, answered, attempted: endpoints.length, perSource };
+  return { events, answered, attempted: endpoints.length, perSource, conflicts };
 }
 
 function hostOf(url: string): string {

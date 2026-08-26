@@ -90,6 +90,26 @@ async function main() {
   const bound = await credit.controllerOf(subject);
   console.log(`\ncontrollerOf(${subject}) = ${bound}`);
   if (getAddress(bound) !== account) throw new Error('binding did not take');
+
+  // The proof of this commitment stays valid forever and anyone may submit it. If it could be
+  // applied twice, then after the subject moved their binding to another account anyone could put
+  // the old one back — so the binding would be whichever proof was replayed most recently rather
+  // than whichever the subject meant. Free to check, through eth_call, and load-bearing.
+  const control = {
+    chainKey: SOURCE,
+    blockHeight: proof.blockHeight,
+    encodedTransaction: proof.encodedTransaction,
+    merkleRoot: proof.merkleRoot,
+    siblings: proof.siblings,
+  };
+  try {
+    await credit.proveControl.staticCall(control, continuity);
+    throw new Error('this commitment can be replayed — the binding is not one');
+  } catch (e: any) {
+    const named = String(e.revert?.name ?? e.shortMessage ?? e.message);
+    if (!named.includes('ControlProofAlreadyUsed')) throw e;
+    console.log('  replaying the same commitment → ControlProofAlreadyUsed');
+  }
   console.log('bound. openLine will now accept this subject from this account.');
 }
 

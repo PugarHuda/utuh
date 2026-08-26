@@ -1,0 +1,10 @@
+{
+  "chainId": 102031,
+  "decoder": "0xEEF4094b3848eD261478310a949c4A1E42d28571",
+  "registry": "0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac",
+  "credit": "0x17299EC7B75B1B148C4d61B6503bde73B70aaddd",
+  "ledger": "0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D",
+  "sourceChainKey": 1,
+  "challengeWindow": 20,
+  "deployer": "0x50577827700c0cF60240ABd07f041F09C95d4748"
+}

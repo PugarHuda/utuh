@@ -156,6 +156,7 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
 
   const events = sweep.events;
   console.log(`  swept independently: ${sweep.perSource.join('  ')}`);
+  for (const c of sweep.conflicts) console.log(`  ENDPOINT CONFLICT: ${c}`);
   console.log(`  union: ${events.length} in-scope event(s)`);
 
   const gaps = [];
