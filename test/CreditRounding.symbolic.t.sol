@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {UtuhRegistry} from "../src/UtuhRegistry.sol";
 import {UtuhCredit} from "../src/UtuhCredit.sol";
-import {EventScope} from "../src/lib/EventScope.sol";
+import {CreditFixture} from "./support/CreditFixture.sol";
 
 /// @notice Symbolic proofs of the two roundings that decide who absorbs a fraction.
 ///
@@ -18,7 +18,7 @@ import {EventScope} from "../src/lib/EventScope.sol";
 ///      counterexample found and no counterexample existing:
 ///
 ///        halmos --contract CreditRoundingSymbolic
-contract CreditRoundingSymbolic is Test {
+contract CreditRoundingSymbolic is Test, CreditFixture {
     UtuhCredit internal credit;
 
     /// The multiplier, as a literal.
@@ -29,44 +29,13 @@ contract CreditRoundingSymbolic is Test {
     /// contract agrees, so the assumption cannot go stale without failing here first.
     uint256 constant MULTIPLE = 10;
 
-    address constant AAVE = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
-    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-
     function setUp() public {
         UtuhRegistry registry = new UtuhRegistry(25);
         UtuhCredit.HistorySpec[] memory clean = new UtuhCredit.HistorySpec[](1);
         clean[0] = _spec(3, 0);
-        credit = new UtuhCredit(
-            registry,
-            UtuhCredit.Policy({
-                volumeUnitInCtc: 15_000_000_000_000,
-                minUnderwritingWindow: 25,
-                minHistoryBlocks: 216_000,
-                maxStalenessBlocks: 50_400,
-                repaymentBps: 10_500,
-                repayWindowBlocks: 400
-            }),
-            _spec(2, 0),
-            clean,
-            _spec(1, 2)
-        );
+        credit = new UtuhCredit(registry, _policy(), _spec(2, 0), clean, _spec(1, 2));
         // The literal above is only sound while the contract says the same thing.
         assert(credit.BOND_MULTIPLE() == MULTIPLE);
-    }
-
-    function _spec(uint8 subjectTopic, uint8 counterpartyTopic)
-        internal
-        pure
-        returns (UtuhCredit.HistorySpec memory s)
-    {
-        s.chainKey = 3;
-        s.emitter = AAVE;
-        s.eventSig = keccak256("Repay(address,address,address,uint256,bool)");
-        s.subjectTopic = subjectTopic;
-        s.counterpartyTopic = counterpartyTopic;
-        s.counterparty = counterpartyTopic == 0 ? address(0) : USDC;
-        s.metric = EventScope.Metric.DATA_WORD;
-        s.metricArg = 0;
     }
 
     /// A limit is never backed by less than a BOND_MULTIPLE-th of itself.

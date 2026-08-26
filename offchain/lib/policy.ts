@@ -1,4 +1,5 @@
 import { ZeroAddress } from 'ethers';
+import { Metric } from './scope';
 import {
   CHAIN_KEY,
   USDC,
@@ -16,7 +17,13 @@ import {
 /// differ by one byte, and a copy that drifts produces exactly that, with nothing in the output
 /// saying why. `deploy.ts` records what it actually used in deployments.json and `verify.ts`
 /// prefers that; this module is what they share when there is nothing recorded to prefer.
-export const Metric = { COUNT: 0, DATA_WORD: 1 } as const;
+///
+/// `Metric` comes from ./scope rather than being restated here. It was restated here once, and
+/// the two copies agreed only by luck: this module builds the HistorySpec that goes into the
+/// constructor and is then immutable, while ./scope builds the Scope the watcher sweeps with.
+/// Had they drifted, the deployed contract would have measured one thing and every sweep
+/// looked for another, with no error anywhere — just claims that never match.
+/// `test_theEnumsAreWhatTheOffchainMirrorSays` pins both to the Solidity enum.
 
 export interface HistorySpec {
   chainKey: number;

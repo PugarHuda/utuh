@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {UtuhRegistry} from "../src/UtuhRegistry.sol";
 import {UtuhCredit} from "../src/UtuhCredit.sol";
 import {EventScope} from "../src/lib/EventScope.sol";
+import {CreditFixture} from "./support/CreditFixture.sol";
 
 /// @notice Tests for the guards that decide *whose* history a line may be opened against.
 /// @dev Neither constructor calls a precompile, so both contracts deploy in a plain EVM. Anything
@@ -338,21 +339,15 @@ contract UtuhCreditTest is Test {
         assertEq(registry.enforceableLoss(999), 0);
     }
 
-    // ------------------------------------------------------------------
-    // Settlement watermark
-    // ------------------------------------------------------------------
-
-    /// @notice Marking claims spent stops a claim being reused; it does not stop a payment being
-    ///         reused. Two lines, two claims over overlapping ranges, one transfer inside both.
-    /// `finishLine.ts` reads a line before it knows whether one exists, so an unknown id has to
-    /// answer rather than revert — and it has to answer in a way that is distinguishable from a
-    /// real line.
-    /// @notice Pins the numbering that offchain/lib/status.ts assumes.
+    /// @notice Pins the numbering that offchain/lib/status.ts and offchain/lib/scope.ts assume.
     /// @dev Solidity enums reach an ABI as a bare uint8, so the names live only here and something
-    ///      off-chain has to mirror them. Six files each carried their own copy once, and one of
-    ///      them called LineStatus 2 "Repaid" — a status this system does not have — which reached
-    ///      the deck and the submission notes before anyone compared it with the contract.
-    ///      Reordering either enum now breaks this, and this says where to look.
+    ///      off-chain has to mirror them. Six files each carried their own copy of the statuses
+    ///      once, and one of them called LineStatus 2 "Repaid" — a status this system does not
+    ///      have — which reached the deck and the submission notes before anyone compared it with
+    ///      the contract. `Metric` is here for a sharper reason: it is chosen at deployment and
+    ///      then immutable, and the sweep that has to agree with it is built off-chain, so a
+    ///      disagreement produces no error at all — only claims that never match.
+    ///      Reordering any of the three now breaks this, and this says where to look.
     function test_theEnumsAreWhatTheOffchainMirrorSays() public pure {
         assertEq(uint8(UtuhRegistry.Status.None), 0, "Status.None moved");
         assertEq(uint8(UtuhRegistry.Status.Open), 1, "Status.Open moved");
@@ -364,8 +359,14 @@ contract UtuhCreditTest is Test {
         assertEq(uint8(UtuhCredit.LineStatus.Active), 1, "LineStatus.Active moved");
         assertEq(uint8(UtuhCredit.LineStatus.Settled), 2, "LineStatus.Settled moved");
         assertEq(uint8(UtuhCredit.LineStatus.Defaulted), 3, "LineStatus.Defaulted moved");
+
+        assertEq(uint8(EventScope.Metric.COUNT), 0, "Metric.COUNT moved");
+        assertEq(uint8(EventScope.Metric.DATA_WORD), 1, "Metric.DATA_WORD moved");
     }
 
+    /// @notice `finishLine.ts` reads a line before it knows whether one exists, so an unknown id
+    ///         has to answer rather than revert — and it has to answer in a way that is
+    ///         distinguishable from a real line.
     function test_anUnknownLineReadsAsNothingRatherThanReverting() public view {
         UtuhCredit.Line memory l = credit.line(999);
         assertEq(uint8(l.status), uint8(UtuhCredit.LineStatus.None), "an unknown line looked active");
@@ -375,6 +376,12 @@ contract UtuhCreditTest is Test {
         assertEq(l.drawn, 0);
     }
 
+    // ------------------------------------------------------------------
+    // Settlement watermark
+    // ------------------------------------------------------------------
+
+    /// @notice Marking claims spent stops a claim being reused; it does not stop a payment being
+    ///         reused. Two lines, two claims over overlapping ranges, one transfer inside both.
     function test_settlementWatermarkStartsUnset() public view {
         assertEq(credit.settledThrough(ALICE), 0);
         assertEq(credit.settledThrough(BOB), 0);
@@ -459,46 +466,16 @@ contract ExposedCredit is UtuhCredit {
 ///      happy path. It is worth exercising: read too permissively and a stranger binds an address
 ///      they do not hold, which is the one failure that would make every claim about a borrower's
 ///      history meaningless.
-contract ControlCommitmentTest is Test {
+contract ControlCommitmentTest is Test, CreditFixture {
     ExposedCredit internal credit;
 
-    address constant AAVE = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
-    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address constant ACCOUNT = address(0xC0FFEE);
 
     function setUp() public {
         UtuhRegistry registry = new UtuhRegistry(25);
         UtuhCredit.HistorySpec[] memory clean = new UtuhCredit.HistorySpec[](1);
         clean[0] = _spec(3, 0);
-        credit = new ExposedCredit(
-            registry,
-            UtuhCredit.Policy({
-                volumeUnitInCtc: 15_000_000_000_000,
-                minUnderwritingWindow: 25,
-                minHistoryBlocks: 216_000,
-                maxStalenessBlocks: 50_400,
-                repaymentBps: 10_500,
-                repayWindowBlocks: 400
-            }),
-            _spec(2, 0),
-            clean,
-            _spec(1, 2)
-        );
-    }
-
-    function _spec(uint8 subjectTopic, uint8 counterpartyTopic)
-        internal
-        pure
-        returns (UtuhCredit.HistorySpec memory s)
-    {
-        s.chainKey = 3;
-        s.emitter = AAVE;
-        s.eventSig = keccak256("Repay(address,address,address,uint256,bool)");
-        s.subjectTopic = subjectTopic;
-        s.counterpartyTopic = counterpartyTopic;
-        s.counterparty = counterpartyTopic == 0 ? address(0) : USDC;
-        s.metric = EventScope.Metric.DATA_WORD;
-        s.metricArg = 0;
+        credit = new ExposedCredit(registry, _policy(), _spec(2, 0), clean, _spec(1, 2));
     }
 
     /// The builder and the reader have to agree, or a borrower who follows the instructions
@@ -628,40 +605,12 @@ contract LenderThatCannotReceive {
 ///      lender that is a contract without a payable fallback could fund this and never recover the
 ///      money: fund accepts, withdraw reverts, forever. withdrawTo is the way out, and these are
 ///      the tests that say so.
-contract LenderWithdrawTest is Test {
+contract LenderWithdrawTest is Test, CreditFixture {
     UtuhRegistry internal registry;
-    address constant AAVE = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
-    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address constant ELSEWHERE = address(0xBEEF);
 
     function setUp() public {
         registry = new UtuhRegistry(25);
-    }
-
-    function _spec(uint8 subjectTopic, uint8 counterpartyTopic)
-        internal
-        pure
-        returns (UtuhCredit.HistorySpec memory s)
-    {
-        s.chainKey = 3;
-        s.emitter = AAVE;
-        s.eventSig = keccak256("Repay(address,address,address,uint256,bool)");
-        s.subjectTopic = subjectTopic;
-        s.counterpartyTopic = counterpartyTopic;
-        s.counterparty = counterpartyTopic == 0 ? address(0) : USDC;
-        s.metric = EventScope.Metric.DATA_WORD;
-        s.metricArg = 0;
-    }
-
-    function _policy() internal pure returns (UtuhCredit.Policy memory) {
-        return UtuhCredit.Policy({
-            volumeUnitInCtc: 15_000_000_000_000,
-            minUnderwritingWindow: 25,
-            minHistoryBlocks: 216_000,
-            maxStalenessBlocks: 50_400,
-            repaymentBps: 10_500,
-            repayWindowBlocks: 400
-        });
     }
 
     function _deployVia(LenderThatCannotReceive lender) internal returns (UtuhCredit) {
@@ -669,6 +618,15 @@ contract LenderWithdrawTest is Test {
         clean[0] = _spec(3, 0);
         lender.deploy(registry, _policy(), _spec(2, 0), clean, _spec(1, 2));
         return lender.credit();
+    }
+
+    /// The three tests below start from the same place: a lender that cannot receive its own
+    /// money, holding one ether of capital.
+    function _fundedLender() internal returns (LenderThatCannotReceive lender, UtuhCredit credit) {
+        lender = new LenderThatCannotReceive();
+        credit = _deployVia(lender);
+        vm.deal(address(this), 2 ether);
+        lender.fund{value: 1 ether}();
     }
 
     /// The deployment that used to strand its own money.
@@ -692,10 +650,7 @@ contract LenderWithdrawTest is Test {
     }
 
     function test_onlyTheLenderMayDirectTheCapital() public {
-        LenderThatCannotReceive lender = new LenderThatCannotReceive();
-        UtuhCredit credit = _deployVia(lender);
-        vm.deal(address(this), 2 ether);
-        lender.fund{value: 1 ether}();
+        (, UtuhCredit credit) = _fundedLender();
 
         vm.expectRevert(UtuhCredit.NotLender.selector);
         credit.withdrawTo(ELSEWHERE, 1 ether);
@@ -704,10 +659,7 @@ contract LenderWithdrawTest is Test {
     /// A payout to the zero address succeeds at the EVM level and burns the value, so it is
     /// refused for the same reason SettlementLedger refuses it.
     function test_theZeroAddressIsNotAWithdrawalTarget() public {
-        LenderThatCannotReceive lender = new LenderThatCannotReceive();
-        UtuhCredit credit = _deployVia(lender);
-        vm.deal(address(this), 2 ether);
-        lender.fund{value: 1 ether}();
+        (LenderThatCannotReceive lender, UtuhCredit credit) = _fundedLender();
 
         vm.expectRevert(UtuhCredit.NoPayee.selector);
         lender.withdrawTo(address(0), 1 ether);
@@ -715,10 +667,7 @@ contract LenderWithdrawTest is Test {
     }
 
     function test_moreThanIsAvailableIsRefused() public {
-        LenderThatCannotReceive lender = new LenderThatCannotReceive();
-        UtuhCredit credit = _deployVia(lender);
-        vm.deal(address(this), 2 ether);
-        lender.fund{value: 1 ether}();
+        (LenderThatCannotReceive lender, UtuhCredit credit) = _fundedLender();
 
         vm.expectRevert(UtuhCredit.NothingToWithdraw.selector);
         lender.withdrawTo(ELSEWHERE, 1 ether + 1);
@@ -732,12 +681,13 @@ contract LenderWithdrawTest is Test {
 ///      borrower's control commitment; the other is an ordinary settlement, which is what a
 ///      transaction that is *not* a commitment looks like. Neither can go stale — they are
 ///      history.
-contract ControlTransactionTest is Test {
+contract ControlTransactionTest is Test, CreditFixture {
     ExposedCredit internal credit;
 
-    address constant AAVE = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
-    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address constant BORROWER = 0x01a802C650ccceF077208A93c1cF43025239003f;
+
+    /// The fixture transactions are Sepolia, which CC3 Testnet numbers chain key 1.
+    uint64 constant SEPOLIA = 1;
 
     bytes internal control;
     bytes internal settlement;
@@ -749,34 +699,8 @@ contract ControlTransactionTest is Test {
 
         UtuhRegistry registry = new UtuhRegistry(25);
         UtuhCredit.HistorySpec[] memory clean = new UtuhCredit.HistorySpec[](1);
-        clean[0] = _spec(3, 0);
-        credit = new ExposedCredit(registry, _policy(), _spec(2, 0), clean, _spec(1, 2));
-    }
-
-    function _spec(uint8 subjectTopic, uint8 counterpartyTopic)
-        internal
-        pure
-        returns (UtuhCredit.HistorySpec memory s)
-    {
-        s.chainKey = 1;
-        s.emitter = AAVE;
-        s.eventSig = keccak256("Repay(address,address,address,uint256,bool)");
-        s.subjectTopic = subjectTopic;
-        s.counterpartyTopic = counterpartyTopic;
-        s.counterparty = counterpartyTopic == 0 ? address(0) : USDC;
-        s.metric = EventScope.Metric.DATA_WORD;
-        s.metricArg = 0;
-    }
-
-    function _policy() internal pure returns (UtuhCredit.Policy memory) {
-        return UtuhCredit.Policy({
-            volumeUnitInCtc: 15_000_000_000_000,
-            minUnderwritingWindow: 25,
-            minHistoryBlocks: 216_000,
-            maxStalenessBlocks: 50_400,
-            repaymentBps: 10_500,
-            repayWindowBlocks: 400
-        });
+        clean[0] = _specOn(SEPOLIA, 3, 0);
+        credit = new ExposedCredit(registry, _policy(), _specOn(SEPOLIA, 2, 0), clean, _specOn(SEPOLIA, 1, 2));
     }
 
     /// The real commitment, read the way proveControl reads it: the sender comes out of bytes the
