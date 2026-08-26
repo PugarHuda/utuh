@@ -436,7 +436,7 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 80 forge tests
+npm run test                # 81 forge tests
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -457,7 +457,7 @@ npm run finish -- <registry> <credit> <lineId>             # resume an interrupt
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
 npm run bait                # seal a deliberately short claim for the watcher to find
-npm run livetest            # 88 guards asserted against the live chain, refunds included
+npm run livetest            # 91 guards asserted against the live chain, refunds included
 
 npm run demo                # e2e then credit, against the deployment already recorded
 ```
@@ -673,7 +673,7 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-80 tests, 9 of them fuzzed, over the half that can run in a plain EVM: ordering and scope matching
+81 tests, 9 of them fuzzed, over the half that can run in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
 record as a payment; and in `UtuhCredit.t.sol` the guards that decide whose history a line may be
 opened against — deployment floors, scope identity, the lender's liquidity, and the control
@@ -709,7 +709,7 @@ whether the range is attested, and that call cannot execute in a local EVM. Ever
 without a precompile is covered; everything else is covered live, on chain, where a stub could not
 have lied about it.
 
-`npm run livetest` is the one that reaches furthest: 88 guards, most of them `staticCall`s that
+`npm run livetest` is the one that reaches furthest: 91 guards, most of them `staticCall`s that
 prove a revert without spending gas, plus the steps that have to be real for the later ones to
 mean anything. It underwrites whichever address the source chain says was busiest in its window,
 which is a deliberate change — it used to underwrite a wallet derived from the operator's key,
@@ -719,7 +719,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 80 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 81 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings**, which is only worth stating alongside what it was allowed to look
 for.
 
