@@ -2,11 +2,10 @@ import { Contract } from 'ethers';
 import type { Scope, ScopedEvent } from './scope';
 import { eventKey, scanScopeUnion } from './scope';
 import type { ScopedEvent as Ev } from './scope';
-import { Contract as EthContract } from 'ethers';
-import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
-import { sources, withDeadline, SOURCE_TIMEOUT_MS, CHAIN_INFO_ADDRESS } from '../config';
+import { sources, withDeadline, SOURCE_TIMEOUT_MS } from '../config';
 import { Prover, planBatches } from './proofs';
-import { sendRegistryCall } from './gasLimit';
+import { sendRegistryCall, isChainRejection } from './gasLimit';
+import { attested } from './chain';
 
 export interface BuildOptions {
   bond: bigint;
@@ -156,7 +155,6 @@ export async function buildClaim(
       } catch (e: any) {
         if (e instanceof KeyMismatch) throw e;
         log(`  batch ${i + 1}/${batches.length} failed as a batch (${e.shortMessage ?? e.message}) — one at a time`);
-        const chainInfo = new EthContract(CHAIN_INFO_ADDRESS, chainInfoAbi as any, registry.runner);
 
         for (const event of batches[i]) {
           const where = `${event.blockNumber}/${event.txIndex}/${event.logIndexInTx}`;
@@ -172,9 +170,12 @@ export async function buildClaim(
             }
             // Even a 404 only means "no such transaction" once the block is attested; before that
             // the prover has nothing to serve for a transaction that does exist.
-            const attested: boolean = await chainInfo.is_height_attested(scope.chainKey, event.blockNumber);
-            if (!attested) {
-              throw new Error(`block ${event.blockNumber} is not attested yet — nothing can be concluded about ${where}`);
+            const frontier = await attested(registry.runner!.provider!, scope.chainKey, event.blockNumber);
+            if (!frontier.ok) {
+              throw new Error(
+                `block ${event.blockNumber} is not attested yet (frontier ${frontier.frontier}) — ` +
+                  `nothing can be concluded about ${where}`,
+              );
             }
             dropped.push(event);
             log(`    dropped ${where}: the chain has no such transaction`);
@@ -192,7 +193,17 @@ export async function buildClaim(
           } catch (inner: any) {
             if (inner instanceof KeyMismatch) throw inner;
             // The registry rejecting a proven event means it is out of scope or out of range, which
-            // a refuter could not use against the claim either.
+            // a refuter could not use against the claim either — so dropping it is safe.
+            //
+            // Only when the *chain* rejected it. Appends now run `eth_call` before they send, so a
+            // timeout or a dead endpoint reaches this catch as well, and it has said nothing about
+            // the event. Dropping there would seal a claim short of a real member and forfeit the
+            // bond for it. An unbuilt claim costs nothing; the same trade as the prover's 404.
+            if (!isChainRejection(registry, inner)) {
+              throw new Error(
+                `could not establish whether the registry accepts ${where}: ${inner.shortMessage ?? inner.message}`,
+              );
+            }
             dropped.push(event);
             log(`    dropped ${where}: ${inner.revert?.name ?? inner.shortMessage ?? 'rejected on-chain'}`);
           }

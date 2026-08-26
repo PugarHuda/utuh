@@ -30,6 +30,25 @@ const PER_MEMBER = 30_000n;
 /// hold, and it is better to fail loudly here than to have one silently never mined.
 const MAX_GAS_CAP = 75_000_000n;
 
+/// Did the *chain* refuse this call, or did we merely fail to ask?
+///
+/// Callers act on the difference. `buildClaim` drops an event the registry rejects, because an
+/// event the registry will not take is one no refuter could use against the claim either — but an
+/// RPC that timed out has said nothing about the event, and dropping it there seals a claim short
+/// of a real member and forfeits the bond. Same distinction as the prover's 404, one layer down.
+///
+/// Only a decoded revert counts. `CALL_EXCEPTION` with no revert data is what ethers also returns
+/// for a call to an address holding no code, which is a misconfiguration rather than a verdict.
+export function isChainRejection(contract: Contract, e: any): boolean {
+  if (e?.code !== 'CALL_EXCEPTION') return false;
+  if (e.revert != null) return true;
+  try {
+    return e.data != null && e.data !== '0x' && contract.interface.parseError(e.data) != null;
+  } catch {
+    return false;
+  }
+}
+
 /// What the EVM charges for these bytes: 16 per non-zero, 4 per zero, per EIP-2028.
 export function calldataGas(data: string): bigint {
   const hex = data.startsWith('0x') ? data.slice(2) : data;

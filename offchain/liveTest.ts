@@ -17,6 +17,7 @@ import { scopeFor, plainSpec } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
 import { answersTheQuestion } from './lib/scope';
 import { Prover, isAbsence, type EventProofStruct, type ContinuityProofStruct } from './lib/proofs';
+import { calldataGas, modelledGas, isChainRejection } from './lib/gasLimit';
 
 /// The half of the registry that unit tests cannot reach.
 ///
@@ -149,6 +150,71 @@ async function main() {
         console.log(`  FAIL  ${name} → ${got ? 'accepted' : 'discarded'}, expected the opposite`);
       }
     }
+  }
+
+  // ------------------------------------------------------------------
+  // Whether a failure came from the chain or from the wire. `buildClaim` drops an event the
+  // registry rejects, because one the registry will not take is one no refuter could use against
+  // the claim either — but an RPC that timed out has said nothing about the event, and dropping it
+  // there seals a claim short of a real member and forfeits the bond for it.
+  console.log('');
+  console.log('telling a rejection apart from a failure to ask');
+  {
+    const rejection = { code: 'CALL_EXCEPTION', revert: { name: 'EventOutOfScope' } };
+    const encoded = { code: 'CALL_EXCEPTION', revert: null, data: registry.interface.encodeErrorResult('NotClaimant') };
+    const cases: [string, any, boolean][] = [
+      ['a decoded revert', rejection, true],
+      ['revert data this ABI can parse', encoded, true],
+      ['a revert with no data at all', { code: 'CALL_EXCEPTION', revert: null, data: '0x' }, false],
+      ['revert data from some other contract', { code: 'CALL_EXCEPTION', revert: null, data: '0xdeadbeef' }, false],
+      ['the endpoint timed out', { code: 'TIMEOUT', message: 'timeout' }, false],
+      ['the endpoint was unreachable', { code: 'NETWORK_ERROR', message: 'could not detect network' }, false],
+      ['the endpoint returned nonsense', { code: 'SERVER_ERROR', message: '502' }, false],
+      ['nothing at all', undefined, false],
+    ];
+    for (const [name, err, want] of cases) {
+      const got = isChainRejection(registry, err);
+      if (got === want) {
+        passed++;
+        console.log(`  ok    ${name} → ${got ? 'the chain refused' : 'we failed to ask'}`);
+      } else {
+        failed++;
+        console.log(`  FAIL  ${name} → ${got ? 'the chain refused' : 'we failed to ask'}, expected the opposite`);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // The gas model that carries a refutation when a node will not estimate one. Wrong low and the
+  // transaction runs out; wrong high and no block will hold it.
+  console.log('');
+  console.log('the fallback gas model');
+  {
+    const check = (name: string, ok: boolean) => {
+      if (ok) {
+        passed++;
+        console.log(`  ok    ${name}`);
+      } else {
+        failed++;
+        console.log(`  FAIL  ${name}`);
+      }
+    };
+    check('empty calldata costs nothing', calldataGas('0x') === 0n);
+    check('a zero byte costs 4', calldataGas('0x00') === 4n);
+    check('a non-zero byte costs 16', calldataGas('0xff') === 16n);
+    check('mixed bytes add up', calldataGas('0x00ff00') === 4n + 16n + 4n);
+    check('the 0x prefix is optional', calldataGas('ff') === calldataGas('0xff'));
+
+    const small = modelledGas('0x' + 'ff'.repeat(100), 1);
+    const wide = modelledGas('0x' + 'ff'.repeat(1000), 1);
+    const many = modelledGas('0x' + 'ff'.repeat(100), 10);
+    check('more calldata costs more', wide > small);
+    check('more members cost more', many > small);
+    // A single append measured 453,592 gas at its cheapest. The model has to clear that or the
+    // fallback loses the transaction it exists to save.
+    check('a one-member append is budgeted above what one really cost', small > 500_000n);
+    // And a full batch has to stay inside a block.
+    check('a ten-member append still fits a 75M block', modelledGas('0x' + 'ff'.repeat(100_000), 10) < 75_000_000n);
   }
 
   // ------------------------------------------------------------------

@@ -45,11 +45,13 @@ jobs:
       - name: tests
         run: forge test -vv
 
-      # A tolerance, because the fuzz tests draw different inputs every run and their mean gas
-      # moves a little with the seed. Five percent is far below anything a real change costs — the
-      # append path is hundreds of thousands of gas — and far above that noise.
+      # Fuzz tests are excluded rather than tolerated. Their mean gas moves with the seed, and a
+      # seed pinned to make the gate deterministic would mean CI draws the same inputs forever —
+      # trading away the point of fuzzing to stabilise a gas number. Without them the figures are
+      # deterministic, and the 5% left is for compiler and toolchain drift, far below what any
+      # real regression costs on a path that spends hundreds of thousands of gas.
       - name: gas snapshot
-        run: forge snapshot --check --tolerance 5 || (echo "::error::gas moved more than 5% — run 'forge snapshot' and commit .gas-snapshot" && exit 1)
+        run: forge snapshot --check --tolerance 5 --no-match-test "testFuzz" || (echo "::error::gas moved more than 5% — run 'forge snapshot --no-match-test testFuzz' and commit .gas-snapshot" && exit 1)
 
   offchain:
     name: offchain

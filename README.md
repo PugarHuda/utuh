@@ -377,7 +377,7 @@ npm run finish -- <registry> <credit> <lineId>             # resume an interrupt
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
 npm run bait                # seal a deliberately short claim for the watcher to find
-npm run livetest            # 44 guards asserted against the live chain, refunds included
+npm run livetest            # 61 guards asserted against the live chain, refunds included
 
 npm run demo                # all three in sequence, for recording
 ```
@@ -459,6 +459,14 @@ Every registry write now goes through `sendRegistryCall`, in this order:
 2. Then `eth_estimateGas`, with the usual 35% buffer, when the node will answer.
 3. If it will not, a limit from the measured cost model — and only because step 1 already proved
    the call good, so this can never send a doomed transaction.
+
+Step 1 has a consequence worth spelling out. `buildClaim` drops an event the registry rejects,
+because one the registry will not take is one no refuter could use against the claim either — and
+adding `eth_call` in front of every append meant a *timeout* could now reach that same code path.
+An RPC that failed to answer has said nothing about the event, and dropping it there seals a claim
+short of a real member and forfeits the bond for it. So only a decoded revert counts as a
+rejection; anything else aborts. It is the prover's 404 problem again, one layer down, and it
+arrived as a side effect of the fix above rather than as anything anyone wrote on purpose.
 
 The fallback is deliberately **not** the SDK's heuristic. That one is `21000 + roots*5000 + 20000`,
 which for a ten-member append comes to about 146,000 gas against a measured 2,150,000: it would run
@@ -592,7 +600,7 @@ whether the range is attested, and that call cannot execute in a local EVM. Ever
 without a precompile is covered; everything else is covered live, on chain, where a stub could not
 have lied about it.
 
-`npm run livetest` is the one that reaches furthest: 44 guards, most of them `staticCall`s that
+`npm run livetest` is the one that reaches furthest: 61 guards, most of them `staticCall`s that
 prove a revert without spending gas, plus the steps that have to be real for the later ones to
 mean anything. It underwrites whichever address the source chain says was busiest in its window,
 which is a deliberate change — it used to underwrite a wallet derived from the operator's key,
