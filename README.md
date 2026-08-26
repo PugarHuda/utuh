@@ -571,6 +571,31 @@ $ FORCE_MODELLED_GAS=1 npm run e2e
   refuted with one proof. reward 1.0 CTC
 ```
 
+### A chain key is not a global constant
+
+`CHAIN_KEY` says Sepolia is 1 and Ethereum mainnet is 3. That is true of CC3 Testnet and it is not
+a property of Creditcoin: gluwa's own
+[networks.json](https://github.com/gluwa/creditcoin-usc-networks/blob/master/networks.json) has
+chain key 3 meaning **Sepolia** on `usc-devnet`. Three things were hardcoded here that the chain
+itself will tell you — which key means which chain, its EVM chain id, and the transaction encoding
+its proofs use.
+
+Point `CC3_RPC` at a different Creditcoin network and a build trusting its own constants would
+underwrite one chain while reporting another. Nothing would catch it, because every proof would
+still verify — they would be perfectly valid proofs about the chain they actually came from.
+
+`get_supported_chains` is read now, once per process, on the path every bond goes through, and
+`npm run doctor` prints what the network says:
+
+```
+  ok    chain key 3 is "Ethereum" (EVM 1), encoding v1
+  ok    chain key 1 is "Sepolia ethereum" (EVM 11155111), encoding v1
+```
+
+A network reporting an encoding other than v1 is refused outright rather than read with the wrong
+decoder — `EvmV1Decoder` and the local proof builder both read v1, and supporting an encoding
+nobody here has seen would be a guess dressed as a feature.
+
 ### The prover was the last single point of failure
 
 Everything above refuses to trust one endpoint for anything — and until recently the one thing
@@ -764,6 +789,7 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 | `is_height_attested` on `0x0FD3` | the gate that makes challenge windows sound |
 | `get_latest_attestation_height_and_hash` | underwriting staleness bound |
 | `get_attestation_genesis_height` | lower bound on claimable ranges |
+| `get_supported_chains` on `0x0FD3` | checking the chain keys this build assumes against the ones the network attests |
 | `PrecompileChainInfoProvider` | waiting for attestation without asking a hosted service |
 | `RawProofBuilder` over source RPCs | proofs built locally when the hosted Proof Builder is down |
 | `PrecompileBlockProver` | `npm run probe` — the `view` twin of `verifyAndEmit`, over `eth_call` |

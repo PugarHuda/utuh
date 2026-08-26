@@ -1,9 +1,9 @@
 import { Contract } from 'ethers';
 import { eventKey, scanScopeUnion, type Scope, type ScopedEvent } from './scope';
-import { sources, withDeadline, SOURCE_TIMEOUT_MS } from '../config';
+import { sources, withDeadline, SOURCE_TIMEOUT_MS, CHAIN_KEY, SOURCE_CHAIN_ID } from '../config';
 import { Prover, planBatches } from './proofs';
 import { sendChecked, isChainRejection, isTransportFailure } from './gasLimit';
-import { attested } from './chain';
+import { attested, verifyChainKeys } from './chain';
 
 export interface BuildOptions {
   bond: bigint;
@@ -113,6 +113,15 @@ export async function buildClaim(
   events: ScopedEvent[],
   opts: BuildOptions,
 ): Promise<BuiltClaim> {
+  // Chain keys are per network, not global — gluwa's own networks.json has key 3 meaning Sepolia
+  // on usc-devnet while it means Ethereum mainnet here. Pointing CC3_RPC at a different Creditcoin
+  // network would leave this underwriting one chain while reporting another, and every proof would
+  // still verify. Read once per process; this is the path every bond goes through.
+  await verifyChainKeys(registry.runner!.provider!, [
+    { chainKey: CHAIN_KEY.mainnet, label: 'Ethereum mainnet', chainId: SOURCE_CHAIN_ID[CHAIN_KEY.mainnet] },
+    { chainKey: CHAIN_KEY.sepolia, label: 'Sepolia', chainId: SOURCE_CHAIN_ID[CHAIN_KEY.sepolia] },
+  ]);
+
   const log = opts.log ?? (() => {});
   const omit = opts.omit ?? new Set<bigint>();
 

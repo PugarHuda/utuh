@@ -11,11 +11,12 @@ import {
   type JsonRpcProvider,
 } from 'ethers';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
+import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey, CHAIN_KEY, SOURCE_CHAIN_ID } from './config';
 import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
 import { scopeFor, plainSpec, sameScope } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
 import { answersTheQuestion, valueOf, type Scope } from './lib/scope';
+import { supportedChains, verifyChainKeys } from './lib/chain';
 import { Prover, isAbsence } from './lib/proofs';
 import { calldataGas, modelledGas, isChainRejection, isTransportFailure } from './lib/gasLimit';
 import { waitForBlock } from './lib/chain';
@@ -173,6 +174,52 @@ async function main() {
         console.log(`  FAIL  ${name} → ${got ? 'accepted' : 'discarded'}, expected the opposite`);
       }
     }
+  }
+
+  // ------------------------------------------------------------------
+  // What the network says about its own chain keys, against what this build assumes.
+  //
+  // Chain keys are per network. gluwa's networks.json has key 3 meaning Sepolia on usc-devnet
+  // while it means Ethereum mainnet here, so a CC3_RPC pointed at another Creditcoin network
+  // would leave everything underwriting one chain and reporting another — with every proof still
+  // verifying, because the proofs would be perfectly valid for the chain they came from.
+  console.log('');
+  console.log('the chain keys this build assumes, against the ones the network attests');
+  {
+    const chains = await supportedChains(owner.provider!);
+    for (const c of chains)
+      console.log(`  network says key ${c.chainKey} = "${c.name}" (EVM ${c.chainId}), encoding v${c.encoding}`);
+
+    const right = [
+      { chainKey: CHAIN_KEY.mainnet, label: 'Ethereum mainnet', chainId: SOURCE_CHAIN_ID[CHAIN_KEY.mainnet] },
+      { chainKey: CHAIN_KEY.sepolia, label: 'Sepolia', chainId: SOURCE_CHAIN_ID[CHAIN_KEY.sepolia] },
+    ];
+    let agreed = true;
+    try {
+      await verifyChainKeys(owner.provider!, right);
+    } catch {
+      agreed = false;
+    }
+    check('what this build assumes is what the network attests', agreed);
+
+    // And the guard has to fire when it is wrong, or it is decoration.
+    const wrongId = [{ chainKey: CHAIN_KEY.mainnet, label: 'Ethereum mainnet', chainId: 999_999 }];
+    let caughtId = false;
+    try {
+      await verifyChainKeys(owner.provider!, wrongId);
+    } catch {
+      caughtId = true;
+    }
+    check('an EVM chain id that does not match is refused', caughtId);
+
+    const unknownKey = [{ chainKey: 77, label: 'a chain this network does not attest', chainId: 1 }];
+    let caughtKey = false;
+    try {
+      await verifyChainKeys(owner.provider!, unknownKey);
+    } catch {
+      caughtKey = true;
+    }
+    check('a chain key the network does not attest is refused', caughtKey);
   }
 
   // ------------------------------------------------------------------

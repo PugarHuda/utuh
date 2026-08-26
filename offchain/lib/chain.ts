@@ -1,3 +1,4 @@
+import { toUtf8String } from 'ethers';
 import type { JsonRpcApiProvider, Provider } from 'ethers';
 import { chainInfo, blockProver } from '@gluwa/usc-sdk';
 import { CHAIN_INFO_ADDRESS } from '../config';
@@ -79,3 +80,80 @@ export async function waitForBlock(
     await new Promise((r) => setTimeout(r, pollMs));
   }
 }
+
+/// What the connected Creditcoin network says about the chains it attests.
+///
+/// Three things are hardcoded off-chain that the chain itself will tell you: which key means which
+/// chain (`CHAIN_KEY`), which EVM chain id that is (`SOURCE_CHAIN_ID`), and which transaction
+/// encoding its proofs use (the `encoding` handed to `RawProofBuilder`). All three are correct for
+/// CC3 Testnet and none of them are properties of Creditcoin in general — gluwa's own networks.json
+/// shows chain key 3 meaning Sepolia on `usc-devnet` while it means Ethereum mainnet here.
+///
+/// So pointing `CC3_RPC` at a different Creditcoin network would leave the code underwriting one
+/// chain while believing it was reading another, and every proof would verify. This is the check
+/// that makes that impossible, and it is why the claim that `get_supported_chains` is read at
+/// runtime is now true rather than aspirational.
+export interface SupportedChain {
+  chainKey: number;
+  chainId: number;
+  name: string;
+  encoding: number;
+}
+
+/// The only transaction encoding this reads: EvmV1Decoder's, and the local builder's.
+const SUPPORTED_ENCODING = 1;
+
+let cached: Promise<SupportedChain[]> | null = null;
+
+/// The mapping, read once per process.
+export function supportedChains(provider: Provider): Promise<SupportedChain[]> {
+  cached ??= chainInfoAt(provider)
+    .getSupportedChains()
+    .then((chains) =>
+      chains.map((c) => ({
+        chainKey: Number(c.chainKey),
+        chainId: Number(c.chainId),
+        // `chainName` arrives as hex-encoded bytes: 0x457468657265756d is "Ethereum".
+        name: toUtf8String(c.chainName),
+        encoding: Number(c.chainEncoding),
+      })),
+    );
+  return cached;
+}
+
+/// Check the hardcoded assumptions against the chain, and say precisely which one is wrong.
+export async function verifyChainKeys(
+  provider: Provider,
+  expected: { chainKey: number; label: string; chainId: number }[],
+): Promise<SupportedChain[]> {
+  const chains = await supportedChains(provider);
+  for (const want of expected) {
+    const got = chains.find((c) => c.chainKey === want.chainKey);
+    if (!got) {
+      const known = chains.map((c) => `${c.chainKey} (${c.name})`).join(', ');
+      throw new Error(
+        `this build treats chain key ${want.chainKey} as ${want.label}, and the network at this ` +
+          `RPC does not attest that key at all — it attests ${known}. Chain keys are per network, ` +
+          `not global.`,
+      );
+    }
+    // The proofs this builds are v1-encoded, in the Solidity decoder and in the local prover
+    // alike. A network reporting another encoding is not a network this can read, and finding
+    // that out here beats finding it out as a Merkle root mismatch with no mention of encodings.
+    if (got.encoding !== SUPPORTED_ENCODING) {
+      throw new Error(
+        `chain key ${want.chainKey} on this network uses transaction encoding v${got.encoding}, ` +
+          `and everything here — EvmV1Decoder and the local proof builder — reads v${SUPPORTED_ENCODING}.`,
+      );
+    }
+    if (got.chainId !== want.chainId) {
+      throw new Error(
+        `this build treats chain key ${want.chainKey} as ${want.label} (EVM chain id ` +
+          `${want.chainId}), and the network at this RPC says that key is "${got.name}", EVM chain ` +
+          `id ${got.chainId}. Underwriting would read a different chain than it reported.`,
+      );
+    }
+  }
+  return chains;
+}
+

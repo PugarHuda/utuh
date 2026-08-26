@@ -164,6 +164,7 @@ export class Prover {
     return p;
   }
 
+
   /// Release the providers this created. Only meaningful for `withDefaults`; a caller that passed
   /// its own providers to `withLocalFallback` still owns them.
   close(): void {
@@ -181,6 +182,10 @@ export class Prover {
   /// The SDK ships a RawProofBuilder that constructs the same proofs from a source-chain RPC and
   /// the ChainInfo precompile — no hosted service involved. It needs whole blocks with receipts,
   /// which not every endpoint will serve, so it is a fallback rather than the default.
+  /// `encoding` is the transaction encoding the proofs use. CC3 Testnet reports v1 for every
+  /// chain it attests, and `verifyChainKeys` refuses to proceed on a network that reports
+  /// anything else — supporting an encoding nobody here has ever seen would be a guess dressed
+  /// as a feature.
   withLocalFallback(sourceRpc: JsonRpcProvider | JsonRpcProvider[], cc3: JsonRpcProvider, encoding = 1): this {
     this.localChainInfo = new chainInfo.PrecompileChainInfoProvider(cc3);
     this.local = new proofProvider.raw.RawProofBuilder(

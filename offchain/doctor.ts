@@ -4,6 +4,7 @@ import {
   CC3_RPC,
   CC3_CHAIN_ID,
   CHAIN_KEY,
+  SOURCE_CHAIN_ID,
   type ChainKey,
   PROVER_URL,
   SOURCE_TIMEOUT_MS,
@@ -12,7 +13,7 @@ import {
   requirePrivateKey,
 } from './config';
 import { signer, readDeployments, creditAt } from './lib/contracts';
-import { chainInfoAt } from './lib/chain';
+import { chainInfoAt, supportedChains, verifyChainKeys } from './lib/chain';
 import { Prover } from './lib/proofs';
 import { runScript } from './lib/cli';
 
@@ -81,6 +82,25 @@ async function main() {
   }
 
   const chainInfo = chainInfoAt(cc3);
+
+  // Three things are hardcoded that the chain will tell you: which key means which chain, its EVM
+  // chain id, and the transaction encoding its proofs use. None are properties of Creditcoin in
+  // general — gluwa's networks.json has chain key 3 meaning Sepolia on usc-devnet and it means
+  // Ethereum mainnet here — so a CC3_RPC pointed elsewhere would underwrite a chain other than the
+  // one being reported, with every proof still verifying.
+  try {
+    const chains = await supportedChains(cc3);
+    await verifyChainKeys(cc3, [
+      { chainKey: CHAIN_KEY.mainnet, label: 'Ethereum mainnet', chainId: SOURCE_CHAIN_ID[CHAIN_KEY.mainnet] },
+      { chainKey: CHAIN_KEY.sepolia, label: 'Sepolia', chainId: SOURCE_CHAIN_ID[CHAIN_KEY.sepolia] },
+    ]);
+    for (const c of chains) {
+      console.log(`  ok    chain key ${c.chainKey} is "${c.name}" (EVM ${c.chainId}), encoding v${c.encoding}`);
+    }
+  } catch (e: any) {
+    problems++;
+    console.log(`  FAIL  ${e.message}`);
+  }
 
   for (const [name, key] of Object.entries(CHAIN_KEY)) {
     console.log(`\n${name} (chain key ${key})`);
