@@ -187,7 +187,9 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
   const prover = Prover.withDefaults(scope.chainKey, 60_000);
   // The watcher outlives the refutation, so the providers this prover opened have to be closed or
   // each catch leaves another set of sockets behind for the rest of the run.
-  const { reward, key } = await refuteClaim(registry, prover, claimId, gap).finally(() => prover.close());
+  const { reward, key } = await refuteClaim(registry, prover, claimId, gap, (m) => console.log(m)).finally(() =>
+    prover.close(),
+  );
   console.log(`  refuted with one proof. key ${key}`);
   console.log(`  reward ${formatEther(reward)} CTC`);
   return 'refuted';

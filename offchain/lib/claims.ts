@@ -6,6 +6,7 @@ import { Contract as EthContract } from 'ethers';
 import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
 import { sources, withDeadline, SOURCE_TIMEOUT_MS, CHAIN_INFO_ADDRESS } from '../config';
 import { Prover, planBatches } from './proofs';
+import { sendRegistryCall } from './gasLimit';
 
 export interface BuildOptions {
   bond: bigint;
@@ -145,7 +146,10 @@ export async function buildClaim(
     for (let i = 0; i < batches.length; i++) {
       try {
         const { proofs, continuity } = await prover.proveBatch(batches[i]);
-        const tx = await registry.appendBatch(claimId, proofs, continuity);
+        const tx = await sendRegistryCall(registry, 'appendBatch', [claimId, proofs, continuity], {
+          members: proofs.length,
+          log,
+        });
         const receipt = await tx.wait();
         assertKeysMatch(registry, receipt, batches[i]);
         log(`  batch ${i + 1}/${batches.length}: ${proofs.length} events verified on-chain`);
@@ -178,7 +182,12 @@ export async function buildClaim(
           }
 
           try {
-            const one = await (await registry.appendBatch(claimId, [attempt.proof], attempt.continuity)).wait();
+            const one = await (
+              await sendRegistryCall(registry, 'appendBatch', [claimId, [attempt.proof], attempt.continuity], {
+                members: 1,
+                log,
+              })
+            ).wait();
             assertKeysMatch(registry, one, [event]);
           } catch (inner: any) {
             if (inner instanceof KeyMismatch) throw inner;
@@ -247,9 +256,11 @@ export async function refuteClaim(
   prover: Prover,
   claimId: bigint,
   omission: ScopedEvent,
+  log: (message: string) => void = () => {},
 ): Promise<{ reward: bigint; key: bigint }> {
   const { proof, continuity } = await prover.proveOne(omission);
-  const tx = await registry.refute(claimId, proof, continuity);
+  // The one call in this repo that must go through even when the node will not estimate it.
+  const tx = await sendRegistryCall(registry, 'refute', [claimId, proof, continuity], { members: 0, log });
   const receipt = await tx.wait();
 
   for (const rawLog of receipt.logs) {

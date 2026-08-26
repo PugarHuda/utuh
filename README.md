@@ -347,6 +347,8 @@ offchain/
   balance.ts                wallet, chain and attestation status
   lib/scope.ts              independent source-chain sweep
   lib/proofs.ts             hosted and local proof building, batched within Attestcoin's limits
+  lib/gasLimit.ts           eth_call first, then estimate, then the measured model
+  lib/chain.ts              the two precompiles, through the SDK's own clients
   lib/claims.ts             open, append, seal, find omissions, refute
 ```
 
@@ -407,6 +409,7 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 | `REPAYMENT_BPS` | `10500` | lender policy: what a draw must repay, in basis points |
 | `REPAY_WINDOW_BLOCKS` | `5760` | lender policy: how long the borrower has |
 | `LENDER_MAINNET` | Binance hot wallet | where repayment must land on Ethereum |
+| `FORCE_MODELLED_GAS` | unset | skip estimation entirely, so the fallback gas model is the one under test |
 | `WAIT_ATTESTED_MS` | `900000` | how long to wait for the attestation frontier to reach a block |
 | `GAS_LOOKBACK` / `GAS_LOG_CHUNK` | `100000` / `2000` | how far back `npm run gas` reads, and its chunk size |
 | `PROVER_TIMEOUT_MS` | `30000` | `doctor` only; the prover is a separate service with its own latency |
@@ -440,6 +443,41 @@ gateway returns a filtered 216,000-block sweep in one call, which is why it head
 The `_RPCS` variables replace that list rather than extending it. Widening a trust set has to come
 with the ability to narrow it: an operator who knows one of the bundled endpoints is rate-limited —
 or is the claimant's — needs to be able to drop it, and an append-only setting cannot.
+
+### A refutation must not depend on a node's willingness to do arithmetic
+
+`pallet-evm` does not always propagate revert reasons in estimation mode, so `eth_estimateGas` on
+a call that reaches a precompile can fail on a call that would have succeeded. Gluwa's own SDK
+ships a workaround, which is how this is known rather than guessed at. Unhandled, it means a
+claimant cannot append and — much worse — **a refuter cannot refute**: a liar keeps a bond because
+a node declined to estimate.
+
+Every registry write now goes through `sendRegistryCall`, in this order:
+
+1. `eth_call` first. Free, not subject to the estimation-mode problem, and it settles whether the
+   call would actually succeed. If it reverts, that error is the real one and is surfaced.
+2. Then `eth_estimateGas`, with the usual 35% buffer, when the node will answer.
+3. If it will not, a limit from the measured cost model — and only because step 1 already proved
+   the call good, so this can never send a doomed transaction.
+
+The fallback is deliberately **not** the SDK's heuristic. That one is `21000 + roots*5000 + 20000`,
+which for a ten-member append comes to about 146,000 gas against a measured 2,150,000: it would run
+out of gas and lose the transaction it exists to save. The constants here are the fit `npm run gas`
+produces, rounded up with the worst observed residual folded in and a third on top, and refused
+outright above Creditcoin's 75M block cap.
+
+A fallback nothing ever takes is a fallback nobody has tested, so `FORCE_MODELLED_GAS=1` makes
+every call take it. Under it, a real ten-event append sent with a modelled 4,704,709 gas limit
+against ~2.5M actual, a one-event append with 689,749, and a real refutation — all mined:
+
+```
+$ FORCE_MODELLED_GAS=1 npm run e2e
+  estimation skipped by FORCE_MODELLED_GAS — the call succeeds under eth_call,
+  sending appendBatch with 4704709 gas from the measured model
+  batch 1/2: 10 events verified on-chain
+  ...
+  refuted with one proof. reward 1.0 CTC
+```
 
 ### The prover was the last single point of failure
 
