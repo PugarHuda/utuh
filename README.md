@@ -436,7 +436,7 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 85 forge tests
+npm run test                # 100 forge tests
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -673,12 +673,15 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-85 tests, 9 of them fuzzed, over the half that can run in a plain EVM: ordering and scope matching
+100 tests, 9 of them fuzzed, over the part that can run in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
-record as a payment; and in `UtuhCredit.t.sol` the guards that decide whose history a line may be
+record as a payment; in `UtuhCredit.t.sol` the guards that decide whose history a line may be
 opened against — deployment floors, scope identity, the lender's liquidity, and the control
-commitment. Neither contract's constructor touches a precompile, so both deploy locally; what
-cannot run locally is anything that reaches one.
+commitment; and in `UtuhRegistry.t.sol` the guards that run before any precompile is reached, which
+is what `open` refuses and in what order, and the fact that an unknown claim id does not answer one
+thing — `seal`, `abandon` and `appendBatch` check the caller first and say `NotClaimant`, while
+`finalize` and `refute` check the status first and say `WrongStatus`. Neither contract's constructor
+touches a precompile, so both deploy locally; what cannot run locally is anything that reaches one.
 
 `_readCommitment` is `internal` rather than `private` so a test can reach it, and that is worth the
 widened visibility. It is the check that decides whether an address may be bound to a Creditcoin
@@ -702,17 +705,31 @@ against the live CC3 Testnet with real proofs for real Ethereum mainnet transact
 e2e`, `npm run credit` and `npm run livetest` are the tests, and they either pass on the real chain
 or they do not pass at all.
 
-Of the 51 errors these contracts can revert with, 15 are named by a unit test and 14 by the live
-suite. The remaining 22 are all behind `openLine`, which is behind `proveControl`, which is behind
-`0x0FD2`: reaching them means a real line on a real chain, so the live suite reaches what it can —
-a settled line refuses a draw, a second settlement and a default, and an unopened line refuses a
-draw — and the rest are reached only by the full loop's happy path.
+Of the 52 errors these contracts can revert with, 21 are named by a unit test, 8 by the live suite,
+and 2 by another script in the loop. The remaining 21 are named nowhere. Most are behind `openLine`,
+which is behind `proveControl`, which is behind `0x0FD2`: reaching them means a real line on a real
+chain, so the live suite reaches what it can — a settled line refuses a draw, a second settlement
+and a default, and an unopened line refuses a draw — and the rest are reached only by the full
+loop's happy path.
 
-`forge coverage` says 100% of `EventScope.sol` and `SettlementLedger.sol`, 49% of `UtuhCredit.sol`, and **9.6% of `UtuhRegistry.sol`**. That last number is worth stating rather than
-leaving to be discovered: almost every path in the registry begins at `open`, `open` asks `0x0FD3`
-whether the range is attested, and that call cannot execute in a local EVM. Everything reachable
-without a precompile is covered; everything else is covered live, on chain, where a stub could not
-have lied about it.
+One of the 52 is not reachable at all: `EventScope.TopicOutOfRange` is declared and never thrown.
+The range check it was written for lives in `UtuhCredit._requireTopic`, which reverts
+`BadSubjectTopic` and names the offending value. It stays declared rather than being deleted,
+because removing it changes 61 characters of the solc metadata CBOR — the executable code is
+identical, measured — and the contracts already verified on Blockscout were built from a source
+tree that has this line in it.
+
+`forge coverage` says 100% of `EventScope.sol` and `SettlementLedger.sol`, 49% of `UtuhCredit.sol`,
+and **32% of `UtuhRegistry.sol`** — 47% of lines overall. That registry number is worth stating
+rather than leaving to be discovered: almost every path in it begins at `open`, `open` asks `0x0FD3`
+whether the range is attested, and that call cannot execute in a local EVM.
+
+It read 9.6% until recently, and the sentence that followed it — that everything reachable without a
+precompile was covered — was not true when it was written. The guards that run *before* the
+precompile were reachable locally and tested only against a live chain, which meant they needed a
+funded account and could not run in CI at all. `test/UtuhRegistry.t.sol` covers them now. What is
+still uncovered locally is genuinely unreachable locally, and is covered live, on chain, where a
+stub could not have lied about it.
 
 `npm run livetest` is the one that reaches furthest: 95 guards, most of them `staticCall`s that
 prove a revert without spending gas, plus the steps that have to be real for the later ones to
@@ -724,7 +741,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 85 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 100 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings**, which is only worth stating alongside what it was allowed to look
 for.
 
