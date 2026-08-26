@@ -83,44 +83,52 @@ absence   →  economic        (bonded assertion, refutable by one proof)
 thousand events is broken by a single proof or by none at all.
 
 *Building* one is not. `npm run gas` measures it rather than reasoning about it — it finds every
-transaction the registry has ever seen from the registry's own logs, reads the receipts, and fits a
-cost model. Ninety-two transactions across both deployments:
+transaction a registry has ever seen from the registry's own logs, reads the receipts, and fits a
+cost model. No explorer involved. Across the four registries deployed so far, 139 transactions:
 
 | Call | Gas (mean) | % of a 75M block |
 |---|---|---|
-| `open` | 251,843 | 0.33% |
+| `open` | 252,750 | 0.33% |
 | `seal` | 206,010 | 0.27% |
-| `appendBatch` (1 event) | 551,922 | 0.73% |
-| `appendBatch` (10 events) | 2,556,706 | 3.40% |
-| `refute` | 609,721 | 0.81% |
+| `appendBatch` (1 event) | 552,956 | 0.73% |
+| `appendBatch` (2 events) | 893,903 | 1.19% |
+| `appendBatch` (10 events) | 2,662,045 | 3.54% |
+| `refute` | 611,556 | 0.81% |
 | `finalize` | 209,258 | 0.27% |
 | `withdraw` | 205,870 | 0.27% |
 
-The interesting part is what those numbers are made of, because member count alone does not explain
-them — one append of **three** events cost 541,464 gas while an append of **two** cost 878,903. A
-least-squares fit over all twenty-five appends, against the call's own calldata gas and its member
-count, says why:
+Member count alone does not explain those. One append of **three** events cost 541,464 gas while
+an append of **two** cost 878,903, because the cost follows the *size of the transactions being
+proven*, not how many events sit inside them. A least-squares fit over all 36 appends, against the
+call's own calldata gas and its member count:
 
 ```
-  314,503 gas fixed
-  2.33 x the call's own calldata gas   (1.00 would be exact)
-   20,526 gas per member on top of its bytes
-  worst residual 177,745 gas, 16% of the mean append
+  273,022 gas fixed
+    1.97 x the call's own calldata gas   (1.00 would be exact)
+   61,265 gas per member on top of its bytes
+  worst residual 232,253 gas, 20% of the mean append
 ```
 
-Two things worth reading off that. **A member costs 20,526 gas** — a cold `SSTORE` is 20,000, so
-the storage array really is the whole per-event cost, exactly as the design assumed. And **the
-transaction it proves costs about 2.3× its own calldata gas**, because those bytes are not just
-paid for at the door: they are copied, RLP-decoded by `EvmV1Decoder`, and hashed by the Block
-Prover. That term dominates, and it is not one the claimant chooses — proving one in-scope log
-inside a fat mainnet transaction means carrying all thirty kilobytes of it.
+The calldata term is the solid one, and it is the interesting one: **a proven transaction costs
+about twice its own calldata gas**, because those bytes are not merely paid for at the door — they
+are copied, RLP-decoded by `EvmV1Decoder`, and hashed by the Block Prover. Proving one in-scope
+log inside a fat mainnet transaction means carrying all thirty kilobytes of it, and that is not a
+choice the claimant has.
 
-So the practical ceiling is set by *bytes*, not by events:
+The per-member term is **not** well determined, and it is worth saying so rather than quoting it.
+An earlier fit over 25 appends put it at 20,526 gas — almost exactly a cold `SSTORE`, which was a
+satisfying number and the reason to distrust it. Eleven more appends moved it to 61,265. Members
+and bytes are correlated in this data (more members generally means more bytes), so separating the
+two needs appends this repo has not made: many members with small transactions, and few with large
+ones. What the data does support is the shape — fixed cost, a dominant per-byte cost, and some
+per-member cost on top — not a precise value for the last of those.
+
+The practical ceiling is therefore set by bytes:
 
 ```
-  a 100-event claim:     10 batches,    ~23.0M gas,  0.3 full blocks of it
-  a 1,000-event claim:  100 batches,   ~230.4M gas,  3.1 full blocks
-  a 10,000-event claim: 1000 batches, ~2303.8M gas, 30.7 full blocks
+  a 100-event claim:     10 batches,    ~24.5M gas,  0.3 full blocks of it
+  a 1,000-event claim:  100 batches,   ~245.2M gas,  3.3 full blocks
+  a 10,000-event claim: 1000 batches, ~2451.6M gas, 32.7 full blocks
 ```
 
 The asymmetry is still the point — challenging is one proof and a binary search, whatever the claim
@@ -292,13 +300,21 @@ The code is readable and the functions are callable.
 | `SettlementLedger` (Sepolia) | [`0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D`](https://eth-sepolia.blockscout.com/address/0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D?tab=contract) |
 
 Everything below is readable at those addresses rather than taken on trust — `claim(id)`,
-`memberCount(id)`, `enforceableLoss(id)`, `line(1)` and `settledThrough(subject)` all answer to
-anyone. Claim 1 volume finalized at **0.003 ETH** over three payments, claim 2 clean finalized
-with zero members, claim 3 **Refuted** with `enforceableLoss` collapsed to 0, claim 4 repayment
-finalized at **0.000525 ETH** — and line 1 reads `Repaid`. The borrower's sweep read
-`publicnode=3  tenderly=3`: two independent endpoints agreeing, and the claim built on the union
-rather than on whichever answered first. `burned()` on that registry reads 1 CTC, which is the
-refuted claimant's half that nobody collected.
+`memberCount(id)`, `keyAt(id, i)`, `enforceableLoss(id)`, `line(1)` and `settledThrough(subject)`
+all answer to anyone. Claim 1 volume finalized at **0.003 ETH** over three payments, at Sepolia
+blocks 11568493, 11568495 and 11568496; claim 2 clean finalized with zero members; claim 3
+**Refuted** with `enforceableLoss` collapsed to 0; claim 4 repayment finalized at **0.000525 ETH**
+— and line 1 reads `Settled`. The borrower's sweep read `publicnode=3  tenderly=3`: two
+independent endpoints agreeing, and the claim built on the union rather than on whichever answered
+first. `burned()` on that registry reads 1 CTC, which is the refuted claimant's half that nobody
+collected.
+
+That run did not finish in one go — the process died during the fifteen-minute wait for Sepolia's
+attestation frontier to reach the repayment block, somewhere between the draw and the settlement.
+Nothing was lost, because nothing was being held in the script: `npm run finish -- <registry>
+<credit> 1` read the line's state off the chain, found the claims already built, and closed it.
+That is what `finishLine.ts` is for, and it is a better demonstration of the design than a clean
+run would have been.
 
 Three figures there are fixes made visible. The limit is **10 CTC** — `enforceableLoss` of 1 CTC
 times a `BOND_MULTIPLE` of 10 — and not the far larger number the 0.003 ETH of volume alone would
@@ -711,9 +727,11 @@ cheaply by the `eth_call` in `sendRegistryCall`.
 ## Known limits
 
 - Claim members are held as a storage array so refutation is a binary search the chain runs
-  itself, with no witness a claimant could withhold. One `SSTORE` per event caps practical claims
-  in the low thousands. Beyond that, the array becomes an incremental Merkle root and the refuter
-  supplies an adjacency proof of the two members bracketing the gap.
+  itself, with no witness a claimant could withhold. What caps a claim is not that array, though —
+  measured, the cost follows the *bytes of the transactions being proven* at about twice their
+  calldata gas, and a ten-thousand-event claim is thirty blocks' worth. Beyond the point where
+  that is affordable, the array becomes an incremental Merkle root and the refuter supplies an
+  adjacency proof of the two members bracketing the gap.
 - Writability is still in third-party audit and not on testnet, so Utuh is read-side only. A
   default is recorded on Creditcoin; enforcing consequences back on Ethereum waits for outbound
   messaging.
