@@ -236,14 +236,18 @@ async function main() {
     const CONTRACTS = new Set(['decoder', 'registry', 'credit']);
     for (const [k, v] of Object.entries(d)) {
       if (!CONTRACTS.has(k) || typeof v !== 'string') {
-        console.log(`  ...  ${k.padEnd(9)} ${v}`);
+        // The recorded constructor arguments are a kilobyte of hex. Printing them in full buries
+        // the findings this whole report exists to surface.
+        // Above an address's 42 characters, so addresses still print in full.
+        const shown = typeof v === 'string' && v.length > 44 ? `${v.slice(0, 12)}…${v.slice(-6)} (${v.length} chars)` : v;
+        console.log(`  ...  ${k.padEnd(12)} ${shown}`);
         continue;
       }
       // An address written in a file is not a contract. Redeploy elsewhere, or keep a stale file,
       // and every script downstream aims confidently at nothing.
       const code = await cc3.getCode(v);
       if (code === '0x') problems++;
-      console.log(`  ${code === '0x' ? 'FAIL' : 'ok  '} ${k.padEnd(9)} ${v}`);
+      console.log(`  ${code === '0x' ? 'FAIL' : 'ok  '} ${k.padEnd(12)} ${v}`);
     }
 
     // A credit contract holds the registry it was deployed against, and nothing keeps that in step
