@@ -1,5 +1,4 @@
 import { Contract, formatEther, parseEther } from 'ethers';
-import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
 import 'dotenv/config';
 import {
   CC3_RPC,
@@ -11,6 +10,7 @@ import {
   requirePrivateKey,
 } from './config';
 import { readDeployments, registryAt, signer } from './lib/contracts';
+import { chainInfoAt } from './lib/chain';
 import { scopeFor, scanScope, eventKey, Metric } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, findOmission, refuteClaim } from './lib/claims';
@@ -30,10 +30,10 @@ async function main() {
 
   const wallet = signer(CC3_RPC, CC3_CHAIN_ID, requirePrivateKey());
   const registry = registryAt(d.registry, wallet);
-  const chainInfo = new Contract(CHAIN_INFO, chainInfoAbi as any, wallet.provider!);
+  const chainInfo = chainInfoAt(wallet.provider!);
   const ck = CHAIN_KEY.mainnet;
 
-  const frontier = Number((await chainInfo.get_latest_attestation_height_and_hash(ck))[0]);
+  const frontier = Number((await chainInfo.getLatestAttestedHeightAndHash(ck)).height);
   const toBlock = frontier - 30;
   const fromBlock = toBlock - RANGE_BLOCKS + 1;
 

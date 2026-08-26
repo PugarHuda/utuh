@@ -1,4 +1,5 @@
-import { JsonRpcProvider } from 'ethers';
+import type { Provider } from 'ethers';
+import type { JsonRpcApiProvider } from 'ethers';
 import { chainInfo, blockProver } from '@gluwa/usc-sdk';
 import { CHAIN_INFO_ADDRESS } from '../config';
 
@@ -12,16 +13,19 @@ import { CHAIN_INFO_ADDRESS } from '../config';
 ///
 /// The Solidity side keeps its own `IChainInfo`, because a contract cannot import a TypeScript
 /// class and the on-chain call has to be snake_case to match the ABI.
-export function chainInfoAt(provider: JsonRpcProvider): chainInfo.PrecompileChainInfoProvider {
-  return new chainInfo.PrecompileChainInfoProvider(provider, CHAIN_INFO_ADDRESS);
+/// Takes any ethers provider. The SDK wants a `JsonRpcApiProvider` specifically and every caller
+/// here has one — a `Wallet`'s provider is typed as the wider `Provider`, so the narrowing happens
+/// once, here, rather than as a cast at each of six call sites.
+export function chainInfoAt(provider: Provider): chainInfo.PrecompileChainInfoProvider {
+  return new chainInfo.PrecompileChainInfoProvider(provider as JsonRpcApiProvider, CHAIN_INFO_ADDRESS);
 }
 
 /// The Block Prover precompile, through the SDK rather than through a hand-held ABI.
 ///
 /// `verifySingle` and `verifyBatch` are `view` twins of the emitting forms, which is what makes
 /// the entire proving path exercisable over `eth_call` with an empty wallet — see `npm run probe`.
-export function blockProverAt(provider: JsonRpcProvider): blockProver.PrecompileBlockProver {
-  return new blockProver.PrecompileBlockProver(provider);
+export function blockProverAt(provider: Provider): blockProver.PrecompileBlockProver {
+  return new blockProver.PrecompileBlockProver(provider as JsonRpcApiProvider);
 }
 
 /// Is `height` attested for `chainKey` yet?
@@ -31,7 +35,7 @@ export function blockProverAt(provider: JsonRpcProvider): blockProver.Precompile
 /// `is_height_attested` on the SDK provider, and there does not need to be: the frontier answers
 /// the same question and is worth printing when it says no.
 export async function attested(
-  provider: JsonRpcProvider,
+  provider: Provider,
   chainKey: number,
   height: number,
 ): Promise<{ ok: boolean; frontier: number }> {

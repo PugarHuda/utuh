@@ -1,5 +1,4 @@
 import { Contract, formatEther, formatUnits, parseEther, getAddress, zeroPadValue } from 'ethers';
-import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
 import 'dotenv/config';
 import {
   CC3_RPC,
@@ -13,6 +12,7 @@ import {
   requirePrivateKey,
 } from './config';
 import { readDeployments, registryAt, creditAt, signer } from './lib/contracts';
+import { chainInfoAt } from './lib/chain';
 import { scopeFor, scanScope, Metric, type Scope, type ScopedEvent } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, refuteClaim } from './lib/claims';
@@ -32,13 +32,13 @@ async function main() {
   const wallet = signer(CC3_RPC, CC3_CHAIN_ID, requirePrivateKey());
   const registry = registryAt(d.registry, wallet);
   const credit = creditAt(d.credit, wallet);
-  const chainInfo = new Contract(CHAIN_INFO, chainInfoAbi as any, wallet.provider!);
+  const chainInfo = chainInfoAt(wallet.provider!);
   const ck = CHAIN_KEY.mainnet;
   const eth = source(ck);
   const prover = Prover.withDefaults(ck, 60000);
   const minWindow = Number(await registry.MIN_CHALLENGE_WINDOW());
 
-  const frontier = Number((await chainInfo.get_latest_attestation_height_and_hash(ck))[0]);
+  const frontier = Number((await chainInfo.getLatestAttestedHeightAndHash(ck)).height);
   const toBlock = frontier - FRONTIER_LAG;
   const fromBlock = toBlock - HISTORY_BLOCKS;
   console.log(`Ethereum mainnet attested up to ${frontier}`);

@@ -1,5 +1,4 @@
 import { Contract, JsonRpcProvider } from 'ethers';
-import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
 import 'dotenv/config';
 import {
   CC3_RPC,
@@ -10,6 +9,7 @@ import {
   sources,
 } from './config';
 import { Prover } from './lib/proofs';
+import { chainInfoAt } from './lib/chain';
 
 /// Prove the same transaction both ways, and time it.
 ///
@@ -31,8 +31,8 @@ async function main() {
   if (chainKey === undefined) throw new Error(`unknown chain ${which} — use sepolia or mainnet`);
 
   const cc3 = new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
-  const chainInfo = new Contract(CHAIN_INFO_ADDRESS, chainInfoAbi as any, cc3);
-  const frontier = Number((await chainInfo.get_latest_attestation_height_and_hash(chainKey))[0]);
+  const chainInfo = chainInfoAt(cc3);
+  const frontier = Number((await chainInfo.getLatestAttestedHeightAndHash(chainKey)).height);
 
   // Step back from the frontier so the block is comfortably attested, then take a real
   // transaction out of it. Nothing is hardcoded, so there is no fixture here to go stale.

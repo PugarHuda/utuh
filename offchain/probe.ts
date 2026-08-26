@@ -1,17 +1,16 @@
-import { Contract, JsonRpcProvider } from 'ethers';
-import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
-import blockProverAbi from '@gluwa/usc-sdk/dist/block-prover/block_prover.json';
+import { JsonRpcProvider } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, USDC, TRANSFER_SIG, source } from './config';
+import { chainInfoAt, blockProverAt } from './lib/chain';
 import { scopeFor, scanScope, Metric } from './lib/scope';
 import { Prover, planBatches } from './lib/proofs';
 
 const BLOCK_PROVER = '0x0000000000000000000000000000000000000FD2';
-const CHAIN_INFO = '0x0000000000000000000000000000000000000fD3';
 
-/// Both `verify` overloads take five arguments, so ethers cannot pick one by arity — the batch
-/// form has to be named by its full signature.
-const BATCH_VERIFY = 'verify(uint64,uint64[],bytes[],(bytes32,(bytes32,bool)[])[],(bytes32,bytes32[]))';
+/// Both `verify` overloads take five arguments, so ethers cannot pick one by arity. The SDK's
+/// `PrecompileBlockProver.verifyBatch` names the batch form by its full signature —
+/// `verify(uint64,uint64[],bytes[],(bytes32,(bytes32,bool)[])[],(bytes32,bytes32[]))` — which is
+/// the one thing this script had to work out by hand before it used the SDK's client.
 
 /// Read-only validation of the proving path, before any CTC is spent.
 ///
@@ -26,8 +25,8 @@ async function main() {
   const cc3 = new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
   const ck = CHAIN_KEY.mainnet;
 
-  const chainInfo = new Contract(CHAIN_INFO, chainInfoAbi as any, cc3);
-  const frontier = Number((await chainInfo.get_latest_attestation_height_and_hash(ck))[0]);
+  const chainInfo = chainInfoAt(cc3);
+  const frontier = Number((await chainInfo.getLatestAttestedHeightAndHash(ck)).height);
 
   const toBlock = frontier - 30;
   const fromBlock = toBlock - 60;
@@ -62,8 +61,9 @@ async function main() {
   const prover = Prover.withDefaults(ck, 60000);
   await prover.waitAttested(toBlock);
 
-  const bp = new Contract(BLOCK_PROVER, blockProverAbi as any, cc3);
-  const batchVerify = bp.getFunction(BATCH_VERIFY);
+  // The SDK's own precompile client, rather than an ABI held by hand. `verifyBatch` is the view
+  // twin of the emitting form, which is what lets this whole script run on an empty wallet.
+  const bp = blockProverAt(cc3);
 
   let checked = 0;
   for (const [i, batch] of batches.entries()) {
@@ -73,13 +73,7 @@ async function main() {
     const blocks = new Set(heights).size;
     const txCount = new Set(batch.map((e) => e.txHash)).size;
 
-    const ok = await batchVerify.staticCall(
-      ck,
-      heights,
-      proofs.map((p) => p.encodedTransaction),
-      merkleProofs,
-      continuity,
-    );
+    const ok = await bp.verifyBatch(ck, heights, proofs.map((p) => p.encodedTransaction), merkleProofs, continuity);
     console.log(
       `\nbatch ${i + 1}: ${proofs.length} queries across ${txCount} tx and ${blocks} block(s), ` +
         `${continuity.roots.length} shared continuity roots -> verify=${ok}`,
@@ -87,7 +81,7 @@ async function main() {
     if (!ok) throw new Error('batch verification returned false');
 
     for (let j = 0; j < proofs.length; j++) {
-      const txIndex = await bp.calculateTxIndex(merkleProofs[j]);
+      const txIndex = await bp.computeTransactionIndex(merkleProofs[j]);
       const key = (BigInt(heights[j]) << 96n) | (BigInt(txIndex) << 32n) | BigInt(proofs[j].logIndex);
       console.log(`  block ${heights[j]} tx#${txIndex} log#${proofs[j].logIndex}  key=${key}`);
       checked++;

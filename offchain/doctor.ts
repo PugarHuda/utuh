@@ -1,5 +1,4 @@
 import { Contract, JsonRpcProvider, formatEther } from 'ethers';
-import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
 import 'dotenv/config';
 import {
   CC3_RPC,
@@ -14,6 +13,7 @@ import {
   requirePrivateKey,
 } from './config';
 import { signer, readDeployments } from './lib/contracts';
+import { chainInfoAt } from './lib/chain';
 import { Prover } from './lib/proofs';
 
 /// Check that the things this depends on are actually there.
@@ -79,14 +79,14 @@ async function main() {
     console.log(`  FAIL  ${CC3_RPC}  ${e.shortMessage ?? e.message}`);
   }
 
-  const chainInfo = new Contract(CHAIN_INFO_ADDRESS, chainInfoAbi as any, cc3);
+  const chainInfo = chainInfoAt(cc3);
 
   for (const [name, key] of Object.entries(CHAIN_KEY)) {
     console.log(`\n${name} (chain key ${key})`);
 
     let frontier = 0;
     try {
-      frontier = Number((await chainInfo.get_latest_attestation_height_and_hash(key))[0]);
+      frontier = Number((await chainInfo.getLatestAttestedHeightAndHash(key)).height);
       console.log(`  ok    attested to block ${frontier}`);
     } catch (e: any) {
       problems++;
