@@ -225,7 +225,19 @@ calldata = bytes12("utuh:control") || <creditcoin account>
 One ordinary transaction from the subject address carrying exactly that. `proveControl` verifies
 it through the Block Prover and reads the sender out of the decoded transaction — no signature
 scheme of our own, no trusted relayer. The tag stops the commitment colliding with real calldata,
-and naming the account inside it stops anyone replaying someone else's commitment.
+and naming the account inside it stops anyone binding a stranger's address to their own account.
+
+**Each commitment may be applied once**, and that is not bookkeeping. A subject can move their
+binding by sending a second commitment naming a different account — which is how anyone rotates
+away from a Creditcoin account they no longer control. The proof of the *first* commitment stays
+valid forever, and anyone may submit it. Without a used-marker the binding is therefore whichever
+proof was replayed most recently, not whichever the subject meant: an attacker holding the
+rotated-away account puts it back at will, including in front of the subject's own `openLine`.
+Creditcoin's own `USCBase` records processed queries for exactly this reason, and this did not
+until it was found. `controlIdOf` keys on the chain and the encoded transaction — which carries
+its own signature — and deliberately not on the block height, so a reorg that moved the same
+transaction cannot make the same commitment usable twice. `npm run control` and `npm run full`
+both replay the commitment they just used and require `ControlProofAlreadyUsed`.
 
 Any supported source chain will do: an EOA address derives from its public key and is identical on
 all of them, so Sepolia gas proves exactly as much as mainnet gas.

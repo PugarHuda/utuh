@@ -59,7 +59,7 @@ jobs:
       # deterministic, and the 5% left is for compiler and toolchain drift, far below what any
       # real regression costs on a path that spends hundreds of thousands of gas.
       - name: gas snapshot
-        run: forge snapshot --check --tolerance 5 --no-match-test "testFuzz" || (echo "::error::gas moved more than 5% — run 'forge snapshot --no-match-test testFuzz' and commit .gas-snapshot" && exit 1)
+        run: forge snapshot --check --tolerance 5 --no-match-test "testFuzz" || (echo "::error::the gas snapshot is out of date — either gas moved more than 5%, or a test was added without regenerating it. Run 'forge snapshot --no-match-test testFuzz' and commit .gas-snapshot" && exit 1)
 
   offchain:
     name: offchain
