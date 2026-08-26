@@ -28,6 +28,10 @@ import { isTransportFailure } from './lib/gasLimit';
 const POLL_MS = Number(process.env.WATCH_POLL_MS ?? 20_000);
 const LOOKBACK = Number(process.env.WATCH_LOOKBACK ?? 5_000);
 /// Where the watcher remembers how far it has read. See `resumeFrom`.
+///
+/// One file per watcher. Two processes watching the same registry with the same state file will
+/// overwrite each other's mark — the worse case being a lower mark winning, which repeats work
+/// rather than skipping it, but neither is a race worth having. Give each its own `WATCH_STATE`.
 const STATE_FILE = process.env.WATCH_STATE ?? '.watch-state.json';
 /// CC3's RPC gives up on a wide eth_getLogs after ten seconds, so the catch-up sweep is chunked
 /// the same way the source-chain sweep is.
