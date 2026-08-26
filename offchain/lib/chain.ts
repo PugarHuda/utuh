@@ -103,11 +103,20 @@ export interface SupportedChain {
 /// The only transaction encoding this reads: EvmV1Decoder's, and the local builder's.
 const SUPPORTED_ENCODING = 1;
 
-let cached: Promise<SupportedChain[]> | null = null;
+/// Keyed by the network, not left global.
+///
+/// A single cache would have served the first network's answer to every later provider — and the
+/// whole point of asking is that the answer differs between Creditcoin networks. Nothing here talks
+/// to two at once today; caching as though the answer were universal is how that stops being true
+/// quietly.
+const cached = new Map<string, Promise<SupportedChain[]>>();
 
-/// The mapping, read once per process.
-export function supportedChains(provider: Provider): Promise<SupportedChain[]> {
-  cached ??= chainInfoAt(provider)
+/// The mapping, read once per network per process.
+export async function supportedChains(provider: Provider): Promise<SupportedChain[]> {
+  const key = String((await provider.getNetwork()).chainId);
+  const existing = cached.get(key);
+  if (existing) return existing;
+  const pending = chainInfoAt(provider)
     .getSupportedChains()
     .then((chains) =>
       chains.map((c) => ({
@@ -118,7 +127,8 @@ export function supportedChains(provider: Provider): Promise<SupportedChain[]> {
         encoding: Number(c.chainEncoding),
       })),
     );
-  return cached;
+  cached.set(key, pending);
+  return pending;
 }
 
 /// Check the hardcoded assumptions against the chain, and say precisely which one is wrong.

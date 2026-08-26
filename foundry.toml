@@ -6,6 +6,9 @@ test = "test"
 solc = "0.8.28"
 optimizer = true
 optimizer_runs = 200
+# test/fixtures holds real proven transaction bytes captured from Sepolia — see
+# ControlTransactionTest. This was dead config once, removed, and is live again now that it is used.
+fs_permissions = [{ access = "read", path = "./test/fixtures" }]
 via_ir = false
 
 [rpc_endpoints]

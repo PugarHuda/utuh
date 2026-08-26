@@ -447,6 +447,10 @@ contract ExposedCredit is UtuhCredit {
     function readCommitment(bytes memory data) external pure returns (bool ok, address account) {
         return _readCommitment(data);
     }
+
+    function readControlTx(bytes calldata encodedTransaction) external pure returns (address subject, address account) {
+        return _readControlTx(encodedTransaction);
+    }
 }
 
 /// @notice The control commitment, read the way `proveControl` reads it.
@@ -719,5 +723,85 @@ contract LenderWithdrawTest is Test {
         vm.expectRevert(UtuhCredit.NothingToWithdraw.selector);
         lender.withdrawTo(ELSEWHERE, 1 ether + 1);
         assertEq(credit.available(), 1 ether);
+    }
+}
+
+/// @notice What a proven transaction has to be before it can bind an address.
+/// @dev The bytes here are real: two Sepolia transactions the Block Prover has already vouched
+///      for, captured from the recorded full-flow run and stored as they came back. One is the
+///      borrower's control commitment; the other is an ordinary settlement, which is what a
+///      transaction that is *not* a commitment looks like. Neither can go stale — they are
+///      history.
+contract ControlTransactionTest is Test {
+    ExposedCredit internal credit;
+
+    address constant AAVE = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
+    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address constant BORROWER = 0x01a802C650ccceF077208A93c1cF43025239003f;
+
+    bytes internal control;
+    bytes internal settlement;
+
+    function setUp() public {
+        string memory json = vm.readFile("test/fixtures/encodedTransactions.json");
+        control = vm.parseJsonBytes(json, ".control");
+        settlement = vm.parseJsonBytes(json, ".settlement");
+
+        UtuhRegistry registry = new UtuhRegistry(25);
+        UtuhCredit.HistorySpec[] memory clean = new UtuhCredit.HistorySpec[](1);
+        clean[0] = _spec(3, 0);
+        credit = new ExposedCredit(registry, _policy(), _spec(2, 0), clean, _spec(1, 2));
+    }
+
+    function _spec(uint8 subjectTopic, uint8 counterpartyTopic)
+        internal
+        pure
+        returns (UtuhCredit.HistorySpec memory s)
+    {
+        s.chainKey = 1;
+        s.emitter = AAVE;
+        s.eventSig = keccak256("Repay(address,address,address,uint256,bool)");
+        s.subjectTopic = subjectTopic;
+        s.counterpartyTopic = counterpartyTopic;
+        s.counterparty = counterpartyTopic == 0 ? address(0) : USDC;
+        s.metric = EventScope.Metric.DATA_WORD;
+        s.metricArg = 0;
+    }
+
+    function _policy() internal pure returns (UtuhCredit.Policy memory) {
+        return UtuhCredit.Policy({
+            volumeUnitInCtc: 15_000_000_000_000,
+            minUnderwritingWindow: 25,
+            minHistoryBlocks: 216_000,
+            maxStalenessBlocks: 50_400,
+            repaymentBps: 10_500,
+            repayWindowBlocks: 400
+        });
+    }
+
+    /// The real commitment, read the way proveControl reads it: the sender comes out of bytes the
+    /// prover vouched for, and the account comes out of the calldata inside them.
+    function test_aRealCommitmentNamesItsSenderAndItsAccount() public view {
+        (address subject, address account) = credit.readControlTx(control);
+        assertEq(subject, BORROWER, "the sender is not the address that sent it");
+        assertEq(account, BORROWER, "the bound account is not the one in the calldata");
+    }
+
+    /// An ordinary transaction is not a commitment, however well proven it is. This is the check
+    /// that stops any proven transaction from binding an address.
+    function test_anOrdinaryTransactionIsNotACommitment() public {
+        vm.expectRevert(UtuhCredit.NotAControlCommitment.selector);
+        credit.readControlTx(settlement);
+    }
+
+    /// Bytes that are not an encoded transaction at all.
+    function test_bytesThatAreNotATransactionAreRefused() public {
+        vm.expectRevert();
+        credit.readControlTx(hex"deadbeef");
+    }
+
+    function test_emptyBytesAreRefused() public {
+        vm.expectRevert();
+        credit.readControlTx("");
     }
 }

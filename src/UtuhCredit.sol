@@ -383,7 +383,16 @@ contract UtuhCredit {
     }
 
     /// @dev Everything here is read out of bytes the prover has already vouched for.
-    function _readControlTx(bytes calldata encodedTransaction) private pure returns (address subject, address account) {
+    /// @dev `internal` for the same reason {_readCommitment} is: this decides what a proven
+    ///      transaction means, and reaching it through {proveControl} goes through `0x0FD2`, which
+    ///      no local test can execute. Its three refusals — an unsupported transaction type, a
+    ///      transaction that reverted on the source chain, and calldata that is not a commitment —
+    ///      had no test at all until it could be called directly.
+    function _readControlTx(bytes calldata encodedTransaction)
+        internal
+        pure
+        returns (address subject, address account)
+    {
         uint8 txType = EvmV1Decoder.getTransactionType(encodedTransaction);
         if (!EvmV1Decoder.isValidTransactionType(txType)) revert UnsupportedTransactionType(txType);
 

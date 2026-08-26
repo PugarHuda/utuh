@@ -2,7 +2,7 @@
 
 **A completeness layer for the Attestcoin Protocol, and undercollateralized credit built on it.**
 
-*utuh* — Indonesian: whole, intact, with nothing missing.
+_utuh_ — Indonesian: whole, intact, with nothing missing.
 
 Built for BUIDL CTC 2026 Fall on Creditcoin.
 
@@ -12,19 +12,19 @@ Built for BUIDL CTC 2026 Fall on Creditcoin.
 
 ## The problem
 
-The Attestcoin Protocol proves that a source-chain transaction *happened*. A Merkle proof places
+The Attestcoin Protocol proves that a source-chain transaction _happened_. A Merkle proof places
 the transaction in a block; a continuity proof anchors that block to an attestation stored on
 Creditcoin. The Block Prover precompile at `0x0FD2` checks both natively, synchronously, inside a
 single Creditcoin block.
 
-What it cannot prove is that a *set* of events is complete.
+What it cannot prove is that a _set_ of events is complete.
 
 Whoever submits proofs chooses which proofs to submit. Every one of them verifies. Nothing in the
 protocol notices the ones that were left out.
 
 For credit, that gap is fatal. The sentence every on-chain credit system needs is:
 
-> *This borrower has never been liquidated.*
+> _This borrower has never been liquidated._
 
 That is a statement about events which do not exist, and an inclusion proof can only ever speak
 about events which do. A borrower assembles their own history, submits the flattering half, and
@@ -43,20 +43,20 @@ illustration of the gap, because it is the reference every builder will start fr
 
 Each event proves itself as it happens. `_markLoanAsFunded` and `_noteLoanRepayment` take one
 proven transaction each; `USCBase.execute` verifies it through `0x0FD2` and records the query so
-it cannot be replayed. Every *present* fact is cryptographic, and that part is sound.
+it cannot be replayed. Every _present_ fact is cryptographic, and that part is sound.
 
 Two things follow from proving one event at a time, and neither is a defect in the tutorial:
 
 - Nothing asks whether the set is complete. That is fine when the loan is already registered on
   chain and the contract knows exactly which events it is waiting for. It stops being fine the
-  moment the question is *"has this borrower ever been liquidated"* — because that question is
+  moment the question is _"has this borrower ever been liquidated"_ — because that question is
   about events nobody submitted, and no number of inclusion proofs answers it.
 - Default is declared, not proven. `markLoanAsExpired` is `onlyOwner`. Somebody trusted says the
   loan went bad. For a tutorial that is the honest simplification; for underwriting a stranger it
   is the whole problem moved one layer up.
 
 Utuh is the layer that would sit under such a contract: a bonded claim that a set of events is
-*all* of them, refutable by anyone with one proof of one omitted event. Presence stays
+_all_ of them, refutable by anyone with one proof of one omitted event. Presence stays
 cryptographic exactly as above. Absence becomes economic, which is the most that can be had.
 
 ## What Utuh does
@@ -70,7 +70,7 @@ can only ever contain events that provably happened, so its aggregate cannot be 
 
 **Nothing omitted.** The claimant bonds the assertion that the set is complete. Anyone may break
 the claim by proving a single in-scope event the set does not contain. Absence is never proven — a
-claim of absence is *refuted by presence*, which Attestcoin does prove.
+claim of absence is _refuted by presence_, which Attestcoin does prove.
 
 ```
 presence  →  cryptographic   (Merkle + continuity, verified by 0x0FD2)
@@ -79,27 +79,27 @@ absence   →  economic        (bonded assertion, refutable by one proof)
 
 ### What scales, and what does not
 
-*Settling* a claim is O(1): the registry never verifies a whole set, so a claim spanning ten
+_Settling_ a claim is O(1): the registry never verifies a whole set, so a claim spanning ten
 thousand events is broken by a single proof or by none at all.
 
-*Building* one is not. `npm run gas` measures it rather than reasoning about it — it finds every
+_Building_ one is not. `npm run gas` measures it rather than reasoning about it — it finds every
 transaction a registry has ever seen from the registry's own logs, reads the receipts, and fits a
 cost model. No explorer involved. Across the four registries deployed so far, 139 transactions:
 
-| Call | Gas (mean) | % of a 75M block |
-|---|---|---|
-| `open` | 252,750 | 0.33% |
-| `seal` | 206,010 | 0.27% |
-| `appendBatch` (1 event) | 552,956 | 0.73% |
-| `appendBatch` (2 events) | 893,903 | 1.19% |
-| `appendBatch` (10 events) | 2,662,045 | 3.54% |
-| `refute` | 611,556 | 0.81% |
-| `finalize` | 209,258 | 0.27% |
-| `withdraw` | 205,870 | 0.27% |
+| Call                      | Gas (mean) | % of a 75M block |
+| ------------------------- | ---------- | ---------------- |
+| `open`                    | 252,750    | 0.33%            |
+| `seal`                    | 206,010    | 0.27%            |
+| `appendBatch` (1 event)   | 552,956    | 0.73%            |
+| `appendBatch` (2 events)  | 893,903    | 1.19%            |
+| `appendBatch` (10 events) | 2,662,045  | 3.54%            |
+| `refute`                  | 611,556    | 0.81%            |
+| `finalize`                | 209,258    | 0.27%            |
+| `withdraw`                | 205,870    | 0.27%            |
 
 Member count alone does not explain those. One append of **three** events cost 541,464 gas while
-an append of **two** cost 878,903, because the cost follows the *size of the transactions being
-proven*, not how many events sit inside them. A least-squares fit over all 36 appends, against the
+an append of **two** cost 878,903, because the cost follows the _size of the transactions being
+proven_, not how many events sit inside them. A least-squares fit over all 36 appends, against the
 call's own calldata gas and its member count:
 
 ```
@@ -146,7 +146,7 @@ if (!CHAIN_INFO.is_height_attested(scope.chainKey, toBlock)) revert RangeNotAtte
 ```
 
 Without that gate, a claimant could cover a range whose tail is not yet attested, and the window
-would expire on a claim nobody was *able* to refute. Attestation heights only advance, so once
+would expire on a claim nobody was _able_ to refute. Attestation heights only advance, so once
 `toBlock` is attested the whole range stays provable for the life of the claim.
 
 A second detail: a refuter receives half the slashed bond, not all of it. If they took the whole
@@ -195,10 +195,10 @@ Ethereum. The only thing that crosses is proof.
 Underwriting rests on two claims that are adversarial in **opposite** directions, which is what
 makes the pair sound:
 
-| Claim | Assertion | Who benefits from a lie | Defence |
-|---|---|---|---|
-| **Volume** | proven Aave USDC repayments | inflating it | every member verified by `0x0FD2` on append |
-| **Clean** | complete set of liquidations, normally empty | omitting one | bond, refutable by one liquidation proof |
+| Claim      | Assertion                                    | Who benefits from a lie | Defence                                     |
+| ---------- | -------------------------------------------- | ----------------------- | ------------------------------------------- |
+| **Volume** | proven Aave USDC repayments                  | inflating it            | every member verified by `0x0FD2` on append |
+| **Clean**  | complete set of liquidations, normally empty | omitting one            | bond, refutable by one liquidation proof    |
 
 ```
 limit = min( 20% of proven volume × the lender's rate , 10 × the bond behind the clean claim )
@@ -237,7 +237,7 @@ and naming the account inside it stops anyone binding a stranger's address to th
 
 **Each commitment may be applied once**, and that is not bookkeeping. A subject can move their
 binding by sending a second commitment naming a different account — which is how anyone rotates
-away from a Creditcoin account they no longer control. The proof of the *first* commitment stays
+away from a Creditcoin account they no longer control. The proof of the _first_ commitment stays
 valid forever, and anyone may submit it. Without a used-marker the binding is therefore whichever
 proof was replayed most recently, not whichever the subject meant: an attacker holding the
 rotated-away account puts it back at will, including in front of the subject's own `openLine`.
@@ -270,7 +270,7 @@ line, so one underwriting funds one line and the cap bounds aggregate exposure r
 line separately. A line's deadline is fixed by its first draw and never moves — otherwise a
 borrower who owes money could buy an unlimited extension by drawing one more wei. And each
 settlement consumes the source-chain range it rests on, tracked per subject in `settledThrough`,
-because marking a *claim* spent does not stop a *payment* being spent twice: two lines, two claims
+because marking a _claim_ spent does not stop a _payment_ being spent twice: two lines, two claims
 over overlapping ranges, one transfer inside both.
 
 ### Default without proving a negative
@@ -293,28 +293,28 @@ Deploying refuses to overwrite an existing record without `REDEPLOY=1`. The addr
 the ones in it, all verified; `npm run demo` used to begin by replacing them, so following this
 file to record a demonstration quietly made everything published about them false.
 
-Blockscout reports a *partial* match: the runtime bytecode agrees and the trailing metadata hash
+Blockscout reports a _partial_ match: the runtime bytecode agrees and the trailing metadata hash
 does not, which is what happens when the compilation environment is not reproduced byte for byte.
 The code is readable and the functions are callable.
 
 ### Mainnet-sourced deployment
 
-| Contract | Address |
-|---|---|
+| Contract       | Address                                                                                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `UtuhRegistry` | [`0x8FA0BD5301D998Be873E31453E53d114929a5Fac`](https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac?tab=contract) |
-| `UtuhCredit` | [`0x94fC0579701c62a271EC128D904d2A2F8796c86c`](https://creditcoin-testnet.blockscout.com/address/0x94fC0579701c62a271EC128D904d2A2F8796c86c?tab=contract) |
+| `UtuhCredit`   | [`0x94fC0579701c62a271EC128D904d2A2F8796c86c`](https://creditcoin-testnet.blockscout.com/address/0x94fC0579701c62a271EC128D904d2A2F8796c86c?tab=contract) |
 | `EvmV1Decoder` | [`0x5cab00c032D7d4436f312Dd51ef59Dc5b860df3F`](https://creditcoin-testnet.blockscout.com/address/0x5cab00c032D7d4436f312Dd51ef59Dc5b860df3F?tab=contract) |
 
 `npm run credit` runs against these, on Ethereum mainnet data.
 
 ### Sepolia-sourced deployment — the completed loop
 
-| Contract | Address |
-|---|---|
-| `UtuhRegistry` | [`0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac`](https://creditcoin-testnet.blockscout.com/address/0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac?tab=contract) |
-| `UtuhCredit` | [`0x17299EC7B75B1B148C4d61B6503bde73B70aaddd`](https://creditcoin-testnet.blockscout.com/address/0x17299EC7B75B1B148C4d61B6503bde73B70aaddd?tab=contract) |
-| `EvmV1Decoder` | [`0xEEF4094b3848eD261478310a949c4A1E42d28571`](https://creditcoin-testnet.blockscout.com/address/0xEEF4094b3848eD261478310a949c4A1E42d28571?tab=contract) |
-| `SettlementLedger` (Sepolia) | [`0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D`](https://eth-sepolia.blockscout.com/address/0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D?tab=contract) |
+| Contract                     | Address                                                                                                                                                   |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UtuhRegistry`               | [`0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac`](https://creditcoin-testnet.blockscout.com/address/0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac?tab=contract) |
+| `UtuhCredit`                 | [`0x17299EC7B75B1B148C4d61B6503bde73B70aaddd`](https://creditcoin-testnet.blockscout.com/address/0x17299EC7B75B1B148C4d61B6503bde73B70aaddd?tab=contract) |
+| `EvmV1Decoder`               | [`0xEEF4094b3848eD261478310a949c4A1E42d28571`](https://creditcoin-testnet.blockscout.com/address/0xEEF4094b3848eD261478310a949c4A1E42d28571?tab=contract) |
+| `SettlementLedger` (Sepolia) | [`0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D`](https://eth-sepolia.blockscout.com/address/0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D?tab=contract)        |
 
 Everything below is readable at those addresses rather than taken on trust — `claim(id)`,
 `memberCount(id)`, `keyAt(id, i)`, `enforceableLoss(id)`, `line(1)` and `settledThrough(subject)`
@@ -436,7 +436,7 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 81 forge tests
+npm run test                # 85 forge tests
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -457,7 +457,7 @@ npm run finish -- <registry> <credit> <lineId>             # resume an interrupt
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
 npm run bait                # seal a deliberately short claim for the watcher to find
-npm run livetest            # 91 guards asserted against the live chain, refunds included
+npm run livetest            # 95 guards asserted against the live chain, refunds included
 
 npm run demo                # e2e then credit, against the deployment already recorded
 ```
@@ -470,39 +470,39 @@ CTC for CC3 Testnet comes from the Creditcoin Discord `#token-faucet` channel:
 
 ### Configuration
 
-| Variable | Default | Notes |
-|---|---|---|
-| `PRIVATE_KEY` | — | required |
-| `CC3_RPC` | `https://rpc.cc3-testnet.creditcoin.network` | chain id 102031 |
-| `PROVER_URL` | `https://prover.cc3-testnet.creditcoin.network` | hosted Proof Builder |
-| `MAINNET_RPC` | `https://gateway.tenderly.co/public/mainnet` | see below |
-| `MIN_CHALLENGE_WINDOW` | `25` | Creditcoin blocks, deploy-time floor |
-| `VOLUME_UNIT_IN_CTC` | `15000000000000` | CTC wei per USDC unit; the lender's stated rate |
-| `CONTROL_CHAIN_KEY` | `1` (Sepolia) | which source chain to send the control commitment on |
-| `MAINNET_RPCS` / `SEPOLIA_RPCS` | bundled list | comma-separated; **replaces** the defaults |
-| `*_RPCS_EXTRA` | — | comma-separated; adds to whatever is in use |
-| `SOURCE_TIMEOUT_MS` | `25000` | how long one endpoint gets before it counts as absent |
-| `PROBE_DEPTH` | `60000` | how far back `doctor` asks; deep enough to cross an archive cutoff |
-| `ALLOW_SINGLE_SOURCE` | unset | let `npm run full` seal on one endpoint when two will not answer |
-| `MIN_HISTORY_BLOCKS` | `216000` | lender policy: how much history an underwriting must cover |
-| `MAX_STALENESS_BLOCKS` | `50400` | lender policy: how recently it must end |
-| `REPAYMENT_BPS` | `10500` | lender policy: what a draw must repay, in basis points |
-| `REPAY_WINDOW_BLOCKS` | `5760` | lender policy: how long the borrower has |
-| `LENDER_MAINNET` | Binance hot wallet | where repayment must land on Ethereum |
-| `RESUME_SCAN` | `200` | how many claims back `npm run finish` looks for one this line already built |
-| `FORCE_MODELLED_GAS` | unset | skip estimation entirely, so the fallback gas model is the one under test |
-| `WAIT_ATTESTED_MS` | `900000` | how long to wait for the attestation frontier to reach a block |
-| `GAS_LOOKBACK` / `GAS_LOG_CHUNK` | `100000` / `2000` | how far back `npm run gas` reads, and its chunk size |
-| `PROVER_TIMEOUT_MS` | `30000` | `doctor` only; the prover is a separate service with its own latency |
-| `LIVE_SUBJECT` / `LIVE_FROM` / `LIVE_SPAN` | discovered / head−3040 / 400 | pin `livetest` to one address or window instead of letting it find a busy one |
-| `WATCH_POLL_MS` / `WATCH_LOOKBACK` / `WATCH_LOG_CHUNK` | `20000` / `5000` / `2000` | watcher cadence, how far back it looks with no saved state, and its log-scan chunk |
-| `WATCH_STATE` | `.watch-state.json` | where the watcher records how far it has read and what is still unresolved — one file per watcher, or two will overwrite each other's mark |
-| `BOND` / `BAIT_FROM` | `2` CTC / `toBlock−3000` | what `npm run bait` stakes, and where it looks for an event to hide |
-| `SUBJECT` / `RANGE_BLOCKS` / `MAX_MEMBERS` | derived / `60` / `12` | who and how much `npm run e2e` builds a claim over |
-| `DEPLOYMENTS` | `deployments.json` | which deployment record to read and write — `deployments.full.json` holds the one `npm run full` made |
-| `REDEPLOY` | unset | required to overwrite an existing deployment record |
-| `LEDGER` | — | a source-chain ledger to verify, when the record does not name one |
-| `EXPLORER_URL` / `SEPOLIA_EXPLORER_URL` | Blockscout | where `npm run verify` submits |
+| Variable                                               | Default                                         | Notes                                                                                                                                      |
+| ------------------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PRIVATE_KEY`                                          | —                                               | required                                                                                                                                   |
+| `CC3_RPC`                                              | `https://rpc.cc3-testnet.creditcoin.network`    | chain id 102031                                                                                                                            |
+| `PROVER_URL`                                           | `https://prover.cc3-testnet.creditcoin.network` | hosted Proof Builder                                                                                                                       |
+| `MAINNET_RPC`                                          | `https://gateway.tenderly.co/public/mainnet`    | see below                                                                                                                                  |
+| `MIN_CHALLENGE_WINDOW`                                 | `25`                                            | Creditcoin blocks, deploy-time floor                                                                                                       |
+| `VOLUME_UNIT_IN_CTC`                                   | `15000000000000`                                | CTC wei per USDC unit; the lender's stated rate                                                                                            |
+| `CONTROL_CHAIN_KEY`                                    | `1` (Sepolia)                                   | which source chain to send the control commitment on                                                                                       |
+| `MAINNET_RPCS` / `SEPOLIA_RPCS`                        | bundled list                                    | comma-separated; **replaces** the defaults                                                                                                 |
+| `*_RPCS_EXTRA`                                         | —                                               | comma-separated; adds to whatever is in use                                                                                                |
+| `SOURCE_TIMEOUT_MS`                                    | `25000`                                         | how long one endpoint gets before it counts as absent                                                                                      |
+| `PROBE_DEPTH`                                          | `60000`                                         | how far back `doctor` asks; deep enough to cross an archive cutoff                                                                         |
+| `ALLOW_SINGLE_SOURCE`                                  | unset                                           | let `npm run full` seal on one endpoint when two will not answer                                                                           |
+| `MIN_HISTORY_BLOCKS`                                   | `216000`                                        | lender policy: how much history an underwriting must cover                                                                                 |
+| `MAX_STALENESS_BLOCKS`                                 | `50400`                                         | lender policy: how recently it must end                                                                                                    |
+| `REPAYMENT_BPS`                                        | `10500`                                         | lender policy: what a draw must repay, in basis points                                                                                     |
+| `REPAY_WINDOW_BLOCKS`                                  | `5760`                                          | lender policy: how long the borrower has                                                                                                   |
+| `LENDER_MAINNET`                                       | Binance hot wallet                              | where repayment must land on Ethereum                                                                                                      |
+| `RESUME_SCAN`                                          | `200`                                           | how many claims back `npm run finish` looks for one this line already built                                                                |
+| `FORCE_MODELLED_GAS`                                   | unset                                           | skip estimation entirely, so the fallback gas model is the one under test                                                                  |
+| `WAIT_ATTESTED_MS`                                     | `900000`                                        | how long to wait for the attestation frontier to reach a block                                                                             |
+| `GAS_LOOKBACK` / `GAS_LOG_CHUNK`                       | `100000` / `2000`                               | how far back `npm run gas` reads, and its chunk size                                                                                       |
+| `PROVER_TIMEOUT_MS`                                    | `30000`                                         | `doctor` only; the prover is a separate service with its own latency                                                                       |
+| `LIVE_SUBJECT` / `LIVE_FROM` / `LIVE_SPAN`             | discovered / head−3040 / 400                    | pin `livetest` to one address or window instead of letting it find a busy one                                                              |
+| `WATCH_POLL_MS` / `WATCH_LOOKBACK` / `WATCH_LOG_CHUNK` | `20000` / `5000` / `2000`                       | watcher cadence, how far back it looks with no saved state, and its log-scan chunk                                                         |
+| `WATCH_STATE`                                          | `.watch-state.json`                             | where the watcher records how far it has read and what is still unresolved — one file per watcher, or two will overwrite each other's mark |
+| `BOND` / `BAIT_FROM`                                   | `2` CTC / `toBlock−3000`                        | what `npm run bait` stakes, and where it looks for an event to hide                                                                        |
+| `SUBJECT` / `RANGE_BLOCKS` / `MAX_MEMBERS`             | derived / `60` / `12`                           | who and how much `npm run e2e` builds a claim over                                                                                         |
+| `DEPLOYMENTS`                                          | `deployments.json`                              | which deployment record to read and write — `deployments.full.json` holds the one `npm run full` made                                      |
+| `REDEPLOY`                                             | unset                                           | required to overwrite an existing deployment record                                                                                        |
+| `LEDGER`                                               | —                                               | a source-chain ledger to verify, when the record does not name one                                                                         |
+| `EXPLORER_URL` / `SEPOLIA_EXPLORER_URL`                | Blockscout                                      | where `npm run verify` submits                                                                                                             |
 
 Two endpoints per chain is the floor for sealing a claim, not a comfortable margin — lose one and
 claims stop being sealable until it returns. The bundled defaults are ones checked to actually
@@ -546,7 +546,7 @@ Every registry write now goes through `sendRegistryCall`, in this order:
 
 Step 1 has a consequence worth spelling out. `buildClaim` drops an event the registry rejects,
 because one the registry will not take is one no refuter could use against the claim either — and
-adding `eth_call` in front of every append meant a *timeout* could now reach that same code path.
+adding `eth_call` in front of every append meant a _timeout_ could now reach that same code path.
 An RPC that failed to answer has said nothing about the event, and dropping it there seals a claim
 short of a real member and forfeits the bond for it. So only a decoded revert counts as a
 rejection; anything else aborts. It is the prover's 404 problem again, one layer down, and it
@@ -645,8 +645,8 @@ floor of 20 blocks — under four minutes — a refuter driving the local path a
 very little room. The floor exists so a demonstration can watch a window elapse; it is not a
 setting to underwrite against.
 
-Two details decide whether the fallback is real or decorative. It needs whole blocks *with
-receipts*, and `eth_getBlockReceipts` is a method plenty of public endpoints decline — so the
+Two details decide whether the fallback is real or decorative. It needs whole blocks _with
+receipts_, and `eth_getBlockReceipts` is a method plenty of public endpoints decline — so the
 local builder reads through every configured endpoint rather than one, and `npm run doctor` asks
 each of them for that method by name, every run.
 
@@ -661,7 +661,7 @@ The second is that absence now arrives in two dialects. A claimant may drop a ca
 the chain definitely does not have it, and the hosted service says that with a `404` while the
 local builder says `Transaction 0x… not found`. Two of the local builder's messages read like
 absence and are not — `Transaction 0x… not found in block N` and `Block N not found for
-transaction 0x…` are a *sibling* transaction or the block itself failing to load from the source
+transaction 0x…` are a _sibling_ transaction or the block itself failing to load from the source
 endpoints. Reading either as absence would let a claimant drop an event that is really there and
 forfeit the bond, so only the exact form counts, and only when **every** prover consulted agrees.
 One answering while the other is unreachable is not agreement.
@@ -673,7 +673,7 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-81 tests, 9 of them fuzzed, over the half that can run in a plain EVM: ordering and scope matching
+85 tests, 9 of them fuzzed, over the half that can run in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
 record as a payment; and in `UtuhCredit.t.sol` the guards that decide whose history a line may be
 opened against — deployment floors, scope identity, the lender's liquidity, and the control
@@ -702,14 +702,19 @@ against the live CC3 Testnet with real proofs for real Ethereum mainnet transact
 e2e`, `npm run credit` and `npm run livetest` are the tests, and they either pass on the real chain
 or they do not pass at all.
 
-`forge coverage` says 100% of `EventScope.sol` and `SettlementLedger.sol`, 43% of
-`UtuhCredit.sol`, and **9.6% of `UtuhRegistry.sol`**. That last number is worth stating rather than
+Of the 51 errors these contracts can revert with, 15 are named by a unit test and 14 by the live
+suite. The remaining 22 are all behind `openLine`, which is behind `proveControl`, which is behind
+`0x0FD2`: reaching them means a real line on a real chain, so the live suite reaches what it can —
+a settled line refuses a draw, a second settlement and a default, and an unopened line refuses a
+draw — and the rest are reached only by the full loop's happy path.
+
+`forge coverage` says 100% of `EventScope.sol` and `SettlementLedger.sol`, 49% of `UtuhCredit.sol`, and **9.6% of `UtuhRegistry.sol`**. That last number is worth stating rather than
 leaving to be discovered: almost every path in the registry begins at `open`, `open` asks `0x0FD3`
 whether the range is attested, and that call cannot execute in a local EVM. Everything reachable
 without a precompile is covered; everything else is covered live, on chain, where a stub could not
 have lied about it.
 
-`npm run livetest` is the one that reaches furthest: 91 guards, most of them `staticCall`s that
+`npm run livetest` is the one that reaches furthest: 95 guards, most of them `staticCall`s that
 prove a revert without spending gas, plus the steps that have to be real for the later ones to
 mean anything. It underwrites whichever address the source chain says was busiest in its window,
 which is a deliberate change — it used to underwrite a wallet derived from the operator's key,
@@ -719,20 +724,20 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 81 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 85 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings**, which is only worth stating alongside what it was allowed to look
 for.
 
 Five detectors are off in `slither.config.json`, and none of them are off because they were
 inconvenient:
 
-| Detector | Why |
-|---|---|
+| Detector            | Why                                                                                                                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `naming-convention` | The ChainInfo precompile's ABI is snake_case; the interface has to match it or the calls do not resolve. Immutables are SCREAMING_CASE by house style. |
-| `assembly` | One block, in `_readCommitment`, reading a 32-byte word out of calldata. |
-| `low-level-calls` | `_pay` uses `.call{value:}` because that is the recommended way to send ether. |
-| `calls-loop` | Both loops are bounded — `MAX_BATCH` is 10, and the clean-claim loop runs once per class the lender configured at deployment. |
-| `solc-version` | Pinned at 0.8.28. |
+| `assembly`          | One block, in `_readCommitment`, reading a 32-byte word out of calldata.                                                                               |
+| `low-level-calls`   | `_pay` uses `.call{value:}` because that is the recommended way to send ether.                                                                         |
+| `calls-loop`        | Both loops are bounded — `MAX_BATCH` is 10, and the clean-claim loop runs once per class the lender configured at deployment.                          |
+| `solc-version`      | Pinned at 0.8.28.                                                                                                                                      |
 
 Everything else stays on, and `fail_on: medium` means a new medium-or-worse finding fails the
 build. The four findings that were real judgments rather than categories — two `arbitrary-send-eth`
@@ -746,7 +751,7 @@ at the line, with the reasoning in the source next to them rather than in a conf
   back into the EVM at all.
 
 One finding was not a false positive and is fixed: `SettlementLedger.settle` took a payee without
-checking for the zero address. A call to the zero address *succeeds* and burns the value, so the
+checking for the zero address. A call to the zero address _succeeds_ and burns the value, so the
 ledger would have stood behind a `Settled` event for ether nobody received — and a lender whose
 `HistorySpec` leaves the counterparty unpinned would have been counting burns as proven volume.
 
@@ -777,28 +782,28 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 
 ## Attestcoin surface used
 
-| Piece | Where |
-|---|---|
-| Batch `verifyAndEmit` on `0x0FD2` | `appendBatch` — up to 10 queries, one shared continuity proof |
-| Single `verifyAndEmit` on `0x0FD2` | `refute` — a refutation only ever needs one |
-| `calculateTxIndex` on `0x0FD2` | ordering key, taken from the proof rather than the caller |
-| `EvmV1Decoder` receipt + log decoding | scope matching against verified bytes |
-| receipt status check | inclusion is not success; a reverted transaction is still in its block |
-| Single `verifyAndEmit` on `0x0FD2` | `proveControl` — binding an address to an account |
-| `decodeCommonTxFields` | reading a control commitment's sender and calldata |
-| `is_height_attested` on `0x0FD3` | the gate that makes challenge windows sound |
-| `get_latest_attestation_height_and_hash` | underwriting staleness bound |
-| `get_attestation_genesis_height` | lower bound on claimable ranges |
-| `get_supported_chains` on `0x0FD3` | checking the chain keys this build assumes against the ones the network attests |
-| `PrecompileChainInfoProvider` | waiting for attestation without asking a hosted service |
-| `RawProofBuilder` over source RPCs | proofs built locally when the hosted Proof Builder is down |
-| `PrecompileBlockProver` | `npm run probe` — the `view` twin of `verifyAndEmit`, over `eth_call` |
-| `utils.gas.MAX_GAS_CAP` / `gasAsPercentageOfMax` | `npm run gas` — what a call costs against a 75M block |
+| Piece                                            | Where                                                                           |
+| ------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Batch `verifyAndEmit` on `0x0FD2`                | `appendBatch` — up to 10 queries, one shared continuity proof                   |
+| Single `verifyAndEmit` on `0x0FD2`               | `refute` — a refutation only ever needs one                                     |
+| `calculateTxIndex` on `0x0FD2`                   | ordering key, taken from the proof rather than the caller                       |
+| `EvmV1Decoder` receipt + log decoding            | scope matching against verified bytes                                           |
+| receipt status check                             | inclusion is not success; a reverted transaction is still in its block          |
+| Single `verifyAndEmit` on `0x0FD2`               | `proveControl` — binding an address to an account                               |
+| `decodeCommonTxFields`                           | reading a control commitment's sender and calldata                              |
+| `is_height_attested` on `0x0FD3`                 | the gate that makes challenge windows sound                                     |
+| `get_latest_attestation_height_and_hash`         | underwriting staleness bound                                                    |
+| `get_attestation_genesis_height`                 | lower bound on claimable ranges                                                 |
+| `get_supported_chains` on `0x0FD3`               | checking the chain keys this build assumes against the ones the network attests |
+| `PrecompileChainInfoProvider`                    | waiting for attestation without asking a hosted service                         |
+| `RawProofBuilder` over source RPCs               | proofs built locally when the hosted Proof Builder is down                      |
+| `PrecompileBlockProver`                          | `npm run probe` — the `view` twin of `verifyAndEmit`, over `eth_call`           |
+| `utils.gas.MAX_GAS_CAP` / `gasAsPercentageOfMax` | `npm run gas` — what a call costs against a 75M block                           |
 
 Two SDK modules are deliberately unused, which is worth saying so it does not read as an oversight.
 `queryBuilder` builds ABIs for the oracle's query subsystem, and Utuh does not go through it — it
 calls the Block Prover precompile directly, which is a layer below. `utils.decoder` decodes EVM v1
-transactions off-chain; Utuh decodes them *on*-chain through `EvmV1Decoder`, because an off-chain
+transactions off-chain; Utuh decodes them _on_-chain through `EvmV1Decoder`, because an off-chain
 decode is a claim about bytes and an on-chain one is a check of them. The one thing an off-chain
 decode would have bought — knowing a call will succeed before paying for it — is bought more
 cheaply by the `eth_call` in `sendRegistryCall`.
@@ -808,7 +813,7 @@ cheaply by the `eth_call` in `sendRegistryCall`.
 
 - Claim members are held as a storage array so refutation is a binary search the chain runs
   itself, with no witness a claimant could withhold. What caps a claim is not that array, though —
-  measured, the cost follows the *bytes of the transactions being proven* at about twice their
+  measured, the cost follows the _bytes of the transactions being proven_ at about twice their
   calldata gas, and a ten-thousand-event claim is thirty blocks' worth. Beyond the point where
   that is affordable, the array becomes an incremental Merkle root and the refuter supplies an
   adjacency proof of the two members bracketing the gap.
@@ -840,7 +845,7 @@ cheaply by the `eth_call` in `sendRegistryCall`.
   from building anything. The Block Prover decides what exists: an event nobody can prove cannot
   be appended and cannot be refuted with either, so dropping it is not an omission.
 
-  Dropping is only safe on a *definite* answer, though, and the SDK returns "no such transaction"
+  Dropping is only safe on a _definite_ answer, though, and the SDK returns "no such transaction"
   and "I could not reach the prover" in the same shape — `success: false` with a message. They are
   told apart by what each prover said, in its own dialect, and only when every prover consulted
   agrees; see [The prover was the last single point of failure](#the-prover-was-the-last-single-point-of-failure).
@@ -859,7 +864,7 @@ cheaply by the `eth_call` in `sendRegistryCall`.
 - **A watcher only retires a claim on a verdict that cannot change.** Refuted, settled by someone
   else, proven complete by two or more endpoints, or past its window. Anything short of that —
   every endpoint down, an RPC hiccup mid-sweep, a refutation lost to a front-run — leaves the
-  claim queued for the next pass. An earlier version marked claims checked *before* inspecting
+  claim queued for the next pass. An earlier version marked claims checked _before_ inspecting
   them, so a transient outage during the minute a claim sealed made that claim invisible for good;
   and an unguarded `await` meant one failed refutation killed the process. A watcher that dies on
   its first lost race is not a watcher. Claims are also worked soonest-deadline-first, because one
@@ -882,7 +887,7 @@ cheaply by the `eth_call` in `sendRegistryCall`.
 - **A watcher's silence is only as good as its sources.** Deciding a claim is complete means
   trusting some node to have mentioned every log — the protocol's own problem, one layer down.
   Voting across endpoints would not fix it, since they can be wrong together or captured. What
-  makes it tractable is that a refutation verifies itself: if *any* endpoint surfaces an event the
+  makes it tractable is that a refutation verifies itself: if _any_ endpoint surfaces an event the
   claim omits, the Block Prover settles whether it is real, and a fabricated one just fails to
   prove. So `watch.ts` sweeps every endpoint it has and takes the union rather than a vote, and no
   endpoint has to be trusted for the positive case. The negative stays soft, and is reported that
@@ -892,11 +897,11 @@ cheaply by the `eth_call` in `sendRegistryCall`.
   blocks:
 
   | depth below head | publicnode | tenderly |
-  |---|---|---|
-  | 100 | 27 | 27 |
-  | 5,000 | 31 | 31 |
-  | 20,000 | 24 | 24 |
-  | 60,000 | **0** | 22 |
+  | ---------------- | ---------- | -------- |
+  | 100              | 27         | 27       |
+  | 5,000            | 31         | 31       |
+  | 20,000           | 24         | 24       |
+  | 60,000           | **0**      | 22       |
 
   An archive cutoff served as an empty result rather than an error, and intermittently — the same
   endpoint agreed at that depth twenty minutes later. Underwriting sweeps two hundred thousand
@@ -918,7 +923,7 @@ cheaply by the `eth_call` in `sendRegistryCall`.
   non-indexed data either, which rules out protocols that keep the subject out of their topics.
   Composition is now handled a level up: a lender configures as many adverse-event classes as it
   cares about and `openLine` demands one finalized, empty claim for each, capping exposure at the
-  *weakest* of them. A spotless Aave record no longer says anything about Compound unless the
+  _weakest_ of them. A spotless Aave record no longer says anything about Compound unless the
   lender asked about Compound.
 
 - **Honest claims pay watchers nothing, and there is no fix for that here.** A refutation earns

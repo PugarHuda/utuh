@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from 'node:fs';
 import {
   makeError,
   Wallet,
@@ -36,6 +37,8 @@ import { runScript } from './lib/cli';
 /// to mean anything are sent for real.
 ///
 ///   npm run livetest -- [registry] [credit]
+
+const NL = String.fromCharCode(10);
 
 let passed = 0;
 let failed = 0;
@@ -113,7 +116,7 @@ async function main() {
   // strongest endpoint will serve it — at which point the two-source minimum stops the suite for
   // reasons that have nothing to do with what it is testing.
   const anchor = process.env.LIVE_FROM ? Number(process.env.LIVE_FROM) : head - 3_040;
-  const fromBlock = anchor;
+  let fromBlock = anchor;
   const toBlock = Math.min(anchor + Number(process.env.LIVE_SPAN ?? 400), head - 40);
 
   // Find a subject that actually has a history in this window, rather than asserting one.
@@ -124,7 +127,14 @@ async function main() {
   // all. A hardcoded borrower would only move the problem: addresses go quiet, and a fixture that
   // rots fails the suite for a reason that has nothing to do with the registry. So ask the chain
   // who was active in this exact range and take the busiest answer.
-  const subject = process.env.LIVE_SUBJECT ?? (await busiestSubject(eth, spec, fromBlock, toBlock));
+  let subject: string;
+  if (process.env.LIVE_SUBJECT) {
+    subject = process.env.LIVE_SUBJECT;
+  } else {
+    const found = await busiestSubject(eth, spec, fromBlock, toBlock);
+    subject = found.subject;
+    fromBlock = found.fromBlock;
+  }
   console.log(`subject ${subject}`);
   const scope: Scope = await scopeFor(credit, 'volume', subject);
 
@@ -173,6 +183,46 @@ async function main() {
         failed++;
         console.log(`  FAIL  ${name} → ${got ? 'accepted' : 'discarded'}, expected the opposite`);
       }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // The line lifecycle's refusals, against a line that really exists.
+  //
+  // Everything past `openLine` is behind `proveControl`, and that is behind `0x0FD2`, so a local
+  // test cannot reach any of it. The completed loop left a real settled line on chain, though, and
+  // a settled line is exactly the state in which draw, settle and markDefault must all refuse.
+  // `staticCall` asks without spending anything.
+  {
+    const full = existsSync('deployments.full.json')
+      ? (JSON.parse(readFileSync('deployments.full.json', 'utf8')) as { credit?: string })
+      : {};
+    if (!full.credit) {
+      console.log(`${NL}no completed loop recorded — skipping the line lifecycle guards`);
+    } else {
+      console.log('');
+      console.log(`refusals on a settled line (${full.credit})`);
+      const settledCredit = creditAt(full.credit, owner);
+      const line = await settledCredit.line(1);
+      console.log(`  line 1 is ${['None', 'Active', 'Settled', 'Defaulted'][Number(line.status)]}`);
+
+      // `draw` checks who is asking before it checks the line's state, which is the right order
+      // and is worth pinning: this suite is not the borrower, so it never reaches the status. The
+      // first version of this asserted WrongLineStatus and was asserting the wrong thing.
+      await expectRevert('a stranger drawing on a settled line', 'NotBorrower', () =>
+        settledCredit.draw.staticCall(1, 1n),
+      );
+      await expectRevert('settling a settled line again', 'WrongLineStatus', () =>
+        settledCredit.settle.staticCall(1, 4),
+      );
+      await expectRevert('defaulting a settled line', 'WrongLineStatus', () =>
+        settledCredit.markDefault.staticCall(1),
+      );
+      // An unopened line has no borrower, so nobody is its borrower — a better answer than a
+      // status complaint about a line that does not exist.
+      await expectRevert('drawing on a line that was never opened', 'NotBorrower', () =>
+        settledCredit.draw.staticCall(9_999, 1n),
+      );
     }
   }
 
@@ -654,24 +704,52 @@ function readClaimId(registry: any, receipt: any): bigint {
 /// Only the emitter, the signature and the spec's pinned counterparty are filtered on — the
 /// subject slot is left open, which is the one query a real claim never makes. Nothing here is
 /// asserted; it only picks the fixture the rest of the suite then treats as untrusted input.
-async function busiestSubject(eth: JsonRpcProvider, spec: any, fromBlock: number, toBlock: number): Promise<string> {
+async function busiestSubject(
+  eth: JsonRpcProvider,
+  spec: any,
+  fromBlock: number,
+  toBlock: number,
+): Promise<{ subject: string; fromBlock: number }> {
   const subjectSlot = Number(spec.subjectTopic);
   const counterpartySlot = Number(spec.counterpartyTopic);
   const topics: (string | null)[] = [spec.eventSig, null, null, null];
   if (counterpartySlot > 0) topics[counterpartySlot] = zeroPadValue(getAddress(spec.counterparty), 32);
   while (topics.length && topics[topics.length - 1] === null) topics.pop();
 
-  const logs = await eth.getLogs({ address: spec.emitter, topics, fromBlock, toBlock });
+  // Widen until somebody qualifies, rather than failing on how busy the chain happened to be.
+  //
+  // A fixed window found nobody with two repayments often enough to matter: the suite then failed
+  // with a message about LIVE_SPAN, which is accurate and is still a suite that fails for reasons
+  // that have nothing to do with the registry. Aave's rate varies by the hour; the window should
+  // follow it. Each attempt doubles the range, and the last one is wide enough that finding
+  // nobody would mean Aave had stopped.
   const tally = new Map<string, number>();
-  for (const l of logs) {
-    const t = l.topics[subjectSlot];
-    if (t) tally.set(t, (tally.get(t) ?? 0) + 1);
+  let span = toBlock - fromBlock;
+  let from = fromBlock;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const logs = await eth.getLogs({ address: spec.emitter, topics, fromBlock: from, toBlock });
+    tally.clear();
+    for (const l of logs) {
+      const t = l.topics[subjectSlot];
+      if (t) tally.set(t, (tally.get(t) ?? 0) + 1);
+    }
+    const best = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (best && best[1] >= 2) {
+      if (attempt > 0) console.log(`  widened to ${toBlock - from} blocks to find a subject with a history`);
+      // The range comes back with the subject. Returning only the address meant the claim below
+      // still swept the original window, where the subject found in a widened one has fewer
+      // events than the suite needs — a failure the widening itself created.
+      return { subject: getAddress('0x' + best[0].slice(26)), fromBlock: from };
+    }
+    span *= 2;
+    from = Math.max(0, toBlock - span);
   }
-  const best = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (!best || best[1] < 2) {
-    throw new Error(`no address has 2+ events in ${fromBlock}..${toBlock} — widen LIVE_SPAN or set LIVE_SUBJECT`);
-  }
-  return getAddress('0x' + best[0].slice(26));
+
+  throw new Error(
+    `no address has 2+ ${spec.emitter} events in the ${toBlock - from} blocks before ${toBlock} — ` +
+      `set LIVE_SUBJECT to one you know of`,
+  );
 }
 
 /// ethers `Result` objects are frozen, so a case that varies one field has to copy first.
