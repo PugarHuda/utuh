@@ -220,6 +220,7 @@ contract UtuhCredit {
     error RepaymentShort(uint256 proven, uint256 required);
     error BadSubjectTopic(uint8 topic);
     error TransferFailed();
+    error NoPayee();
     error ProofRejected();
     error TransactionFailedOnSource(uint8 receiptStatus);
     error UnsupportedTransactionType(uint8 txType);
@@ -301,11 +302,24 @@ contract UtuhCredit {
 
     /// @notice Take back liquidity that has not been drawn.
     function withdraw(uint256 amount) external {
+        withdrawTo(msg.sender, amount);
+    }
+
+    /// @notice Take back undrawn liquidity, to somewhere other than the lender's own address.
+    ///
+    /// @dev {LENDER} is `msg.sender` at construction and immutable, and every payout went to it
+    ///      directly. A lender that is a contract without a payable fallback — a vault, a multisig
+    ///      of the wrong shape — could therefore fund this and never get the money back out:
+    ///      `fund` accepts, `withdraw` reverts with {TransferFailed}, forever, with no recourse.
+    ///      Deciding where your own capital lands is not a privilege worth withholding, and the
+    ///      authority check is unchanged: only the lender may call this at all.
+    function withdrawTo(address to, uint256 amount) public {
         if (msg.sender != LENDER) revert NotLender();
+        if (to == address(0)) revert NoPayee();
         if (amount == 0 || amount > available) revert NothingToWithdraw();
         available -= amount;
         emit Withdrawn(amount);
-        _pay(msg.sender, amount);
+        _pay(to, amount);
     }
 
     // ------------------------------------------------------------------
@@ -623,13 +637,19 @@ contract UtuhCredit {
         if (rc.fromBlock < required) revert RepaymentAlreadyCounted(rc.fromBlock, required);
 
         if (claimSpent[repayClaimId]) revert ClaimAlreadySpent(repayClaimId);
-        claimSpent[repayClaimId] = true;
-        settledThrough[l.subject] = rc.toBlock + 1;
 
-        _requireUsable(repayClaimId, l.drawn / BOND_MULTIPLE);
-
+        // {backingFor} rather than a bare division. Integer division would ask the repayment claim
+        // to be backed by less enforceable loss than the drawn amount implies, which is the same
+        // rounding {openLine} had — fixed there and missed here, since the two are the same
+        // question asked at either end of a line.
+        _requireUsable(repayClaimId, backingFor(l.drawn));
         if (rc.aggregate < l.repayRequired) revert RepaymentShort(rc.aggregate, l.repayRequired);
 
+        // Effects after every check, the way the rest of this contract is written. Nothing above
+        // can revert once these are set, so the ordering was never a bug — but a reader should not
+        // have to prove that to themselves.
+        claimSpent[repayClaimId] = true;
+        settledThrough[l.subject] = rc.toBlock + 1;
         l.status = LineStatus.Settled;
         emit Settled(lineId, repayClaimId, rc.aggregate);
     }

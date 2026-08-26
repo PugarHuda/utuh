@@ -566,3 +566,139 @@ contract ControlCommitmentTest is Test {
         assertEq(read, address(0));
     }
 }
+
+/// @notice A lender that cannot receive ether — a vault or a multisig of the wrong shape.
+/// @dev Not a stand-in for anything: it deploys the real contract and becomes its real LENDER,
+///      which is exactly the deployment that used to strand its own capital.
+contract LenderThatCannotReceive {
+    UtuhCredit public credit;
+
+    function deploy(
+        UtuhRegistry registry,
+        UtuhCredit.Policy memory policy,
+        UtuhCredit.HistorySpec memory volume,
+        UtuhCredit.HistorySpec[] memory clean,
+        UtuhCredit.HistorySpec memory repay
+    ) external {
+        credit = new UtuhCredit(registry, policy, volume, clean, repay);
+    }
+
+    function fund() external payable {
+        credit.fund{value: msg.value}();
+    }
+
+    function withdraw(uint256 amount) external {
+        credit.withdraw(amount);
+    }
+
+    function withdrawTo(address to, uint256 amount) external {
+        credit.withdrawTo(to, amount);
+    }
+
+    receive() external payable {
+        revert("no");
+    }
+}
+
+/// @notice Getting the lender's own capital back out.
+/// @dev LENDER is msg.sender at construction and immutable. Every payout went straight to it, so a
+///      lender that is a contract without a payable fallback could fund this and never recover the
+///      money: fund accepts, withdraw reverts, forever. withdrawTo is the way out, and these are
+///      the tests that say so.
+contract LenderWithdrawTest is Test {
+    UtuhRegistry internal registry;
+    address constant AAVE = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
+    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address constant ELSEWHERE = address(0xBEEF);
+
+    function setUp() public {
+        registry = new UtuhRegistry(25);
+    }
+
+    function _spec(uint8 subjectTopic, uint8 counterpartyTopic)
+        internal
+        pure
+        returns (UtuhCredit.HistorySpec memory s)
+    {
+        s.chainKey = 3;
+        s.emitter = AAVE;
+        s.eventSig = keccak256("Repay(address,address,address,uint256,bool)");
+        s.subjectTopic = subjectTopic;
+        s.counterpartyTopic = counterpartyTopic;
+        s.counterparty = counterpartyTopic == 0 ? address(0) : USDC;
+        s.metric = EventScope.Metric.DATA_WORD;
+        s.metricArg = 0;
+    }
+
+    function _policy() internal pure returns (UtuhCredit.Policy memory) {
+        return UtuhCredit.Policy({
+            volumeUnitInCtc: 15_000_000_000_000,
+            minUnderwritingWindow: 25,
+            minHistoryBlocks: 216_000,
+            maxStalenessBlocks: 50_400,
+            repaymentBps: 10_500,
+            repayWindowBlocks: 400
+        });
+    }
+
+    function _deployVia(LenderThatCannotReceive lender) internal returns (UtuhCredit) {
+        UtuhCredit.HistorySpec[] memory clean = new UtuhCredit.HistorySpec[](1);
+        clean[0] = _spec(3, 0);
+        lender.deploy(registry, _policy(), _spec(2, 0), clean, _spec(1, 2));
+        return lender.credit();
+    }
+
+    /// The deployment that used to strand its own money.
+    function test_aLenderThatCannotReceiveIsNotStranded() public {
+        LenderThatCannotReceive lender = new LenderThatCannotReceive();
+        UtuhCredit credit = _deployVia(lender);
+        assertEq(credit.LENDER(), address(lender), "the deployer is not the lender");
+
+        vm.deal(address(this), 5 ether);
+        lender.fund{value: 3 ether}();
+        assertEq(credit.available(), 3 ether);
+
+        // Paying itself is exactly what it cannot do.
+        vm.expectRevert(UtuhCredit.TransferFailed.selector);
+        lender.withdraw(1 ether);
+
+        // Naming somewhere else works, and the accounting follows.
+        lender.withdrawTo(ELSEWHERE, 1 ether);
+        assertEq(ELSEWHERE.balance, 1 ether, "the money did not arrive");
+        assertEq(credit.available(), 2 ether, "available did not follow the payout");
+    }
+
+    function test_onlyTheLenderMayDirectTheCapital() public {
+        LenderThatCannotReceive lender = new LenderThatCannotReceive();
+        UtuhCredit credit = _deployVia(lender);
+        vm.deal(address(this), 2 ether);
+        lender.fund{value: 1 ether}();
+
+        vm.expectRevert(UtuhCredit.NotLender.selector);
+        credit.withdrawTo(ELSEWHERE, 1 ether);
+    }
+
+    /// A payout to the zero address succeeds at the EVM level and burns the value, so it is
+    /// refused for the same reason SettlementLedger refuses it.
+    function test_theZeroAddressIsNotAWithdrawalTarget() public {
+        LenderThatCannotReceive lender = new LenderThatCannotReceive();
+        UtuhCredit credit = _deployVia(lender);
+        vm.deal(address(this), 2 ether);
+        lender.fund{value: 1 ether}();
+
+        vm.expectRevert(UtuhCredit.NoPayee.selector);
+        lender.withdrawTo(address(0), 1 ether);
+        assertEq(credit.available(), 1 ether, "a refused withdrawal moved the accounting");
+    }
+
+    function test_moreThanIsAvailableIsRefused() public {
+        LenderThatCannotReceive lender = new LenderThatCannotReceive();
+        UtuhCredit credit = _deployVia(lender);
+        vm.deal(address(this), 2 ether);
+        lender.fund{value: 1 ether}();
+
+        vm.expectRevert(UtuhCredit.NothingToWithdraw.selector);
+        lender.withdrawTo(ELSEWHERE, 1 ether + 1);
+        assertEq(credit.available(), 1 ether);
+    }
+}
