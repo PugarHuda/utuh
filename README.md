@@ -304,17 +304,27 @@ Everything below is readable at those addresses rather than taken on trust — `
 all answer to anyone. Claim 1 volume finalized at **0.003 ETH** over three payments, at Sepolia
 blocks 11568493, 11568495 and 11568496; claim 2 clean finalized with zero members; claim 3
 **Refuted** with `enforceableLoss` collapsed to 0; claim 4 repayment finalized at **0.000525 ETH**
-— and line 1 reads `Settled`. The borrower's sweep read `publicnode=3  tenderly=3`: two
+from Sepolia block 11568588 — and line 1 reads `Settled`, with `settledThrough` at 11568619. The borrower's sweep read `publicnode=3  tenderly=3`: two
 independent endpoints agreeing, and the claim built on the union rather than on whichever answered
 first. `burned()` on that registry reads 1 CTC, which is the refuted claimant's half that nobody
 collected.
 
-That run did not finish in one go — the process died during the fifteen-minute wait for Sepolia's
-attestation frontier to reach the repayment block, somewhere between the draw and the settlement.
-Nothing was lost, because nothing was being held in the script: `npm run finish -- <registry>
-<credit> 1` read the line's state off the chain, found the claims already built, and closed it.
-That is what `finishLine.ts` is for, and it is a better demonstration of the design than a clean
-run would have been.
+That run did not finish in one go, twice over, and both interruptions are worth recording because
+the chain absorbed them.
+
+The first: the process died during the long wait for Sepolia's attestation frontier to reach the
+repayment block, between the draw and the settlement. Nothing was lost, because nothing was being
+held in the script — `npm run finish -- <registry> <credit> 1` read the line's state off the chain
+and closed it. That is what `finishLine.ts` is for.
+
+The second was mine. I stopped a resume that looked stuck and started another, and the first was
+still running: **two processes built the same repayment claim.** Claim 4 and claim 5 hold the
+identical event — Sepolia block 11568588, tx 142, log 0 — and settlement took claim 4. Nothing
+broke, because a settlement consumes both the claim and the source-chain range it rests on:
+claim 5 could not settle the same line, and `settledThrough` at 11568619 means that payment cannot
+settle any other. The duplicate cost its author a bond locked until its own window closed, and
+nothing else. Two guards that were written for a lying claimant turned out to cover a clumsy
+honest one too.
 
 Three figures there are fixes made visible. The limit is **10 CTC** — `enforceableLoss` of 1 CTC
 times a `BOND_MULTIPLE` of 10 — and not the far larger number the 0.003 ETH of volume alone would
