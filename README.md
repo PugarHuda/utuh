@@ -358,6 +358,9 @@ to.
                             checks the hosted and local provers still agree, and reports what the
                             registry has cost. All three need no key and write nothing.
 slither.config.json         which detectors are off, with the reasons next to the code
+knip.json                   what counts as reachable; @gluwa/usc-contracts is imported from
+                            Solidity, which a TypeScript analyser cannot see
+.prettierrc.json            TypeScript formatting, enforced in CI the way forge fmt is
 .gas-snapshot               committed, and CI fails if gas moves more than 5%
 src/
   UtuhRegistry.sol          the completeness layer
@@ -370,6 +373,8 @@ test/
   EventScope.t.sol          the matcher, ordering key, metrics and leaf identity
   UtuhCredit.t.sol          deployment floors, control binding, scope identity, terms, liquidity
   SettlementLedger.t.sol    what the source-chain ledger will and will not record as a payment
+  EventScopeKey.symbolic.t.sol  halmos proofs of the ordering key, over every input rather
+                            than 256 samples — `npm run symbolic`
 offchain/
   deploy.ts                 deploy decoder, registry, credit
   e2e.ts                    honest claim finalized; dishonest claim refuted and slashed
@@ -385,11 +390,16 @@ offchain/
   provers.ts                the same proof hosted and locally, compared and timed
   gas.ts                    what the registry has cost, fitted from its own receipts
   balance.ts                wallet, chain and attestation status
+  probe.ts                  verify real mainnet events through 0x0FD2 over eth_call, no key
+  config.ts                 endpoints, chain keys, timeouts — everything the env can override
   lib/scope.ts              independent source-chain sweep
   lib/proofs.ts             hosted and local proof building, batched within Attestcoin's limits
   lib/gasLimit.ts           eth_call first, then estimate, then the measured model
   lib/chain.ts              the two precompiles, through the SDK's own clients
   lib/claims.ts             open, append, seal, find omissions, refute
+  lib/specs.ts              a UtuhCredit HistorySpec becomes a Scope, and scope equality
+  lib/policy.ts             the lender's deployment configuration, read by deploy and verify
+  lib/contracts.ts          artifacts, library linking, deployments.json
 ```
 
 ## Running it
@@ -404,6 +414,16 @@ npm run doctor              # are the endpoints, both provers and the precompile
 npm run verify              # publish contract sources to the block explorer
 npm run balance             # prints the faucet command if the account is empty
 npm run probe               # verifies real mainnet events on-chain — needs no CTC at all
+
+npm run check               # everything CI runs, in one command
+npm run build               # forge build
+npm run test                # 80 forge tests
+npm run lint                # forge lint over src/
+npm run fmt                 # forge fmt
+npm run format              # prettier over offchain/  (--check variant: npm run format:check)
+npm run typecheck           # tsc, ten strictness flags past `strict`
+npm run deadcode            # knip: unused files, exports, dependencies
+npm run symbolic            # halmos proofs of the ordering key (needs `pip install halmos`)
 npm run provers             # prove one transaction hosted and locally, and compare
 npm run gas                 # what the registry has really cost, fitted from its own receipts
 npm run slither             # static analysis; the config says which detectors are off and why
@@ -417,7 +437,7 @@ npm run finish -- <registry> <credit> <lineId>             # resume an interrupt
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
 npm run bait                # seal a deliberately short claim for the watcher to find
-npm run livetest            # 70 guards asserted against the live chain, refunds included
+npm run livetest            # 88 guards asserted against the live chain, refunds included
 
 npm run demo                # all three in sequence, for recording
 ```
@@ -606,7 +626,7 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-71 tests, 7 of them fuzzed, over the half that can run in a plain EVM: ordering and scope matching
+80 tests, 9 of them fuzzed, over the half that can run in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
 record as a payment; and in `UtuhCredit.t.sol` the guards that decide whose history a line may be
 opened against — deployment floors, scope identity, the lender's liquidity, and the control
@@ -642,7 +662,7 @@ whether the range is attested, and that call cannot execute in a local EVM. Ever
 without a precompile is covered; everything else is covered live, on chain, where a stub could not
 have lied about it.
 
-`npm run livetest` is the one that reaches furthest: 70 guards, most of them `staticCall`s that
+`npm run livetest` is the one that reaches furthest: 88 guards, most of them `staticCall`s that
 prove a revert without spending gas, plus the steps that have to be real for the later ones to
 mean anything. It underwrites whichever address the source chain says was busiest in its window,
 which is a deliberate change — it used to underwrite a wallet derived from the operator's key,
@@ -652,7 +672,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 71 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 80 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings**, which is only worth stating alongside what it was allowed to look
 for.
 
