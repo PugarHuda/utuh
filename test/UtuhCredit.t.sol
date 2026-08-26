@@ -512,6 +512,17 @@ contract ControlCommitmentTest is Test {
     /// A binding that can be replayed is not a binding. The subject can move theirs by sending a
     /// second commitment; if the first proof stays usable, anyone can put it back, and the binding
     /// becomes whichever proof was replayed most recently rather than whichever the subject meant.
+    /// The commitment layout is twelve bytes of tag then twenty of address, and `bytes12(...)`
+    /// truncates silently. Rename the tag to anything longer and every commitment ever issued
+    /// still parses, against a tag that is no longer the one the constant reads as.
+    function test_theTagIsExactlyTheTwelveBytesItReadsAs() public view {
+        assertEq(bytes(string("utuh:control")).length, 12, "the tag is not twelve bytes");
+        assertEq(credit.CONTROL_TAG(), bytes12(bytes("utuh:control")), "the tag was truncated or padded");
+        // And the commitment is exactly those twelve bytes followed by twenty of address.
+        bytes memory c = credit.controlCommitment(ACCOUNT);
+        assertEq(c.length, 32, "a commitment is not 32 bytes");
+    }
+
     function test_aControlIdIsOneTransactionOnOneChain() public view {
         bytes memory txA = abi.encodePacked("transaction-a");
         bytes memory txB = abi.encodePacked("transaction-b");

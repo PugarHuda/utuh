@@ -39,6 +39,14 @@ jobs:
       - name: formatting
         run: forge fmt --check
 
+      # The codebase already carried `forge-lint: disable-next-line` directives before anything ran
+      # the linter, which is a suppression nobody had checked. src/ only: a truncating cast in a
+      # test is a matter of how the test was written, not a property of what ships.
+      - name: lint
+        run: |
+          forge lint src/ 2>&1 | tee lint.txt
+          if grep -qE '^(warning|error)\[' lint.txt; then echo "::error::forge lint found something in src/"; exit 1; fi
+
       - name: build
         run: forge build --sizes
 

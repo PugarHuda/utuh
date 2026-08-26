@@ -80,6 +80,11 @@ contract UtuhCredit {
     uint64 public constant RECOMMENDED_UNDERWRITING_WINDOW = 5760; // ~24h
 
     /// @notice Tag that distinguishes a control commitment from ordinary calldata.
+    /// @dev "utuh:control" is exactly twelve bytes. A longer tag would be truncated here without
+    ///      a word of complaint, and the commitment layout — twelve bytes of tag then twenty of
+    ///      address — would stop meaning what {controlCommitment} says it means.
+    ///      `test_theTagIsExactlyTheTwelveBytesItReadsAs` is what keeps that honest.
+    // forge-lint: disable-next-line(unsafe-typecast)
     bytes12 public constant CONTROL_TAG = bytes12("utuh:control");
 
     /// @notice How far behind the attestation frontier an underwriting range may end.
@@ -391,6 +396,8 @@ contract UtuhCredit {
         assembly {
             word := mload(add(data, 0x20))
         }
+        // Truncation is the operation: the tag is the top twelve bytes of the word by definition.
+        // forge-lint: disable-next-line(unsafe-typecast)
         if (bytes12(word) != CONTROL_TAG) return (false, address(0));
         return (true, address(uint160(uint256(word))));
     }

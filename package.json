@@ -24,8 +24,9 @@
     "provers": "tsx offchain/provers.ts",
     "slither": "slither .",
     "fmt": "forge fmt",
-    "check": "forge fmt --check && forge test && tsc --noEmit -p tsconfig.json && slither .",
-    "gas": "tsx offchain/gas.ts"
+    "check": "forge fmt --check && forge lint src/ && forge test && tsc --noEmit -p tsconfig.json && slither .",
+    "gas": "tsx offchain/gas.ts",
+    "lint": "forge lint src/"
   },
   "keywords": [],
   "author": "",
