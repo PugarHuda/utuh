@@ -1,0 +1,67 @@
+name: pages
+
+# The console, published.
+#
+# It is a static page that talks to Creditcoin from the visitor's own browser, so hosting it needs
+# nothing but somewhere to put three files. This builds them from the artifacts of the commit being
+# published — the ABIs come out of `forge build` and the addresses out of the deployment record —
+# rather than from whatever happened to be in the tree when someone last remembered to rebuild.
+#
+# Nothing secret is involved and nothing is deployed on-chain. The published page holds no key.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One at a time, and let a run in flight finish: a half-published console is worse than a stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - run: npm ci
+
+      # The ABIs the page carries are the ones this commit compiles to. That is the whole reason
+      # this is a build step rather than a committed folder.
+      - name: build artifacts
+        run: forge build
+
+      - name: build the console
+        run: npm run web:static
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/static
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

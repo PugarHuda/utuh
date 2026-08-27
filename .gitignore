@@ -9,3 +9,4 @@ lint.txt
 web/dist/
 playwright-report/
 test-results/
+web/static/

@@ -24,10 +24,10 @@ export interface ProvenBatch {
   continuity: ContinuityProofStruct;
 }
 
-/// Attestcoin's batch endpoint shares one continuity proof across a batch, but only within these
-/// bounds. Both come from the SDK's own limits and are the reason claims are built incrementally
-/// rather than in one shot.
-const MAX_BATCH_SIZE = 10;
+/// Batch planning and its two limits live in `./batches`, which imports nothing but a type — the
+/// browser builds claims too, and this file reaches `process.env` through `../config` the moment it
+/// is imported. Re-exported because six files already ask for it here.
+export { planBatches } from './batches';
 
 /// How long to wait for the attestation frontier to reach a block, in milliseconds.
 ///
@@ -35,32 +35,6 @@ const MAX_BATCH_SIZE = 10;
 /// the tip has a real wait in front of it. Fifteen minutes is the hosted builder's own default and
 /// is generous enough for both source chains.
 const WAIT_ATTESTED_MS = Number(process.env.WAIT_ATTESTED_MS ?? 900_000);
-const MAX_BATCH_RANGE = 1000;
-
-/// Split events into batches the Block Prover will actually accept.
-///
-/// The cap is on *queries*, not transactions: a transaction carrying three in-scope logs spends
-/// three of the ten slots even though it needs only one proof. Counting transactions instead is
-/// how you earn `heights: Value is too large for length` from the precompile.
-export function planBatches(events: ScopedEvent[]): ScopedEvent[][] {
-  const batches: ScopedEvent[][] = [];
-  let current: ScopedEvent[] = [];
-  let firstBlock = 0;
-
-  for (const e of events) {
-    const wouldExceedQueries = current.length + 1 > MAX_BATCH_SIZE;
-    const wouldExceedRange = current.length > 0 && e.blockNumber - firstBlock + 1 > MAX_BATCH_RANGE;
-
-    if (current.length > 0 && (wouldExceedQueries || wouldExceedRange)) {
-      batches.push(current);
-      current = [];
-    }
-    if (current.length === 0) firstBlock = e.blockNumber;
-    current.push(e);
-  }
-  if (current.length > 0) batches.push(current);
-  return batches;
-}
 
 /// A block provider that asks every configured endpoint instead of one.
 ///

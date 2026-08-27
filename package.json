@@ -40,6 +40,7 @@
     "gas": "tsx offchain/gas.ts",
     "web:build": "esbuild web/main.ts --bundle --format=esm --target=es2022 --minify --outfile=web/dist/main.js",
     "web": "npm run web:build && tsx web/serve.ts",
+    "web:static": "tsx web/build-static.ts",
     "web:test": "playwright test",
     "lint": "forge lint src/",
     "format": "prettier --write \"offchain/**/*.ts\"",

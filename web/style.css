@@ -201,8 +201,53 @@ button.danger:hover:not(:disabled) {
   color: var(--dim);
 }
 
+#borrow-log:empty::before {
+  content: "nothing built yet";
+}
+
 .line {
   padding: 0.05rem 0;
+}
+
+.step {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 0.7rem;
+}
+
+.step.done {
+  opacity: 0.72;
+}
+
+.step-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.calldata {
+  margin: 0.4rem 0;
+  padding: 0.5rem 0.7rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font: 12.5px/1.5 ui-monospace, "SFMono-Regular", Menlo, monospace;
+  overflow-x: auto;
+}
+
+input {
+  font: inherit;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 7px;
+  padding: 0.4rem 0.6rem;
+  min-width: 12rem;
+  flex: 1 1 12rem;
+}
+
+.good {
+  color: var(--good);
 }
 
 .bad {

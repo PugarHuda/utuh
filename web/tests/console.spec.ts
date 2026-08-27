@@ -73,7 +73,14 @@ test('lists every claim the registry holds, with a status the contract could ret
   await boot(page);
   const rows = page.locator('[data-testid=claims-table] tbody tr');
   const count = await rows.count();
-  expect(count).toBeGreaterThan(0);
+
+  // A registry nobody has used yet is a real state — a fresh deployment has none — and the page
+  // has to say so rather than offer a sweep of nothing.
+  if (count === 0) {
+    await expect(page.locator('[data-testid=claim-select] option')).toHaveCount(0);
+    await expect(page.locator('[data-testid=sweep]')).toBeDisabled();
+    return;
+  }
 
   // Newest first, so ids run strictly downwards and never below one.
   let previous = Number.POSITIVE_INFINITY;
@@ -94,6 +101,9 @@ test('lists every claim the registry holds, with a status the contract could ret
 
 test('sweeps the source chain from the browser and reports what it found', async ({ page }) => {
   await boot(page);
+
+  const options = await page.locator('[data-testid=claim-select] option').count();
+  test.skip(options === 0, 'this registry holds no claims yet — nothing to sweep');
 
   // Whatever is at the top of the list — newest first, so this is the claim anyone watching a
   // window would actually be looking at.

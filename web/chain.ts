@@ -38,6 +38,22 @@ export function sourceEndpoints(chainKey: number): { url: string; provider: Json
   }));
 }
 
+/// What a statically-hosted build has baked into the page.
+///
+/// `npm run web` serves the ABIs and the deployment record over HTTP because the files are right
+/// there on disk. A static host has no server to do that, so `npm run web:static` writes them into
+/// the page itself, read from the same forge artifacts at build time. Either way the page holds the
+/// ABI the contracts were compiled with, and either way everything the page then *does* is a call
+/// to a public endpoint from the visitor's own browser.
+interface Baked {
+  abis: Abis;
+  deployments: Deployments;
+}
+
+function baked(): Baked | undefined {
+  return (globalThis as { __UTUH__?: Baked }).__UTUH__;
+}
+
 async function json<T>(path: string): Promise<T> {
   const res = await fetch(path);
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
@@ -55,6 +71,9 @@ export interface Abis {
 /// Not copied into the page and not hand-written: a console showing a field the contract stopped
 /// having is worse than a console that fails to load.
 export async function loadAbis(): Promise<Abis> {
+  const inPage = baked();
+  if (inPage) return inPage.abis;
+
   const [registry, credit, chainInfo] = await Promise.all([
     json<unknown[]>('/abi/UtuhRegistry.json'),
     json<unknown[]>('/abi/UtuhCredit.json'),
@@ -64,6 +83,8 @@ export async function loadAbis(): Promise<Abis> {
 }
 
 export function loadDeployments(): Promise<Deployments> {
+  const inPage = baked();
+  if (inPage) return Promise.resolve(inPage.deployments);
   return json<Deployments>('/deployments.json');
 }
 

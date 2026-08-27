@@ -15,6 +15,7 @@ import { runScript } from '../offchain/lib/cli';
 const ROOT = join(__dirname, '..');
 const WEB = __dirname;
 const OUT = join(ROOT, 'out');
+const STATIC = join(ROOT, process.env.STATIC_OUT ?? join('web', 'static'));
 const PORT = Number(process.env.WEB_PORT ?? 5173);
 const HOST = process.env.WEB_HOST ?? '127.0.0.1';
 
@@ -73,6 +74,16 @@ async function main(): Promise<void> {
         if (path === '/style.css') return await serveFile(join(WEB, 'style.css'), res);
         if (path === '/dist/main.js' || path === '/dist/main.js.map') {
           return await serveFile(join(WEB, 'dist', path.slice('/dist/'.length)), res);
+        }
+
+        // The statically-built console, served the way a static host would serve it: three files
+        // and nothing else. Under a prefix rather than on its own port so the browser tests can
+        // prove that this build asks for no `/abi` and no `/deployments.json` at all.
+        if (path === '/static/' || path === '/static/index.html') {
+          return await serveFile(join(STATIC, 'index.html'), res);
+        }
+        if (path === '/static/main.js' || path === '/static/style.css') {
+          return await serveFile(join(STATIC, path.slice('/static/'.length)), res);
         }
 
         if (path.startsWith('/abi/')) {

@@ -3,6 +3,7 @@ import { claimStatus, lineStatus } from '../offchain/lib/status';
 import { CHAIN_NAME } from '../offchain/lib/networks';
 import { cc3, connect, EXPLORER, hasWallet, shortAddress, wire, type Wired } from './chain';
 import { refute, sweepClaim, type Sweep } from './watch';
+import { renderBorrow } from './borrowPane';
 
 /// The Utuh console.
 ///
@@ -280,6 +281,12 @@ async function renderRegistry(): Promise<void> {
     );
     if (chosen) select.value = chosen;
 
+    // A registry that has never been used has nothing to sweep, and a sweep button that produces
+    // `BigInt("")` is worse than one that is plainly off.
+    const sweep = $('sweep') as HTMLButtonElement;
+    sweep.disabled = claims.length === 0;
+    sweep.title = claims.length === 0 ? 'this registry holds no claims yet' : '';
+
     renderActions(claims, head);
   } catch (e) {
     fail(box, e);
@@ -330,6 +337,13 @@ async function send(button: HTMLButtonElement, work: () => Promise<{ wait: () =>
     button.textContent = was;
     button.disabled = false;
   }
+}
+
+/// The borrow pane keeps its own log, so a long claim build does not scroll the watcher's away.
+function sayBorrow(line: string): void {
+  const log = $('borrow-log');
+  log.appendChild(el('div', 'line', line));
+  log.scrollTop = log.scrollHeight;
 }
 
 function say(line: string): void {
@@ -475,7 +489,19 @@ function renderRefuteButton(): void {
 // ------------------------------------------------------------------
 
 async function refresh(): Promise<void> {
-  await Promise.all([renderHeader(), renderRegistry(), renderCredit()]);
+  await Promise.all([renderHeader(), renderRegistry(), renderCredit(), renderBorrowPane()]);
+}
+
+function renderBorrowPane(): Promise<void> {
+  return renderBorrow(
+    {
+      wired,
+      signer: () => signer,
+      account: () => account,
+      onChange: () => refresh(),
+    },
+    sayBorrow,
+  );
 }
 
 async function main(): Promise<void> {
@@ -511,7 +537,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  await Promise.all([renderHeader(), renderAttestcoin(), renderRegistry(), renderCredit()]);
+  await Promise.all([renderHeader(), renderAttestcoin(), renderRegistry(), renderCredit(), renderBorrowPane()]);
   document.body.dataset.state = 'ready';
 }
 

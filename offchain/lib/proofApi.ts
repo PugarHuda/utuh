@@ -80,3 +80,76 @@ function hostOf(url: string): string {
     return url;
   }
 }
+
+/// One proof for each of up to {MAX_BATCH_SIZE} transactions, sharing a continuity proof.
+///
+/// This is the shape `appendBatch` is built around: the array form of `verifyAndEmit` takes one
+/// continuity chain spanning the batch's block range and a Merkle proof per query. The service
+/// keys the Merkle proofs by header number and then by transaction index, so a caller has to know
+/// which block and which position each of its events came from — which the sweep already knows.
+export interface BatchProof {
+  chainKey: number;
+  fromHeader: number;
+  toHeader: number;
+  continuityProof: { lowerEndpointDigest: string; roots: string[] };
+  merkleProofs: Record<string, Record<string, { txHash: string; txBytes: string; merkleProof: MerkleProof }>>;
+}
+
+export interface MerkleProof {
+  root: string;
+  siblings: MerkleProofEntry[];
+}
+
+export async function fetchBatchProof(
+  chainKey: number,
+  txHashes: string[],
+  timeoutMs = 120_000,
+): Promise<BatchProof> {
+  const failures: string[] = [];
+
+  for (const host of proofHosts()) {
+    const url = `${host.replace(/\/$/, '')}/api/v1/proof-batch-by-tx/${chainKey}`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(txHashes),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) {
+        failures.push(`${hostOf(host)} → ${res.status}`);
+        continue;
+      }
+      const body = (await res.json()) as BatchProof & { data?: BatchProof };
+      const proof = body.merkleProofs ? body : body.data;
+      if (!proof?.merkleProofs || !proof.continuityProof) {
+        failures.push(`${hostOf(host)} → the response carried no proofs`);
+        continue;
+      }
+      return proof;
+    } catch (e) {
+      failures.push(`${hostOf(host)} → ${(e as Error).message}`);
+    }
+  }
+
+  throw new Error(`no proof builder answered: ${failures.join('; ')}`);
+}
+
+/// Pull one transaction's proof out of a batch response.
+///
+/// Absence here is not "the chain does not have it" — the caller asked for these hashes by name.
+/// It means the service answered about a different set than it was asked about, which is worth
+/// failing on rather than skipping, because a skipped event is an incomplete claim and a forfeit
+/// bond.
+export function proofFromBatch(
+  batch: BatchProof,
+  blockNumber: number,
+  txIndex: number,
+): { txBytes: string; merkleProof: MerkleProof } {
+  const atHeight = batch.merkleProofs[String(blockNumber)];
+  const found = atHeight?.[String(txIndex)];
+  if (!found) {
+    throw new Error(`the batch proof has nothing at block ${blockNumber} tx#${txIndex}`);
+  }
+  return { txBytes: found.txBytes, merkleProof: found.merkleProof };
+}
