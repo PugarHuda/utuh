@@ -75,22 +75,28 @@ test('lists every claim the registry holds, with a status the contract could ret
   const count = await rows.count();
   expect(count).toBeGreaterThan(0);
 
+  // Newest first, so ids run strictly downwards and never below one.
+  let previous = Number.POSITIVE_INFINITY;
   for (let i = 0; i < count; i++) {
     const cells = await rows.nth(i).locator('td').allInnerTexts();
-    expect(Number(cells[0])).toBe(i + 1); // claim ids are sequential from one
+    const id = Number(cells[0]);
+    expect(id).toBeGreaterThan(0);
+    expect(id).toBeLessThan(previous);
+    previous = id;
     expect(CLAIM_STATUSES).toContain(cells[2]!.trim());
     expect(cells[3]).toMatch(/^\d+\.\.\d+$/); // a source range
     expect(cells[7]).toMatch(/CTC$/); // a bond
   }
 
-  // Every claim is selectable in the watch pane, and nothing else is.
+  // Every claim on screen is selectable in the watch pane, and nothing else is.
   await expect(page.locator('[data-testid=claim-select] option')).toHaveCount(count);
 });
 
 test('sweeps the source chain from the browser and reports what it found', async ({ page }) => {
   await boot(page);
 
-  // The oldest claim: its range is settled history, so the sweep is deterministic.
+  // Whatever is at the top of the list — newest first, so this is the claim anyone watching a
+  // window would actually be looking at.
   await page.locator('[data-testid=claim-select]').selectOption({ index: 0 });
   await page.locator('[data-testid=sweep]').click();
 

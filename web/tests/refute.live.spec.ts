@@ -129,7 +129,10 @@ test.describe('refuting an incomplete claim from the browser', () => {
     await expect(log).toContainText(/refuted — 0x[0-9a-f]{64}/, { timeout: 180_000 });
 
     // And the chain agrees: the page re-reads the registry after a send, so the row must have moved.
-    const row = page.locator('[data-testid=claims-table] tbody tr').nth(Number(broken) - 1);
+    // Found by its id rather than by position — the table is newest-first, not claim-one-first.
+    const row = page
+      .locator('[data-testid=claims-table] tbody tr')
+      .filter({ has: page.locator(`td:first-child:text-is("${broken}")`) });
     await expect(row).toContainText('Refuted', { timeout: 60_000 });
   });
 });

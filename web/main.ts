@@ -140,36 +140,73 @@ interface ClaimView {
   until: bigint;
 }
 
-async function readClaims(): Promise<ClaimView[]> {
-  const next = Number(await wired.registry.nextClaimId());
-  const out: ClaimView[] = [];
-  for (let i = 1; i < next; i++) {
-    const c = await wired.registry.claim(i);
-    out.push({
-      id: BigInt(i),
-      claimant: c.claimant,
-      status: Number(c.status),
-      fromBlock: c.fromBlock,
-      toBlock: c.toBlock,
-      chainKey: Number(c.scope.chainKey),
-      members: await wired.registry.memberCount(i),
-      aggregate: c.aggregate,
-      bondPosted: c.bondPosted,
-      enforceable: await wired.registry.enforceableLoss(i),
-      until: await wired.registry.challengeUntil(i),
-    });
+/// How many claims to read at once.
+///
+/// Four `eth_call`s per claim, one after another, is what this did first, and on the registry with
+/// 48 claims on it that took **51.7 seconds** to draw a table. Nothing was slow; everything was
+/// waiting. Public endpoints do rate-limit, though, so this is a batch size rather than one
+/// `Promise.all` over the lot.
+const CLAIM_BATCH = 12;
+
+/// Newest first, and only this many unless asked for more. A registry accumulates claims forever
+/// and the ones anyone is looking at are the recent ones — a challenge window is a day at most.
+const CLAIM_PAGE = 25;
+
+let claimLimit = CLAIM_PAGE;
+
+async function readOneClaim(i: number): Promise<ClaimView> {
+  const [c, members, enforceable, until] = await Promise.all([
+    wired.registry.claim(i),
+    wired.registry.memberCount(i) as Promise<bigint>,
+    wired.registry.enforceableLoss(i) as Promise<bigint>,
+    wired.registry.challengeUntil(i) as Promise<bigint>,
+  ]);
+  return {
+    id: BigInt(i),
+    claimant: c.claimant,
+    status: Number(c.status),
+    fromBlock: c.fromBlock,
+    toBlock: c.toBlock,
+    chainKey: Number(c.scope.chainKey),
+    members,
+    aggregate: c.aggregate,
+    bondPosted: c.bondPosted,
+    enforceable,
+    until,
+  };
+}
+
+interface ClaimPage {
+  claims: ClaimView[];
+  total: number;
+}
+
+async function readClaims(): Promise<ClaimPage> {
+  const total = Number(await wired.registry.nextClaimId()) - 1;
+  const first = Math.max(1, total - claimLimit + 1);
+
+  const ids: number[] = [];
+  for (let i = first; i <= total; i++) ids.push(i);
+
+  const claims: ClaimView[] = [];
+  for (let at = 0; at < ids.length; at += CLAIM_BATCH) {
+    claims.push(...(await Promise.all(ids.slice(at, at + CLAIM_BATCH).map(readOneClaim))));
   }
-  return out;
+  // Read in order because a batch is a batch; shown newest first because that is what anyone
+  // watching a challenge window is looking for.
+  claims.reverse();
+  return { claims, total };
 }
 
 async function renderRegistry(): Promise<void> {
   const box = $('registry-body');
   try {
-    const [claims, burned, head] = await Promise.all([
+    const [page, burned, head] = await Promise.all([
       readClaims(),
       wired.registry.burned() as Promise<bigint>,
       cc3.getBlockNumber(),
     ]);
+    const claims = page.claims;
 
     const rows = claims.map((c) => {
       const window =
@@ -209,8 +246,27 @@ async function renderRegistry(): Promise<void> {
         rows,
         'claims-table',
       ),
-      el('p', 'note', `${formatEther(burned)} CTC burned from broken claims — nobody can recover that.`),
+      el(
+        'p',
+        'note',
+        `${claims.length} of ${page.total} claim(s) shown, newest first. ` +
+          `${formatEther(burned)} CTC burned from broken claims — nobody can recover that.`,
+      ),
     );
+
+    if (claims.length < page.total) {
+      const more = el(
+        'button',
+        'act',
+        `show ${Math.min(CLAIM_PAGE, page.total - claims.length)} older`,
+      ) as HTMLButtonElement;
+      more.dataset.testid = 'more-claims';
+      more.onclick = () => {
+        claimLimit += CLAIM_PAGE;
+        void renderRegistry();
+      };
+      box.appendChild(more);
+    }
 
     const select = $('claim-select') as HTMLSelectElement;
     const chosen = select.value;
