@@ -223,6 +223,20 @@ async function main() {
       await expectRevert('drawing on a line that was never opened', 'NotBorrower', () =>
         settledCredit.draw.staticCall(9_999, 1n),
       );
+      // Curing is for a line that defaulted. A settled one has nothing to make good, and letting
+      // it through would be a second discharge of a debt that is already gone.
+      await expectRevert('curing a line that never defaulted', 'WrongLineStatus', () =>
+        settledCredit.cure.staticCall(1, 4),
+      );
+
+      // The two watermarks that stop one history, and one payment, being spent twice. Both are
+      // written by the loop that produced this line, and both are read back here rather than
+      // asserted in prose.
+      const underwritten: bigint = await settledCredit.underwrittenThrough(line.subject);
+      const settled: bigint = await settledCredit.settledThrough(line.subject);
+      check('the underwritten history is consumed past the range it covered', underwritten > line.repayFrom);
+      check('the repayment range is consumed too', settled > underwritten);
+      check('a settled borrower carries no standing default', (await settledCredit.defaultsOf(line.subject)) === 0n);
     }
   }
 

@@ -184,6 +184,31 @@ contract UtuhCredit {
     ///      has not already discharged a debt.
     mapping(address => uint64) public settledThrough;
 
+    /// @notice First source-chain block whose history a subject has not already borrowed against.
+    /// @dev The same reasoning as {settledThrough}, at the other end of the line. Marking claims
+    ///      spent stops one claim opening two lines; it does not stop one *history* doing so. The
+    ///      registry will happily hold two finalized claims over the same range with the same
+    ///      scope — building the second costs a bond that {UtuhRegistry.finalize} then gives back —
+    ///      so without this a borrower could underwrite the same three repayments over and over
+    ///      and draw a fresh limit each time. Every guard in {openLine} would still pass, because
+    ///      each of them looks at one line in isolation, and the aggregate is what was unbounded.
+    ///
+    ///      So a stretch of history underwrites exactly once. Borrowing again means new history:
+    ///      a range starting after the last one, still {MIN_HISTORY_BLOCKS} long and still inside
+    ///      {MAX_STALENESS_BLOCKS} of the frontier. That is what a credit line renewing on
+    ///      performance looks like, rather than a number that can be spent twice.
+    mapping(address => uint64) public underwrittenThrough;
+
+    /// @notice Defaults standing against a subject, not yet made good.
+    /// @dev A default that costs nothing but the line it happened on is not a credit event. Until
+    ///      this, a borrower could draw, let the deadline pass, be marked in default, and open the
+    ///      next line the same block on a later slice of history — the contract recorded the
+    ///      failure and then ignored it.
+    ///
+    ///      Counted rather than flagged because {cure} can take one back, and a borrower with two
+    ///      defaulted lines who settles one is not clean.
+    mapping(address => uint64) public defaultsOf;
+
     /// @notice CTC deposited by the lender and not yet drawn.
     uint256 public available;
 
@@ -198,6 +223,7 @@ contract UtuhCredit {
     event Drawn(uint256 indexed lineId, uint256 amount, uint64 dueBlock, uint256 repayRequired);
     event Settled(uint256 indexed lineId, uint256 repayClaimId, uint256 proven);
     event Defaulted(uint256 indexed lineId, uint256 outstanding);
+    event Cured(uint256 indexed lineId, uint256 repayClaimId, uint256 proven, uint64 defaultsLeft);
     event Funded(uint256 amount);
     event Withdrawn(uint256 amount);
     event ControlProven(address indexed subject, address indexed account, uint64 blockHeight);
@@ -207,6 +233,8 @@ contract UtuhCredit {
     error ScopeMismatch(bytes32 expected, bytes32 actual);
     error RangeMismatch();
     error RepaymentAlreadyCounted(uint64 fromBlock, uint64 required);
+    error HistoryAlreadyUnderwritten(uint64 fromBlock, uint64 required);
+    error SubjectInDefault(address subject, uint64 defaults);
     error HistoryTooShort(uint64 span, uint64 required);
     error UnderwritingStale(uint64 toBlock, uint64 frontier);
     error NotClean(uint256 adverseCount);
@@ -466,6 +494,7 @@ contract UtuhCredit {
         if (cleanClaimIds.length != _cleanSpecs.length) {
             revert WrongNumberOfCleanClaims(cleanClaimIds.length, _cleanSpecs.length);
         }
+        if (defaultsOf[subject] != 0) revert SubjectInDefault(subject, defaultsOf[subject]);
 
         // One underwriting funds one line. Otherwise the cap would bound each line while bounding
         // nothing in aggregate.
@@ -476,6 +505,9 @@ contract UtuhCredit {
             revert WindowTooShort(vol.challengeWindow, MIN_UNDERWRITING_WINDOW);
         }
         _requireScope(volumeSpec, subject, vol.scope);
+
+        // One stretch of history, one line. See {underwrittenThrough}.
+        _requireFreshHistory(subject, vol.fromBlock);
 
         uint64 span = vol.toBlock - vol.fromBlock;
         if (span < MIN_HISTORY_BLOCKS) revert HistoryTooShort(span, MIN_HISTORY_BLOCKS);
@@ -499,6 +531,8 @@ contract UtuhCredit {
         for (uint256 i = 0; i < cleanClaimIds.length; i++) {
             _requireUsable(cleanClaimIds[i], backingNeeded);
         }
+
+        underwrittenThrough[subject] = vol.toBlock + 1;
 
         lineId = nextLineId++;
         Line storage l = _lines[lineId];
@@ -540,6 +574,13 @@ contract UtuhCredit {
             uint256 backing = REGISTRY.enforceableLoss(ids[i]) * BOND_MULTIPLE;
             if (backing < cap) cap = backing;
         }
+    }
+
+    /// @dev Its own function because {openLine} is already at the edge of what the legacy codegen
+    ///      will give it in stack slots, and a second local there costs a compile.
+    function _requireFreshHistory(address subject, uint64 fromBlock) private view {
+        uint64 mark = underwrittenThrough[subject];
+        if (fromBlock < mark) revert HistoryAlreadyUnderwritten(fromBlock, mark);
     }
 
     function _spend(uint256 claimId) private {
@@ -634,6 +675,43 @@ contract UtuhCredit {
         if (l.status != LineStatus.Active) revert WrongLineStatus(LineStatus.Active, l.status);
         if (block.number > l.dueBlock) revert PastDue(uint64(block.number), l.dueBlock);
 
+        uint256 proven = _applyRepayment(l, repayClaimId);
+        l.status = LineStatus.Settled;
+        emit Settled(lineId, repayClaimId, proven);
+    }
+
+    /// @notice Make a defaulted line good, late, on the same terms it was owed.
+    ///
+    /// @dev A default is not a proof of anything — it records that the borrower did not prove
+    ///      repayment in time. If they can prove it afterwards, the record should say so, and the
+    ///      subject should be able to borrow again: that is the difference between a credit
+    ///      protocol and a blacklist.
+    ///
+    ///      Nothing is discounted for being late. The repayment demanded is the one the draw
+    ///      created, and every check {settle} makes runs here unchanged — same scope, same
+    ///      watermark, same backing, same amount. The only thing this drops is the deadline, which
+    ///      has already done its work: the default was recorded, and it stood until this.
+    function cure(uint256 lineId, uint256 repayClaimId) external {
+        Line storage l = _lines[lineId];
+        if (l.status != LineStatus.Defaulted) revert WrongLineStatus(LineStatus.Defaulted, l.status);
+
+        uint256 proven = _applyRepayment(l, repayClaimId);
+        l.status = LineStatus.Settled;
+
+        // Cannot underflow. A line reaches Defaulted only through {markDefault}, which increments
+        // this, and the status is already Settled above — so a second cure of the same line stops
+        // at the status check rather than reaching a second decrement.
+        uint64 left = defaultsOf[l.subject] - 1;
+        defaultsOf[l.subject] = left;
+
+        emit Cured(lineId, repayClaimId, proven, left);
+    }
+
+    /// @dev Everything a repayment claim has to be, for a line in any status that can take one.
+    ///      Shared so that {settle} and {cure} cannot drift apart: a cure that checked one thing
+    ///      less than a settlement would be a cheaper way to discharge the same debt, and the
+    ///      cheaper path is the one a borrower would take.
+    function _applyRepayment(Line storage l, uint256 repayClaimId) private returns (uint256 proven) {
         UtuhRegistry.Claim memory rc = REGISTRY.claim(repayClaimId);
 
         bytes32 got = EventScope.id(rc.scope);
@@ -659,8 +737,7 @@ contract UtuhCredit {
         // have to prove that to themselves.
         claimSpent[repayClaimId] = true;
         settledThrough[l.subject] = rc.toBlock + 1;
-        l.status = LineStatus.Settled;
-        emit Settled(lineId, repayClaimId, rc.aggregate);
+        return rc.aggregate;
     }
 
     /// @notice Record a default once the deadline passes with no proven repayment.
@@ -674,6 +751,7 @@ contract UtuhCredit {
         if (block.number <= l.dueBlock) revert NotYetDue(uint64(block.number), l.dueBlock);
 
         l.status = LineStatus.Defaulted;
+        defaultsOf[l.subject]++;
         emit Defaulted(lineId, l.drawn);
     }
 
