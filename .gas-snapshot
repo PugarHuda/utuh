@@ -1,3 +1,8 @@
+ConsumerTest:test_aClaimAboutAnotherSubjectIsRefused() (gas: 252696)
+ConsumerTest:test_aClaimWithMembersIsNotClean() (gas: 488414)
+ConsumerTest:test_aCleanFinalizedClaimOpensTheGate() (gas: 278386)
+ConsumerTest:test_aSealedButUnfinalizedClaimIsRefused() (gas: 247367)
+ConsumerTest:test_exposureAboveTheEnforceableLossIsRefused() (gas: 255754)
 ControlCommitmentTest:test_aControlIdIsOneTransactionOnOneChain() (gas: 16668)
 ControlCommitmentTest:test_aTagOffByOneByteIsRejected() (gas: 7870)
 ControlCommitmentTest:test_anUnrelatedThirtyTwoByteWordIsRejected() (gas: 6770)

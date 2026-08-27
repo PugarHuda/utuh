@@ -11,6 +11,9 @@ Built for BUIDL CTC 2026 Fall on Creditcoin.
 Deployed and verified on Creditcoin CC3 Testnet. `npm run web` opens a console that reads all of it
 live and lets anyone sweep Ethereum from their browser and break an incomplete claim.
 
+Building something else on Creditcoin that needs a sentence about events that did *not* happen?
+The registry is usable on its own — see **[docs/INTEGRATING.md](docs/INTEGRATING.md)**.
+
 ---
 
 ## The problem
@@ -491,8 +494,13 @@ src/
   lib/EventScope.sol        which events a claim covers, and how each one counts
   interfaces/IBlockProver.sol   0x0FD2 — Merkle + continuity verification
   interfaces/IChainInfo.sol     0x0FD3 — attestation frontier and coverage
+docs/
+  INTEGRATING.md            using UtuhRegistry from someone else's contract — the registry is
+                            infrastructure, UtuhCredit is one application of it
 test/
   EventScope.t.sol          the matcher, ordering key, metrics and leaf identity
+  Consumer.t.sol            a thirty-line consumer that is not Utuh, compiled and tested, so the
+                            claim that the registry is reusable is checked rather than asserted
   UtuhCredit.t.sol          deployment floors, control binding, scope identity, terms, liquidity
   Lifecycle.t.sol           the whole loop locally — claim, refute, finalize, underwrite, draw,
                             settle, default, cure — on real Sepolia transaction bytes, with only
@@ -560,7 +568,7 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 118 forge tests
+npm run test                # 123 forge tests
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -809,7 +817,7 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-118 tests, 9 of them fuzzed. Everything below runs with `forge test`, no key and no network.
+123 tests, 9 of them fuzzed. Everything below runs with `forge test`, no key and no network.
 
 Most of them cover the part that runs in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
@@ -909,7 +917,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 118 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 123 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings**, which is only worth stating alongside what it was allowed to look
 for.
 
