@@ -19,7 +19,27 @@
 /// `npm run livetest` returned success no matter how many of its assertions failed. Measured: a
 /// script that sets exitCode 1 and returns exited 0. Anything reading the exit code rather than the
 /// output was being told the suite passed.
+/// Whether a script has already taken over this process.
+///
+/// Importing a module that calls `runScript` at its top level *runs that script*, and if the
+/// importer is itself a script the two mains race: two sets of transactions from one key, and
+/// whichever finishes first calls `process.exit` on the other. That happened — `cureDemo` imported
+/// one helper from `redeployCredit`, and the demonstration silently redeployed a contract and
+/// rewrote the deployment record.
+///
+/// The fix was to move the helper into a library. This is the second lock: the next time somebody
+/// reaches into a script for something, they get a sentence explaining it instead of a race.
+let running = false;
+
 export function runScript(main: () => Promise<unknown>): void {
+  if (running) {
+    throw new Error(
+      'two scripts are starting in one process. Something imported a module that calls runScript ' +
+        'at its top level — move the thing being borrowed into offchain/lib/ instead.',
+    );
+  }
+  running = true;
+
   main()
     .then(() => process.exit(Number(process.exitCode ?? 0)))
     .catch((e: unknown) => {

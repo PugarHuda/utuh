@@ -280,7 +280,13 @@ contract LifecycleTest is Test {
     ///      and each opened a full line. The bond cap bounded every line and nothing bounded the
     ///      total, so a borrower could repeat this for the price of a bond that comes back.
     function test_theSameHistoryCannotUnderwriteTwice() public {
-        _openLine();
+        uint256 first = _openLine();
+
+        // Give the slot back first, or the one-line-at-a-time guard answers instead and this
+        // proves nothing about the history watermark.
+        vm.prank(payer);
+        credit.closeLine(first);
+        assertEq(uint8(credit.line(first).status), uint8(UtuhCredit.LineStatus.Closed));
 
         uint256 volume2 = _volumeClaim(VOL_FROM, VOL_TO);
         uint256 clean2 = _cleanClaim(VOL_FROM, VOL_TO);
@@ -324,6 +330,167 @@ contract LifecycleTest is Test {
         vm.expectRevert(abi.encodeWithSelector(UtuhCredit.SubjectInDefault.selector, payer, uint64(1)));
         vm.prank(payer);
         credit.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice One line at a time, per subject.
+    function test_aSubjectWithALineOpenCannotOpenAnother() public {
+        uint256 first = _openLine();
+        _bindPayer();
+
+        uint64 from = VOL_TO + 1;
+        uint256 volume = _volumeClaim(from, from + 200);
+        uint256 clean = _cleanClaim(from, from + 200);
+
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.SubjectHasActiveLine.selector, payer, first));
+        vm.prank(payer);
+        credit.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice The hole the slot exists for: a deadline that passed and nobody marked.
+    /// @dev {markDefault} is permissionless and unpaid, so `defaultsOf` can sit at zero
+    ///      indefinitely after a borrower has walked away. Before this, fresh history was all it
+    ///      took to draw a second time.
+    function test_anOverdueLineNobodyMarkedStillBlocksTheNextOne() public {
+        uint256 first = _openLine();
+        credit.fund{value: 10 ether}();
+        vm.prank(payer);
+        credit.draw(first, 10 ether);
+
+        vm.roll(credit.line(first).dueBlock + 1);
+        assertEq(credit.defaultsOf(payer), 0, "nobody has marked it, and nobody is paid to");
+
+        uint64 from = VOL_TO + 1;
+        uint256 volume = _volumeClaim(from, from + 200);
+        uint256 clean = _cleanClaim(from, from + 200);
+
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.SubjectHasActiveLine.selector, payer, first));
+        vm.prank(payer);
+        credit.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice An undrawn line can be given back, or the rule above would be a trap.
+    function test_anUndrawnLineCanBeClosedAndTheSlotComesBack() public {
+        uint256 first = _openLine();
+
+        vm.prank(payer);
+        credit.closeLine(first);
+        assertEq(uint8(credit.line(first).status), uint8(UtuhCredit.LineStatus.Closed));
+        assertEq(credit.activeLineOf(payer), 0);
+
+        uint64 from = VOL_TO + 1;
+        uint256 second = _openLineOver(from, from + 200);
+        assertEq(second, 2, "the subject can borrow again on later history");
+    }
+
+    /// @notice A line with money out of it is not closeable, whatever the borrower would prefer.
+    function test_aDrawnLineCannotBeClosed() public {
+        uint256 first = _openLine();
+        credit.fund{value: 10 ether}();
+        vm.prank(payer);
+        credit.draw(first, 3 ether);
+
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.LineHasBeenDrawn.selector, first, uint256(3 ether)));
+        vm.prank(payer);
+        credit.closeLine(first);
+    }
+
+    function test_onlyTheBorrowerMayCloseTheirLine() public {
+        uint256 first = _openLine();
+        vm.expectRevert(UtuhCredit.NotBorrower.selector);
+        vm.prank(WATCHER);
+        credit.closeLine(first);
+    }
+
+    // ------------------------------------------------------------------
+    // What another lender's books are worth
+    // ------------------------------------------------------------------
+
+    /// @notice A default here is a refusal next door, when the lender next door says so.
+    /// @dev No reports and no shared registry: the second lender reads `defaultsOf` out of the
+    ///      first one's storage, where the contract that actually lent the money recorded it.
+    function test_aPeersStandingDefaultIsRefusedHere() public {
+        uint256 lineId = _openLine();
+        credit.fund{value: 10 ether}();
+        vm.prank(payer);
+        credit.draw(lineId, 1 ether);
+        vm.roll(credit.line(lineId).dueBlock + 1);
+        credit.markDefault(lineId);
+        assertEq(credit.defaultsOf(payer), 1);
+
+        UtuhCredit next = _lenderWithPeers(_peerList(address(credit)));
+        next.proveControl(_controlProof(), _continuity());
+
+        uint64 from = VOL_TO + 1;
+        uint256 volume = _volumeClaim(from, from + 200);
+        uint256 clean = _cleanClaim(from, from + 200);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(UtuhCredit.SubjectInDefaultElsewhere.selector, address(credit), payer, uint64(1))
+        );
+        vm.prank(payer);
+        next.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice A lender that names no peers is not affected by anyone else's books.
+    /// @dev Trusting nobody is the safe default and a real choice, not an oversight.
+    function test_aLenderWithNoPeersDoesNotSeeTheDefault() public {
+        uint256 lineId = _openLine();
+        credit.fund{value: 10 ether}();
+        vm.prank(payer);
+        credit.draw(lineId, 1 ether);
+        vm.roll(credit.line(lineId).dueBlock + 1);
+        credit.markDefault(lineId);
+
+        UtuhCredit next = _lenderWithPeers(new address[](0));
+        next.proveControl(_controlProof(), _continuity());
+
+        // Built before the prank: `vm.prank` applies to the next call, and evaluating these
+        // arguments makes several of their own.
+        uint64 from = VOL_TO + 1;
+        uint256 volume = _volumeClaim(from, from + 200);
+        uint256 clean = _cleanClaim(from, from + 200);
+
+        vm.prank(payer);
+        uint256 opened = next.openLine(payer, volume, _ids(clean));
+        assertEq(opened, 1, "this lender never asked, so it never heard");
+    }
+
+    /// @notice Curing at the first lender clears the refusal at the second.
+    function test_curingAtOneLenderClearsTheRefusalAtTheOther() public {
+        uint256 lineId = _openLine();
+        credit.fund{value: 10 ether}();
+        vm.prank(payer);
+        credit.draw(lineId, 10 ether);
+        vm.roll(credit.line(lineId).dueBlock + 1);
+        credit.markDefault(lineId);
+
+        UtuhCredit next = _lenderWithPeers(_peerList(address(credit)));
+        next.proveControl(_controlProof(), _continuity());
+
+        credit.cure(lineId, _repaymentClaim(VOL_TO + 1, VOL_TO + 100));
+        assertEq(credit.defaultsOf(payer), 0);
+
+        uint64 from = VOL_TO + 101;
+        uint256 volume = _volumeClaim(from, from + 200);
+        uint256 clean = _cleanClaim(from, from + 200);
+
+        vm.prank(payer);
+        uint256 opened = next.openLine(payer, volume, _ids(clean));
+        assertEq(opened, 1, "the record was made good, so the door is open again");
+    }
+
+    /// @notice An address with no code answers every question with zero. That is not a peer.
+    function test_aPeerThatIsNotAContractIsRefusedAtDeployment() public {
+        address notAContract = address(0xDEAD);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.NotAContract.selector, notAContract));
+        _lenderWithPeers(_peerList(notAContract));
+    }
+
+    function test_thePeerListIsReadable() public {
+        UtuhCredit next = _lenderWithPeers(_peerList(address(credit)));
+        assertEq(next.peerCount(), 1);
+        assertEq(next.peerAt(0), address(credit));
+        assertEq(credit.peerCount(), 0);
     }
 
     /// @notice Proving the repayment late clears the default, on the terms it was owed.
@@ -444,7 +611,8 @@ contract LifecycleTest is Test {
             minHistoryBlocks: 100,
             maxStalenessBlocks: 5_000,
             repaymentBps: 10_500,
-            repayWindowBlocks: 400
+            repayWindowBlocks: 400,
+            peers: new address[](0)
         });
     }
 
@@ -558,6 +726,20 @@ contract LifecycleTest is Test {
         vm.prank(payer);
         credit.draw(lineId, 1 ether);
         credit.settle(lineId, _repaymentClaim(VOL_TO + 1, VOL_TO + 100));
+    }
+
+    function _peerList(address one) internal pure returns (address[] memory peers) {
+        peers = new address[](1);
+        peers[0] = one;
+    }
+
+    /// A second lender over the same registry, with the same terms and its own books.
+    function _lenderWithPeers(address[] memory peers) internal returns (UtuhCredit) {
+        UtuhCredit.Policy memory p = _policy();
+        p.peers = peers;
+        UtuhCredit.HistorySpec[] memory clean = new UtuhCredit.HistorySpec[](1);
+        clean[0] = _adverseSpec();
+        return new UtuhCredit(registry, p, _paymentSpec(), clean, _paymentSpec());
     }
 
     function _ids(uint256 a) internal pure returns (uint256[] memory ids) {

@@ -43,6 +43,8 @@ export interface Policy {
   maxStalenessBlocks: number;
   repaymentBps: number;
   repayWindowBlocks: number;
+  /// Other UtuhCredit deployments whose standing defaults this lender honours.
+  peers: string[];
 }
 
 /// Challenge window floor for this deployment, in Creditcoin blocks. The production value is
@@ -69,6 +71,16 @@ export const policy = (): Policy => ({
   // `draw` takes neither of them from the borrower.
   repaymentBps: Number(process.env.REPAYMENT_BPS ?? 10_500),
   repayWindowBlocks: Number(process.env.REPAY_WINDOW_BLOCKS ?? 5_760),
+  // Whose books this lender takes as its own. `defaultsOf` belongs to one deployment, so a
+  // borrower who walks away here opens a line next door unless the lender next door was named.
+  // Empty by default, because trusting nobody else's books is the safe answer and has to be a
+  // choice rather than an accident.
+  //
+  //   PEERS=0xabc...,0xdef...
+  peers: (process.env.PEERS ?? '')
+    .split(',')
+    .map((a) => a.trim())
+    .filter(Boolean),
 });
 
 /// Aave V3 Pool: Repay(reserve, user, repayer, amount, useATokens). The subject is the user in

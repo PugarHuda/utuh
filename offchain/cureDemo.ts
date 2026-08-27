@@ -1,7 +1,7 @@
 import { AbiCoder, Contract, JsonRpcProvider, Wallet, formatEther, keccak256, concat, toUtf8Bytes } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
-import { artifact, deploy, signer, creditAt, registryAt, readDeployments } from './lib/contracts';
+import { artifact, deploy, signer, creditAt, peersOf, registryAt, readDeployments } from './lib/contracts';
 import { plainSpec } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { sendChecked } from './lib/gasLimit';
@@ -79,6 +79,9 @@ async function main() {
     maxStalenessBlocks: await old.MAX_STALENESS_BLOCKS(),
     repaymentBps: await old.REPAYMENT_BPS(),
     repayWindowBlocks: DEMO_REPAY_WINDOW,
+    // Read off the contract this one stands in for, so a lender that honoured someone else's
+    // books goes on honouring them in the demonstration.
+    peers: await peersOf(old),
   };
   const clean = [];
   for (let i = 0; i < Number(await old.cleanSpecCount()); i++) clean.push(plainSpec(await old.cleanSpecAt(i)));

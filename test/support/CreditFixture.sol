@@ -45,7 +45,8 @@ abstract contract CreditFixture {
             minHistoryBlocks: 216_000,
             maxStalenessBlocks: 50_400,
             repaymentBps: 10_500,
-            repayWindowBlocks: 400
+            repayWindowBlocks: 400,
+            peers: new address[](0)
         });
     }
 }

@@ -7,6 +7,15 @@ import {EventScope} from "./lib/EventScope.sol";
 import {IBlockProver, BlockProverLib} from "./interfaces/IBlockProver.sol";
 import {IChainInfo, ChainInfoLib} from "./interfaces/IChainInfo.sol";
 
+/// @notice The one question a lender asks of another lender's books.
+/// @dev Deliberately this small. A peer is trusted for exactly one fact about its own borrowers,
+///      and naming that fact in an interface is what keeps the trust boundary legible — anything
+///      wider would invite reading a peer's terms, its liquidity or its scope specs, none of which
+///      are this lender's business.
+interface IDefaultsElsewhere {
+    function defaultsOf(address subject) external view returns (uint64);
+}
+
 /// @title UtuhCredit — undercollateralized credit on Creditcoin, underwritten on Ethereum
 /// @author Utuh
 ///
@@ -122,7 +131,9 @@ contract UtuhCredit {
         None,
         Active,
         Settled,
-        Defaulted
+        Defaulted,
+        /// Opened and given back without ever being drawn on. See {closeLine}.
+        Closed
     }
 
     /// @notice A source-chain transaction offered as proof that its sender controls that address.
@@ -199,6 +210,21 @@ contract UtuhCredit {
     ///      performance looks like, rather than a number that can be spent twice.
     mapping(address => uint64) public underwrittenThrough;
 
+    /// @notice The line a subject currently has open, or zero.
+    ///
+    /// @dev One line at a time, per subject. This is not tidiness; it is what makes the default
+    ///      guard hold without anyone volunteering gas.
+    ///
+    ///      {markDefault} is permissionless and unpaid. Nobody is obliged to call it, and until
+    ///      somebody does, `defaultsOf` stays at zero — so a borrower whose deadline passed could
+    ///      accumulate a fresh month of history, satisfy {underwrittenThrough}, and open the next
+    ///      line with the first one still sitting there overdue and undefaulted. The guard added
+    ///      to stop exactly that was resting on a transaction nobody was paid to send.
+    ///
+    ///      An overdue line now blocks the next one by itself, and {markDefault} goes back to
+    ///      being bookkeeping. A lender who wants concurrent lines for one subject deploys twice.
+    mapping(address => uint256) public activeLineOf;
+
     /// @notice Defaults standing against a subject, not yet made good.
     /// @dev A default that costs nothing but the line it happened on is not a credit event. Until
     ///      this, a borrower could draw, let the deadline pass, be marked in default, and open the
@@ -208,6 +234,26 @@ contract UtuhCredit {
     ///      Counted rather than flagged because {cure} can take one back, and a borrower with two
     ///      defaulted lines who settles one is not clean.
     mapping(address => uint64) public defaultsOf;
+
+    /// @notice Other lenders whose defaults this one honours.
+    ///
+    /// @dev `defaultsOf` is this contract's own mapping, so a borrower who walks away from a line
+    ///      here opens one at the lender next door with nothing in the way. That is the gap a
+    ///      credit bureau fills, and the tempting shape is a shared contract everyone reports to.
+    ///
+    ///      It did not survive being designed. Reports would have to be trusted, and a registry
+    ///      anyone may write to is a blacklist with extra steps: deploy a contract, report a rival's
+    ///      borrower as a defaulter, done. Every fix for that is a permission, and a permissioned
+    ///      bureau is the centralised thing this whole repository exists to avoid.
+    ///
+    ///      So there is no bureau. Each lender names the peers whose word it takes, and the answer
+    ///      is *pulled* from the peer's own storage — where the fact was recorded by the contract
+    ///      that actually extended the credit. No reports, no writes, nothing to spoof: a peer can
+    ///      only ever say what happened on its own books.
+    ///
+    ///      Immutable, like every other term here. Adding a peer is a new deployment, which is the
+    ///      honest cost of changing whose word you accept.
+    address[] private _peers;
 
     /// @notice CTC deposited by the lender and not yet drawn.
     uint256 public available;
@@ -224,6 +270,7 @@ contract UtuhCredit {
     event Settled(uint256 indexed lineId, uint256 repayClaimId, uint256 proven);
     event Defaulted(uint256 indexed lineId, uint256 outstanding);
     event Cured(uint256 indexed lineId, uint256 repayClaimId, uint256 proven, uint64 defaultsLeft);
+    event LineClosed(uint256 indexed lineId, address indexed subject);
     event Funded(uint256 amount);
     event Withdrawn(uint256 amount);
     event ControlProven(address indexed subject, address indexed account, uint64 blockHeight);
@@ -235,6 +282,10 @@ contract UtuhCredit {
     error RepaymentAlreadyCounted(uint64 fromBlock, uint64 required);
     error HistoryAlreadyUnderwritten(uint64 fromBlock, uint64 required);
     error SubjectInDefault(address subject, uint64 defaults);
+    error SubjectInDefaultElsewhere(address peer, address subject, uint64 defaults);
+    error SubjectHasActiveLine(address subject, uint256 lineId);
+    error LineHasBeenDrawn(uint256 lineId, uint256 drawn);
+    error NotAContract(address peer);
     error HistoryTooShort(uint64 span, uint64 required);
     error UnderwritingStale(uint64 toBlock, uint64 frontier);
     error NotClean(uint256 adverseCount);
@@ -270,6 +321,9 @@ contract UtuhCredit {
         uint64 maxStalenessBlocks;
         uint64 repaymentBps; // what must come back, in basis points of what went out
         uint64 repayWindowBlocks; // how long the borrower has
+        /// Other UtuhCredit deployments whose standing defaults this lender honours. Empty is a
+        /// lender that trusts nobody else's books, which is the safe default and a real choice.
+        address[] peers;
     }
 
     constructor(
@@ -297,6 +351,12 @@ contract UtuhCredit {
         CHAIN_INFO = ChainInfoLib.getChainInfo();
         PROVER = BlockProverLib.getProver();
         LENDER = msg.sender;
+        for (uint256 i = 0; i < policy.peers.length; i++) {
+            // A peer that is not a contract answers every question with empty returndata, which
+            // decodes as zero — a silent "no defaults here" from an address that holds nothing.
+            if (policy.peers[i].code.length == 0) revert NotAContract(policy.peers[i]);
+            _peers.push(policy.peers[i]);
+        }
         if (clean.length == 0) revert NoCleanSpecs();
         _requireSpec(volume);
         _requireSpec(repay);
@@ -494,7 +554,8 @@ contract UtuhCredit {
         if (cleanClaimIds.length != _cleanSpecs.length) {
             revert WrongNumberOfCleanClaims(cleanClaimIds.length, _cleanSpecs.length);
         }
-        if (defaultsOf[subject] != 0) revert SubjectInDefault(subject, defaultsOf[subject]);
+        if (activeLineOf[subject] != 0) revert SubjectHasActiveLine(subject, activeLineOf[subject]);
+        _requireNotInDefault(subject);
 
         // One underwriting funds one line. Otherwise the cap would bound each line while bounding
         // nothing in aggregate.
@@ -535,6 +596,7 @@ contract UtuhCredit {
         underwrittenThrough[subject] = vol.toBlock + 1;
 
         lineId = nextLineId++;
+        activeLineOf[subject] = lineId;
         Line storage l = _lines[lineId];
         l.borrower = msg.sender;
         l.subject = subject;
@@ -574,6 +636,34 @@ contract UtuhCredit {
             uint256 backing = REGISTRY.enforceableLoss(ids[i]) * BOND_MULTIPLE;
             if (backing < cap) cap = backing;
         }
+    }
+
+    /// @dev Standing defaults, here and at every peer this lender named.
+    ///
+    ///      The peer call is `defaultsOf` on the peer's own storage — the contract that extended
+    ///      the credit is the one that recorded the failure, and it is the only thing that can
+    ///      answer for its own books. Nothing is reported, so nothing can be forged; the worst a
+    ///      hostile peer can do is refuse credit it was never going to extend anyway.
+    ///
+    ///      The loop is bounded by what the lender configured at deployment, like {_cleanSpecs}.
+    // slither-disable-next-line calls-loop
+    function _requireNotInDefault(address subject) private view {
+        uint64 here = defaultsOf[subject];
+        if (here != 0) revert SubjectInDefault(subject, here);
+
+        uint256 n = _peers.length;
+        for (uint256 i = 0; i < n; i++) {
+            uint64 there = IDefaultsElsewhere(_peers[i]).defaultsOf(subject);
+            if (there != 0) revert SubjectInDefaultElsewhere(_peers[i], subject, there);
+        }
+    }
+
+    function peerCount() external view returns (uint256) {
+        return _peers.length;
+    }
+
+    function peerAt(uint256 i) external view returns (address) {
+        return _peers[i];
     }
 
     /// @dev Its own function because {openLine} is already at the edge of what the legacy codegen
@@ -677,6 +767,7 @@ contract UtuhCredit {
 
         uint256 proven = _applyRepayment(l, repayClaimId);
         l.status = LineStatus.Settled;
+        activeLineOf[l.subject] = 0;
         emit Settled(lineId, repayClaimId, proven);
     }
 
@@ -697,6 +788,9 @@ contract UtuhCredit {
 
         uint256 proven = _applyRepayment(l, repayClaimId);
         l.status = LineStatus.Settled;
+        // A defaulted line still held the subject's one slot: nothing else could open while it
+        // stood, which is the point. Curing gives the slot back along with the record.
+        activeLineOf[l.subject] = 0;
 
         // Cannot underflow. A line reaches Defaulted only through {markDefault}, which increments
         // this, and the status is already Settled above — so a second cure of the same line stops
@@ -740,6 +834,27 @@ contract UtuhCredit {
         return rc.aggregate;
     }
 
+    /// @notice Give back a line that was opened and never drawn on.
+    ///
+    /// @dev Without this the one-line-at-a-time rule is a trap. An undrawn line cannot be settled
+    ///      (there is nothing to repay) and cannot be defaulted ({markDefault} refuses a `drawn` of
+    ///      zero, correctly — no money went out, so nothing was missed), so a borrower who opened a
+    ///      line and thought better of it would have been locked out of this lender for good.
+    ///
+    ///      The history it consumed is not given back. {underwrittenThrough} has already moved, and
+    ///      it should have: the claims were spent, and a range that has opened one line has been
+    ///      used whether or not the borrower drew on it.
+    function closeLine(uint256 lineId) external {
+        Line storage l = _lines[lineId];
+        if (l.borrower != msg.sender) revert NotBorrower();
+        if (l.status != LineStatus.Active) revert WrongLineStatus(LineStatus.Active, l.status);
+        if (l.drawn != 0) revert LineHasBeenDrawn(lineId, l.drawn);
+
+        l.status = LineStatus.Closed;
+        activeLineOf[l.subject] = 0;
+        emit LineClosed(lineId, l.subject);
+    }
+
     /// @notice Record a default once the deadline passes with no proven repayment.
     /// @dev No proof is required and none exists to give. The contract is not asserting that a
     ///      payment was missed — it is recording that the borrower, who alone could have proven
@@ -751,6 +866,11 @@ contract UtuhCredit {
         if (block.number <= l.dueBlock) revert NotYetDue(uint64(block.number), l.dueBlock);
 
         l.status = LineStatus.Defaulted;
+        // The slot goes back and the record takes over. Each guard then has exactly one job:
+        // {activeLineOf} says "you have a line open", {defaultsOf} says "you failed one" — and an
+        // overdue line nobody has marked is still Active, so it still blocks. That is the case the
+        // slot exists for.
+        activeLineOf[l.subject] = 0;
         defaultsOf[l.subject]++;
         emit Defaulted(lineId, l.drawn);
     }

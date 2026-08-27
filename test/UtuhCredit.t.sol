@@ -38,7 +38,8 @@ contract UtuhCreditTest is Test {
             minHistoryBlocks: HISTORY,
             maxStalenessBlocks: STALENESS,
             repaymentBps: REPAYMENT_BPS,
-            repayWindowBlocks: REPAY_WINDOW
+            repayWindowBlocks: REPAY_WINDOW,
+            peers: new address[](0)
         });
     }
 
@@ -359,6 +360,7 @@ contract UtuhCreditTest is Test {
         assertEq(uint8(UtuhCredit.LineStatus.Active), 1, "LineStatus.Active moved");
         assertEq(uint8(UtuhCredit.LineStatus.Settled), 2, "LineStatus.Settled moved");
         assertEq(uint8(UtuhCredit.LineStatus.Defaulted), 3, "LineStatus.Defaulted moved");
+        assertEq(uint8(UtuhCredit.LineStatus.Closed), 4, "LineStatus.Closed moved");
 
         assertEq(uint8(EventScope.Metric.COUNT), 0, "Metric.COUNT moved");
         assertEq(uint8(EventScope.Metric.DATA_WORD), 1, "Metric.DATA_WORD moved");

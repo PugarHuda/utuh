@@ -140,6 +140,7 @@ async function main() {
       maxStalenessBlocks: 5000,
       repaymentBps: 10_500, // 105% — principal plus the lender's spread
       repayWindowBlocks: 400,
+      peers: [],
     },
     volumeSpec,
     [cleanSpec],

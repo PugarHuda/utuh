@@ -9,7 +9,7 @@
 /// `test_theEnumsAreWhatTheOffchainMirrorSays` in test/UtuhCredit.t.sol pins the numbering these
 /// arrays assume, so reordering an enum breaks a test that names this file.
 const CLAIM_STATUS = ['None', 'Open', 'Sealed', 'Finalized', 'Refuted'] as const;
-const LINE_STATUS = ['None', 'Active', 'Settled', 'Defaulted'] as const;
+const LINE_STATUS = ['None', 'Active', 'Settled', 'Defaulted', 'Closed'] as const;
 
 /// A claim's status by name, or the raw value when the contract knows something this does not.
 export function claimStatus(s: bigint | number): string {

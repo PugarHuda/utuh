@@ -1,7 +1,7 @@
 import { AbiCoder, formatEther } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, requirePrivateKey } from './config';
-import { artifact, deploy, signer, creditAt, readDeployments, writeDeployments } from './lib/contracts';
+import { artifact, deploy, signer, creditAt, peersOf, readDeployments, writeDeployments } from './lib/contracts';
 import { plainSpec } from './lib/specs';
 import { runScript } from './lib/cli';
 
@@ -69,6 +69,7 @@ async function main() {
     maxStalenessBlocks: await old.MAX_STALENESS_BLOCKS(),
     repaymentBps: await old.REPAYMENT_BPS(),
     repayWindowBlocks: await old.REPAY_WINDOW_BLOCKS(),
+    peers: await peersOf(old),
   };
 
   const volume = plainSpec(await old.volumeSpec());
@@ -102,6 +103,7 @@ async function main() {
     ['volumeSpec', specText(plainSpec(await fresh.volumeSpec())), specText(volume)],
     ['repaySpec', specText(plainSpec(await fresh.repaySpec())), specText(repay)],
     ['cleanSpecCount', await fresh.cleanSpecCount(), BigInt(clean.length)],
+    ['peerCount', await fresh.peerCount(), BigInt(policy.peers.length)],
   ];
   for (const [name, got, want] of checks) {
     const same =

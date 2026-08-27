@@ -100,3 +100,16 @@ export function registryAt(address: string, wallet: Wallet): Contract {
 export function creditAt(address: string, wallet: Wallet): Contract {
   return new Contract(address, artifact('UtuhCredit.sol', 'UtuhCredit').abi, wallet);
 }
+
+/// The peers a deployed UtuhCredit honours, read back so a replacement keeps honouring them.
+///
+/// Here rather than in `redeployCredit.ts`, where it started, because that file calls `runScript`
+/// at module scope: importing it to borrow one function *runs the redeployment*. It did, once —
+/// `npm run cure` deployed a replacement credit and overwrote the deployment record with it, in
+/// the middle of a demonstration, and the two mains then raced inside one process. A function two
+/// scripts share belongs in a library, and a library is the thing with no side effects.
+export async function peersOf(credit: Contract): Promise<string[]> {
+  const out: string[] = [];
+  for (let i = 0; i < Number(await credit.peerCount()); i++) out.push(await credit.peerAt(i));
+  return out;
+}
