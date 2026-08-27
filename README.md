@@ -8,8 +8,10 @@ Built for BUIDL CTC 2026 Fall on Creditcoin.
 
 **Technical brief:** https://claude.ai/code/artifact/2caca05b-c659-463f-b5ca-28e207f95147
 
-Deployed and verified on Creditcoin CC3 Testnet. `npm run web` opens a console that reads all of it
-live and lets anyone sweep Ethereum from their browser and break an incomplete claim.
+Deployed and verified on Creditcoin CC3 Testnet. **[The console is live at
+pugarhuda.github.io/utuh](https://pugarhuda.github.io/utuh/)** — it reads the chain from your own
+browser, lets anyone sweep Ethereum and break an incomplete claim, and lets a borrower be
+underwritten end to end without cloning anything. `npm run web` runs the same page locally.
 
 Building something else on Creditcoin that needs a sentence about events that did *not* happen?
 The registry is usable on its own — see **[docs/INTEGRATING.md](docs/INTEGRATING.md)**.
@@ -296,6 +298,41 @@ it rests on. Borrowing again means new history: a range starting after the last 
 `MIN_HISTORY_BLOCKS` long, still inside `MAX_STALENESS_BLOCKS` of the frontier. A credit line that
 renews on performance, rather than a number that can be spent twice.
 
+### One line at a time, and why that is a rule rather than tidiness
+
+`markDefault` is permissionless and nobody is paid to call it. That was fine while it only wrote a
+status, and stopped being fine the moment a standing default started blocking new lines: a borrower
+whose deadline passed could wait, accumulate a fresh month of history, satisfy
+`underwrittenThrough`, and open the next line with the first one still sitting there overdue and
+unmarked. The guard was resting on a transaction nobody was obliged to send.
+
+`activeLineOf[subject]` removes the dependency. A subject has one line at a time; an overdue line is
+still `Active`, so it blocks by itself, and `markDefault` goes back to being bookkeeping. Each guard
+then has exactly one job — the slot says *you have a line open*, the count says *you failed one*.
+
+The rule needs an exit, or it is a trap. An undrawn line cannot be settled (nothing was borrowed)
+and cannot be defaulted (`markDefault` refuses a `drawn` of zero, correctly — no money went out, so
+nothing was missed), so `closeLine` gives the slot back. It does not give the history back:
+`underwrittenThrough` has already moved, and it should have.
+
+### Whose books you take
+
+`defaultsOf` belongs to one deployment. A borrower who walks away from a line here opens one at the
+lender next door with nothing in the way, and that is the gap a credit bureau fills.
+
+The tempting shape is a shared contract everyone reports to. It did not survive being designed.
+Reports have to be trusted, and a registry anyone may write to is a blacklist with extra steps —
+deploy a contract, report a rival's borrower as a defaulter, done. Every fix for that is a
+permission, and a permissioned bureau is the centralised thing this whole repository exists to
+avoid.
+
+So there is no bureau. A lender names the peers whose word it takes, in its constructor, and the
+answer is *pulled* from the peer's own storage — where the fact was recorded by the contract that
+actually extended the credit. No reports, no writes, nothing to forge: a peer can only ever say what
+happened on its own books, and the worst a hostile one can do is refuse credit it was never going to
+extend. A lender that names nobody is unaffected by everyone, which is the safe default and has to
+be a choice rather than an accident.
+
 ### Default without proving a negative, and the way back
 
 A drawn line is settled by the borrower proving repayment landed at the lender's Ethereum address.
@@ -348,10 +385,10 @@ The code is readable and the functions are callable.
 
 | Contract                     | Address                                                                                                                                                    |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UtuhRegistry`               | [`0x452301f32B2AF195cc7D1fA2986f03a254e26129`](https://creditcoin-testnet.blockscout.com/address/0x452301f32B2AF195cc7D1fA2986f03a254e26129?tab=contract)   |
-| `UtuhCredit`                 | [`0x27EBEA9B282Af2AEc882120372E22dc82fB87757`](https://creditcoin-testnet.blockscout.com/address/0x27EBEA9B282Af2AEc882120372E22dc82fB87757?tab=contract)   |
-| `EvmV1Decoder`               | [`0x35871f388769aFe891bF4c5817f64728B1B6B8d7`](https://creditcoin-testnet.blockscout.com/address/0x35871f388769aFe891bF4c5817f64728B1B6B8d7?tab=contract)   |
-| `SettlementLedger` (Sepolia) | [`0x697F5051E6400bdeD2488870E0f1B5DA584E4Ce2`](https://eth-sepolia.blockscout.com/address/0x697F5051E6400bdeD2488870E0f1B5DA584E4Ce2?tab=contract)          |
+| `UtuhRegistry`               | [`0x26880c8980Cd54827543bD34c6c613253c69347b`](https://creditcoin-testnet.blockscout.com/address/0x26880c8980Cd54827543bD34c6c613253c69347b?tab=contract)   |
+| `UtuhCredit`                 | [`0x0177aDb82152c8673a85271F7F06336B820324b6`](https://creditcoin-testnet.blockscout.com/address/0x0177aDb82152c8673a85271F7F06336B820324b6?tab=contract)   |
+| `EvmV1Decoder`               | [`0x084c45552A6c45C7269F4a7041E757ABf4Bcc008`](https://creditcoin-testnet.blockscout.com/address/0x084c45552A6c45C7269F4a7041E757ABf4Bcc008?tab=contract)   |
+| `SettlementLedger` (Sepolia) | [`0xC8C9053C4E2c0590df684c12e5f2610EFeC9575B`](https://eth-sepolia.blockscout.com/address/0xC8C9053C4E2c0590df684c12e5f2610EFeC9575B?tab=contract)          |
 
 Everything below is readable at those addresses rather than taken on trust — `claim(id)`,
 `memberCount(id)`, `keyAt(id, i)`, `enforceableLoss(id)`, `line(1)`, `underwrittenThrough(subject)`
@@ -361,16 +398,18 @@ without a terminal.
 | Read                                  | Answer                                                                     |
 | ------------------------------------- | -------------------------------------------------------------------------- |
 | `claim(1)`                            | Finalized, 3 members, aggregate 0.003 ETH of proven volume                  |
-| `keyAt(1, 0..2)`                      | Sepolia blocks 11575260, 11575262, 11575264                                 |
+| `keyAt(1, 0..2)`                      | Sepolia blocks 11575883, 11575885, 11575886                                 |
 | `claim(2)`                            | Finalized, 0 members — the clean claim, and there is nothing to show        |
 | `claim(3)`                            | Refuted, `enforceableLoss` collapsed to 0                                   |
 | `claim(4)`                            | Finalized, repayment of 0.000525 ETH                                        |
 | `claim(5)`                            | Refuted — planted short by one, and broken from a browser                   |
 | `burned()`                            | 2 CTC, two refuted claimants' halves that nobody collected                  |
 | `line(1)`                             | Settled, limit 10 CTC, drawn 10 CTC, `repayRequired` 525000000000000        |
-| `underwrittenThrough(borrower)`       | 11575268 — one past the range that opened the line                          |
-| `settledThrough(borrower)`            | 11575358 — one past the range that discharged it                            |
+| `underwrittenThrough(borrower)`       | 11575891 — one past the range that opened the line                          |
+| `settledThrough(borrower)`            | 11575986 — one past the range that discharged it                            |
 | `defaultsOf(borrower)`                | 0                                                                           |
+| `activeLineOf(borrower)`              | 0 — the line settled, so the slot is back                                   |
+| `peerCount()`                         | 0 — this lender takes nobody else's books, which is the safe default        |
 
 The borrower's sweep read `publicnode=3  tenderly=3`: two independent endpoints agreeing, and the
 claim built on the union rather than on whichever answered first.
@@ -395,7 +434,7 @@ amount and the deployed policy, so they are a property of the code rather than o
 
 **A default, and the way back.** `DEPLOYMENTS=deployments.full.json npm run cure` deploys a second
 UtuhCredit over the same registry with a five-minute repayment window — the recorded run left one
-at [`0x609EAee1c7419fa8DcA554363950c64BD5DB19f0`](https://creditcoin-testnet.blockscout.com/address/0x609EAee1c7419fa8DcA554363950c64BD5DB19f0) — and underwrites the same
+at [`0x509fab6a2Fd8C1a50dAB8C05cD7C7e53cB29868f`](https://creditcoin-testnet.blockscout.com/address/0x509fab6a2Fd8C1a50dAB8C05cD7C7e53cB29868f) — and underwrites the same
 borrower on the same finalized claims, draws, lets the deadline pass, is marked in default — and
 then makes it good with the repayment claim the loop already finalized. Claims belong to the
 registry and `claimSpent` belongs to the credit contract, which is why that costs one deployment
@@ -468,6 +507,28 @@ The sweep is the daemon's own function, imported rather than reimplemented — `
 `offchain/lib/scope.ts`, bundled into the page. A browser cannot conclude that a claim is complete
 on different reasoning than the daemon would.
 
+### Borrowing from the page
+
+The scripts could always do this, and that was the problem: being underwritten meant cloning a
+repository, filling in a `.env` and running TypeScript. The Borrow pane is the same flow with the
+visitor's own wallet — bind your address (it will send the control commitment on the source chain
+for you, switching the wallet there and back), build the volume and clean claims, wait out their
+challenge window, open the line, draw.
+
+Nothing there is a shortcut around the protocol. The claims it builds are ordinary claims: swept
+across independent endpoints, proven event by event through `0x0FD2`, bonded, sealed, refutable by
+the watcher in the pane above, and finalized only once the window has actually elapsed. The claim
+ids are kept in the browser's own storage, so closing the tab during a window costs nothing —
+which matters, because a window is measured in blocks and nobody is going to sit and watch one.
+
+### Published without a server
+
+`npm run web:static` bakes the ABIs and the deployment record into the page and writes three files.
+There is no server in the published build at all, and the browser tests assert exactly that: the
+page boots, reads the live chain, and asks its host for nothing but `index.html`, `main.js` and
+`style.css`. A GitHub Actions workflow builds it from each commit's own artifacts, so the ABI the
+page carries is the ABI the contracts were compiled with.
+
 `npm run web:test` drives it in a real browser against the live chain: the chain id it reports has
 to match an independent RPC call, the attestation frontier has to be past genesis, the claims it
 lists have to be the ones the registry holds, and the sweep has to produce a verdict with its
@@ -478,6 +539,7 @@ slashing a real bond.
 ## Layout
 
 ```
+.github/workflows/pages.yml the published console, rebuilt from each commit's own artifacts
 .github/workflows/ci.yml    fmt, build, tests, gas snapshot, typecheck, slither — and a daily
                             job that proves real mainnet events against the live precompile,
                             checks the hosted and local provers still agree, and reports what the
@@ -540,15 +602,22 @@ offchain/
   lib/contracts.ts          artifacts, library linking, deployments.json
   lib/networks.ts           chain keys, precompile addresses and default endpoints — the facts
                             the browser console shares with the scripts
-  lib/proofApi.ts           one proof from the hosted builder over plain fetch, across both of
-                            its published hostnames
+  lib/proofApi.ts           one proof, or a batch, from the hosted builder over plain fetch,
+                            across both of its published hostnames
+  lib/batches.ts            how a claim is cut into batches the prover will accept — pure, so the
+                            browser can plan one the same way
 web/
   index.html                the console — everything on it is read from CC3 as the page draws it
-  main.ts                   panes: what Creditcoin attests, claims, the watcher, credit
+  main.ts                   panes: what Creditcoin attests, claims, the watcher, borrowing, credit
   chain.ts                  providers, ABIs out of forge's artifacts, wallet connection
   watch.ts                  the watcher in the browser, importing the daemon's own sweep
+  borrow.ts                 sweep, open, append, seal, finalize, open a line — from the page
+  borrowPane.ts             the steps, each one reading back what the chain says rather than
+                            what the page thinks
   serve.ts                  a static server, and nothing else — no key, no indexer, no cache
+  build-static.ts           the published build: three files, no server, ABIs baked in
   tests/console.spec.ts     Playwright, against the live chain: no fixtures, no stubs
+  tests/static.spec.ts      the published build asks its host for nothing but its own files
   tests/refute.live.spec.ts refuting through the page with a real wallet — off unless asked
 playwright.config.ts        one worker, generous timeouts, because the sweeps are real
 ```
@@ -568,7 +637,7 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 123 forge tests
+npm run test                # 133 forge tests
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -595,6 +664,7 @@ npm run livetest            # 107 guards asserted against the live chain, refund
 
 npm run web                 # the console on http://127.0.0.1:5173 — read-only without a wallet
 npm run web:build           # bundle it; the server serves ABIs straight out of out/
+npm run web:static          # the published build: three files, no server
 npm run web:test            # Playwright, in a real browser, against the live chain
 
 npm run demo                # e2e then credit, against the deployment already recorded
@@ -817,7 +887,7 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-123 tests, 9 of them fuzzed. Everything below runs with `forge test`, no key and no network.
+133 tests, 9 of them fuzzed. Everything below runs with `forge test`, no key and no network.
 
 Most of them cover the part that runs in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
@@ -917,7 +987,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 123 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 133 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings**, which is only worth stating alongside what it was allowed to look
 for.
 

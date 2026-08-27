@@ -109,6 +109,33 @@ whose calldata is a tag and the Creditcoin account, with the sender read out of 
 
 ---
 
+## If you are the second lender
+
+`UtuhCredit` keeps `defaultsOf(address) → uint64`: how many of its own lines that subject walked
+away from and has not made good. It is the one fact a lender is willing to answer for out loud, and
+it is read rather than reported — the contract that extended the credit is the only thing that can
+speak for its own books.
+
+That makes cross-lender checking a constructor argument rather than an institution. Name the peers
+whose word you take, and `openLine` refuses a subject who is in default at any of them:
+
+```solidity
+interface IDefaultsElsewhere {
+    function defaultsOf(address subject) external view returns (uint64);
+}
+```
+
+There is deliberately no shared bureau to write to. A registry anyone may report into is a
+blacklist with extra steps — deploy a contract, report a rival's borrower, done — and every fix for
+that is a permission. Naming your own peers keeps the trust explicit and one-directional: a hostile
+peer can only refuse you credit you were not going to extend, and a lender that names nobody is
+affected by nobody.
+
+If you expose `defaultsOf` from your own contract with the same meaning, other lenders can name you
+back. That is the whole protocol.
+
+---
+
 ## What it costs
 
 Nothing, for the consumer. Every call above is a `view` against a contract on Creditcoin.
