@@ -8,6 +8,9 @@ Built for BUIDL CTC 2026 Fall on Creditcoin.
 
 **Technical brief:** https://claude.ai/code/artifact/2caca05b-c659-463f-b5ca-28e207f95147
 
+Deployed and verified on Creditcoin CC3 Testnet. `npm run web` opens a console that reads all of it
+live and lets anyone sweep Ethereum from their browser and break an incomplete claim.
+
 ---
 
 ## The problem
@@ -273,12 +276,43 @@ settlement consumes the source-chain range it rests on, tracked per subject in `
 because marking a _claim_ spent does not stop a _payment_ being spent twice: two lines, two claims
 over overlapping ranges, one transfer inside both.
 
-### Default without proving a negative
+### One history, one line
+
+A finalized claim can only open one line: `openLine` marks it spent. That is not enough on its own,
+and for a while nothing else was.
+
+The registry will hold any number of claims over the same range with the same scope, and finalizing
+one gives the bond back. So a borrower could build a second claim over the same three repayments,
+finalize it, open a second line, and draw the limit again — every guard in `openLine` passing each
+time, because each of them looks at one line in isolation. The bond cap bounded each line and
+nothing bounded the total.
+
+`underwrittenThrough[subject]` is the fix, and it is the same shape as the `settledThrough`
+watermark that already stopped one payment discharging two debts. Opening a line consumes the range
+it rests on. Borrowing again means new history: a range starting after the last one, still
+`MIN_HISTORY_BLOCKS` long, still inside `MAX_STALENESS_BLOCKS` of the frontier. A credit line that
+renews on performance, rather than a number that can be spent twice.
+
+### Default without proving a negative, and the way back
 
 A drawn line is settled by the borrower proving repayment landed at the lender's Ethereum address.
 If no finalized claim arrives before the deadline, the line defaults. The contract never
 establishes that a payment was missed — the burden sits with the only party who could discharge
 it. Silence is the default condition, not an inference.
+
+A default that costs nothing but the line it happened on is not a credit event, though, and that is
+what it used to be: `markDefault` set a status and the borrower opened the next line the same block
+on a later slice of history. `defaultsOf[subject]` counts defaults that still stand, and `openLine`
+refuses while any do.
+
+`cure` is the way back. The borrower proves the repayment late, on exactly the terms it was owed —
+same scope, same watermark, same backing, same amount, every check `settle` makes, sharing one
+function with it so the cheaper path cannot drift into existence. The line becomes `Settled`, the
+count comes down, and the subject can borrow again on history it has not already spent. Nothing is
+forgiven for being late; the deadline has already done its work, which was to record the default
+while it stood.
+
+That distinction is what separates a credit protocol from a blacklist, and it costs one counter.
 
 ## Deployed on CC3 Testnet (chain id 102031)
 
@@ -309,46 +343,72 @@ The code is readable and the functions are callable.
 
 ### Sepolia-sourced deployment — the completed loop
 
-| Contract                     | Address                                                                                                                                                   |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UtuhRegistry`               | [`0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac`](https://creditcoin-testnet.blockscout.com/address/0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac?tab=contract) |
-| `UtuhCredit`                 | [`0x1C6d88eb6a40Ef2dBB8cFAF8A1aBe5641eAe9Ea8`](https://creditcoin-testnet.blockscout.com/address/0x1C6d88eb6a40Ef2dBB8cFAF8A1aBe5641eAe9Ea8?tab=contract) |
-| `EvmV1Decoder`               | [`0xEEF4094b3848eD261478310a949c4A1E42d28571`](https://creditcoin-testnet.blockscout.com/address/0xEEF4094b3848eD261478310a949c4A1E42d28571?tab=contract) |
-| `SettlementLedger` (Sepolia) | [`0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D`](https://eth-sepolia.blockscout.com/address/0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D?tab=contract)        |
+| Contract                     | Address                                                                                                                                                    |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UtuhRegistry`               | [`0x452301f32B2AF195cc7D1fA2986f03a254e26129`](https://creditcoin-testnet.blockscout.com/address/0x452301f32B2AF195cc7D1fA2986f03a254e26129?tab=contract)   |
+| `UtuhCredit`                 | [`0x27EBEA9B282Af2AEc882120372E22dc82fB87757`](https://creditcoin-testnet.blockscout.com/address/0x27EBEA9B282Af2AEc882120372E22dc82fB87757?tab=contract)   |
+| `EvmV1Decoder`               | [`0x35871f388769aFe891bF4c5817f64728B1B6B8d7`](https://creditcoin-testnet.blockscout.com/address/0x35871f388769aFe891bF4c5817f64728B1B6B8d7?tab=contract)   |
+| `SettlementLedger` (Sepolia) | [`0x697F5051E6400bdeD2488870E0f1B5DA584E4Ce2`](https://eth-sepolia.blockscout.com/address/0x697F5051E6400bdeD2488870E0f1B5DA584E4Ce2?tab=contract)          |
 
 Everything below is readable at those addresses rather than taken on trust — `claim(id)`,
-`memberCount(id)`, `keyAt(id, i)`, `enforceableLoss(id)`, `line(1)` and `settledThrough(subject)`
-all answer to anyone. Claim 1 volume finalized at **0.003 ETH** over three payments, at Sepolia
-blocks 11568493, 11568495 and 11568496; claim 2 clean finalized with zero members; claim 3
-**Refuted** with `enforceableLoss` collapsed to 0; claim 4 repayment finalized at **0.000525 ETH**
-from Sepolia block 11568588 — and line 1 reads `Settled`, with `settledThrough` at 11568619. The borrower's sweep read `publicnode=3  tenderly=3`: two
-independent endpoints agreeing, and the claim built on the union rather than on whichever answered
-first. `burned()` on that registry reads 1 CTC, which is the refuted claimant's half that nobody
-collected.
+`memberCount(id)`, `keyAt(id, i)`, `enforceableLoss(id)`, `line(1)`, `underwrittenThrough(subject)`
+and `settledThrough(subject)` all answer to anyone, and the console at `npm run web` shows them
+without a terminal.
 
-That run did not finish in one go, twice over, and both interruptions are worth recording because
-the chain absorbed them.
+| Read                                  | Answer                                                                     |
+| ------------------------------------- | -------------------------------------------------------------------------- |
+| `claim(1)`                            | Finalized, 3 members, aggregate 0.003 ETH of proven volume                  |
+| `keyAt(1, 0..2)`                      | Sepolia blocks 11575260, 11575262, 11575264                                 |
+| `claim(2)`                            | Finalized, 0 members — the clean claim, and there is nothing to show        |
+| `claim(3)`                            | Refuted, `enforceableLoss` collapsed to 0                                   |
+| `claim(4)`                            | Finalized, repayment of 0.000525 ETH                                        |
+| `claim(5)`                            | Refuted — planted short by one, and broken from a browser                   |
+| `burned()`                            | 2 CTC, two refuted claimants' halves that nobody collected                  |
+| `line(1)`                             | Settled, limit 10 CTC, drawn 10 CTC, `repayRequired` 525000000000000        |
+| `underwrittenThrough(borrower)`       | 11575268 — one past the range that opened the line                          |
+| `settledThrough(borrower)`            | 11575358 — one past the range that discharged it                            |
+| `defaultsOf(borrower)`                | 0                                                                           |
 
-The first: the process died during the long wait for Sepolia's attestation frontier to reach the
-repayment block, between the draw and the settlement. Nothing was lost, because nothing was being
-held in the script — `npm run finish -- <registry> <credit> 1` read the line's state off the chain
-and closed it. That is what `finishLine.ts` is for.
+The borrower's sweep read `publicnode=3  tenderly=3`: two independent endpoints agreeing, and the
+claim built on the union rather than on whichever answered first.
 
-The second was mine. I stopped a resume that looked stuck and started another, and the first was
-still running: **two processes built the same repayment claim.** Claim 4 and claim 5 hold the
-identical event — Sepolia block 11568588, tx 142, log 0 — and settlement took claim 4. Nothing
-broke, because a settlement consumes both the claim and the source-chain range it rests on:
-claim 5 could not settle the same line, and `settledThrough` at 11568619 means that payment cannot
-settle any other. The duplicate cost its author a bond locked until its own window closed, and
-nothing else. Two guards that were written for a lying claimant turned out to cover a clumsy
+Claim 5 is the interesting one. `npm run bait` sealed it deliberately short by one event and told
+nobody. It was found and broken **from the console**, in a browser: the page swept Sepolia across
+two endpoints (`publicnode=4  tenderly=4`), checked all four against the claim on-chain, found the
+one it omitted, fetched a proof from the hosted builder and sent the refutation itself. That path
+is a Playwright test — `UTUH_LIVE_UI=1 npm run web:test -- refute.live` — so it is a thing that is
+checked rather than a thing that was done once.
+
+Three figures there are the mechanism, not decoration. The limit is **10 CTC** —
+`enforceableLoss` of 1 CTC times a `BOND_MULTIPLE` of 10 — and not the 12 CTC the 0.003 ETH of
+volume alone would justify, because a 2 CTC bond only guarantees a 1 CTC loss and it is the
+guarantee that lends. 0.000525 ETH is what drawing 10 CTC obliges at the lender's rate and 105%
+terms; the borrower had no say in the figure. And the two watermarks now read one past the ranges
+they consumed, which is what stops the same history opening a second line and the same payment
+discharging a second debt.
+
+`test/Lifecycle.t.sol` reproduces all three of those numbers locally, from the fixture's own
+amount and the deployed policy, so they are a property of the code rather than of that afternoon.
+
+**A default, and the way back.** `DEPLOYMENTS=deployments.full.json npm run cure` deploys a second
+UtuhCredit over the same registry with a five-minute repayment window — the recorded run left one
+at [`0x609EAee1c7419fa8DcA554363950c64BD5DB19f0`](https://creditcoin-testnet.blockscout.com/address/0x609EAee1c7419fa8DcA554363950c64BD5DB19f0) — and underwrites the same
+borrower on the same finalized claims, draws, lets the deadline pass, is marked in default — and
+then makes it good with the repayment claim the loop already finalized. Claims belong to the
+registry and `claimSpent` belongs to the credit contract, which is why that costs one deployment
+and one Sepolia transaction rather than a second loop.
+
+**An earlier run, at earlier addresses, did not finish in one go** — twice — and both interruptions
+are worth recording because the chain absorbed them. The first: the process died during the long
+wait for Sepolia's attestation frontier to reach the repayment block. Nothing was lost, because
+nothing was being held in the script; `npm run finish -- <registry> <credit> 1` read the line's
+state off the chain and closed it. The second was mine. I stopped a resume that looked stuck and
+started another, and the first was still running: two processes built the same repayment claim, both
+holding the identical event. Nothing broke, because a settlement consumes both the claim and the
+source-chain range it rests on — the duplicate could not settle the same line, and the watermark
+meant that payment could not settle any other. It cost its author a bond locked until its own window
+closed, and nothing else. Two guards written for a lying claimant turned out to cover a clumsy
 honest one too.
-
-Three figures there are fixes made visible. The limit is **10 CTC** — `enforceableLoss` of 1 CTC
-times a `BOND_MULTIPLE` of 10 — and not the far larger number the 0.003 ETH of volume alone would
-justify, because a 2 CTC bond only guarantees a 1 CTC loss and it is the guarantee that lends.
-0.000525 ETH is what drawing 10 CTC obliges at the lender's rate and 105% terms; the borrower had
-no say in the figure. And `settledThrough` for that subject reads 11565483, past the payment that
-discharged the line, so the same payment cannot discharge a second one.
 
 ## Two demonstrations, and why there are two
 
@@ -366,6 +426,51 @@ The source-chain contract is not a stand-in for anything under test. The payment
 transfers, the events are real logs in real blocks, and Creditcoin attests them exactly as it
 attests Aave's. A scope is a scope — the registry cannot tell the difference, and does not need
 to.
+
+## The console, and why the watcher belongs in a browser
+
+```bash
+npm run web     # http://127.0.0.1:5173
+```
+
+Everything on that page is read from CC3 Testnet as the page draws it. No server holds a key, no
+indexer stands in between, and there is no seeded state to fall back on — if the chain is
+unreachable the page says so rather than showing the last thing it knew. The ABIs come out of
+forge's own artifacts, so a field the contract stopped having is a load failure rather than a
+plausible-looking zero.
+
+It shows four things: what Creditcoin says it can attest, read straight off `0x0FD3`; every claim
+in the registry with its bond, its enforceable loss and its remaining window; the lender's policy
+and every line; and a watcher.
+
+The watcher is the part that had to exist. Every guarantee here rests on one sentence — *anyone may
+refute a claim by proving one in-scope event it left out* — and until something is actually
+watching, that sentence describes a possibility rather than a fact. `npm run watch` is that
+sentence made real for whoever runs a daemon with a funded key, which is a small number of people.
+The console makes it true for whoever opens a page:
+
+- it rebuilds the claim's scope from what the registry stores, trusting the claimant for nothing;
+- it sweeps the source chain **from the browser**, across independent public endpoints, taking the
+  union rather than a vote, and says how many answered — because "no gap found" from one endpoint
+  is not the same claim as "no gap found" from two;
+- it checks each event against the claim with `contains`, on chain;
+- and if the claim is short, it fetches one proof from the Proof Builder and sends the refutation.
+
+That is possible only because the pieces are CORS-open and public: `rpc.cc3-testnet.creditcoin.network`,
+the source-chain endpoints, and the hosted Proof Builder all answer a browser directly. Nothing
+needed to be built to make it work, and it means enforcement does not depend on anyone deploying
+infrastructure.
+
+The sweep is the daemon's own function, imported rather than reimplemented — `scanScopeUnion` in
+`offchain/lib/scope.ts`, bundled into the page. A browser cannot conclude that a claim is complete
+on different reasoning than the daemon would.
+
+`npm run web:test` drives it in a real browser against the live chain: the chain id it reports has
+to match an independent RPC call, the attestation frontier has to be past genesis, the claims it
+lists have to be the ones the registry holds, and the sweep has to produce a verdict with its
+provenance attached. With `UTUH_LIVE_UI=1` a further test connects a real wallet, finds a claim
+that is genuinely short, and refutes it — a real transaction, verified by the real precompile,
+slashing a real bond.
 
 ## Layout
 
@@ -389,6 +494,10 @@ src/
 test/
   EventScope.t.sol          the matcher, ordering key, metrics and leaf identity
   UtuhCredit.t.sol          deployment floors, control binding, scope identity, terms, liquidity
+  Lifecycle.t.sol           the whole loop locally — claim, refute, finalize, underwrite, draw,
+                            settle, default, cure — on real Sepolia transaction bytes, with only
+                            the two precompiles' answers substituted
+  fixtures/                 two real Sepolia transactions, captured from a recorded run
   SettlementLedger.t.sol    what the source-chain ledger will and will not record as a payment
   EventScopeKey.symbolic.t.sol  halmos proofs of the ordering key, over every input rather
                             than 256 samples — `npm run symbolic`
@@ -398,6 +507,8 @@ offchain/
   deploy.ts                 deploy decoder, registry, credit
   e2e.ts                    honest claim finalized; dishonest claim refuted and slashed
   creditDemo.ts             underwrite a real Aave borrower; refute a real liquidated one
+  cureDemo.ts               draw, miss the deadline, be marked in default, prove the repayment
+                            late — on chain, against claims the full loop already finalized
   watch.ts                  the watcher — follows ClaimSealed, sweeps, refutes what is short
   badClaim.ts               files a deliberately incomplete claim, so the watcher has prey
   liveTest.ts               the guards unit tests cannot reach, asserted against CC3
@@ -419,6 +530,19 @@ offchain/
   lib/specs.ts              a UtuhCredit HistorySpec becomes a Scope, and scope equality
   lib/policy.ts             the lender's deployment configuration, read by deploy and verify
   lib/contracts.ts          artifacts, library linking, deployments.json
+  lib/networks.ts           chain keys, precompile addresses and default endpoints — the facts
+                            the browser console shares with the scripts
+  lib/proofApi.ts           one proof from the hosted builder over plain fetch, across both of
+                            its published hostnames
+web/
+  index.html                the console — everything on it is read from CC3 as the page draws it
+  main.ts                   panes: what Creditcoin attests, claims, the watcher, credit
+  chain.ts                  providers, ABIs out of forge's artifacts, wallet connection
+  watch.ts                  the watcher in the browser, importing the daemon's own sweep
+  serve.ts                  a static server, and nothing else — no key, no indexer, no cache
+  tests/console.spec.ts     Playwright, against the live chain: no fixtures, no stubs
+  tests/refute.live.spec.ts refuting through the page with a real wallet — off unless asked
+playwright.config.ts        one worker, generous timeouts, because the sweeps are real
 ```
 
 ## Running it
@@ -436,7 +560,7 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 100 forge tests
+npm run test                # 118 forge tests
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -454,11 +578,16 @@ npm run e2e                 # the registry, both outcomes
 npm run credit              # the credit line, on a real Aave borrower
 npm run control             # bind your own address (needs a little source-chain gas)
 npm run full                # the entire loop, two parties, on Sepolia
+npm run cure                # a default recorded on chain, then made good — needs a finished loop
 npm run finish -- <registry> <credit> <lineId>             # resume an interrupted run
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
 npm run bait                # seal a deliberately short claim for the watcher to find
-npm run livetest            # 95 guards asserted against the live chain, refunds included
+npm run livetest            # 107 guards asserted against the live chain, refunds included
+
+npm run web                 # the console on http://127.0.0.1:5173 — read-only without a wallet
+npm run web:build           # bundle it; the server serves ABIs straight out of out/
+npm run web:test            # Playwright, in a real browser, against the live chain
 
 npm run demo                # e2e then credit, against the deployment already recorded
 ```
@@ -680,7 +809,9 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-100 tests, 9 of them fuzzed, over the part that can run in a plain EVM: ordering and scope matching
+118 tests, 9 of them fuzzed. Everything below runs with `forge test`, no key and no network.
+
+Most of them cover the part that runs in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
 record as a payment; in `UtuhCredit.t.sol` the guards that decide whose history a line may be
 opened against — deployment floors, scope identity, the lender's liquidity, and the control
@@ -699,18 +830,45 @@ demo's happy path. Eight tests now cover it, including a fuzzed round-trip asser
 `controlCommitment` tells a borrower to send is exactly what the parser accepts, and a tag bent by
 a single byte.
 
-The proving half is **not** unit tested, deliberately. The Attestcoin precompiles at `0x0FD2` and
-`0x0FD3` are Creditcoin runtime natives — `eth_getCode` returns `0x` for both:
+### The precompiles, and what a local test may and may not say about them
+
+The Attestcoin precompiles at `0x0FD2` and `0x0FD3` are Creditcoin runtime natives —
+`eth_getCode` returns `0x` for both:
 
 ```
 $ eth_getCode 0x...0fD2 → 0x
 $ eth_getCode 0x...0fD3 → 0x
 ```
 
-A forked EVM cannot execute them, and a stub would only ever test the stub. So that half runs
-against the live CC3 Testnet with real proofs for real Ethereum mainnet transactions. `npm run
-e2e`, `npm run credit` and `npm run livetest` are the tests, and they either pass on the real chain
-or they do not pass at all.
+A forked EVM cannot execute them, and **a stub that answered "this proof is valid" would only ever
+test the stub**. That is true, and it is the reason the verification half runs against the live
+chain: `npm run probe` proves real Ethereum mainnet transactions through `0x0FD2` over `eth_call`,
+CI runs it daily, and no local test can substitute for it.
+
+For a long time that argument was also doing a second job it could not carry. Because `open` asks
+`0x0FD3` whether a range is attested before anything else happens, *every* path past that line was
+untested locally — appending, ordering, sealing, refuting, finalizing, underwriting, drawing,
+settling. A hundred tests passed without one of them opening a line, and the registry read **32%**
+covered.
+
+`test/Lifecycle.t.sol` closes that. It substitutes exactly two answers — the Block Prover's verdict
+on a proof and the transaction index it reads out of the Merkle path, and the ChainInfo
+precompile's attestation heights — and nothing else. The bytes it feeds in are a **real Sepolia
+transaction**, captured from a recorded full-flow run and stored in `test/fixtures`. Everything
+downstream of the substituted answers is the real code on real bytes: `EvmV1Decoder` decodes the
+transaction, the receipt status is read, the log is matched against the scope field by field, the
+metric is pulled out of the log's data, the ordering key is packed, membership is binary-searched,
+and the money is divided.
+
+The distinction is the whole point. A stub cannot tell you whether a proof is valid. It can tell
+you what your contract does with a valid one, and that was the half nothing was checking. So the
+suite reproduces the published run's arithmetic from first principles — three settlements of
+0.001 ETH, a headline limit of 12 CTC, a bond cap that cuts it to 10, and 0.000525 ETH owed back —
+and if any of those stops falling out of the code, a test fails on a laptop rather than a
+demonstration failing on a chain.
+
+The live scripts still run and still matter: `npm run e2e`, `npm run credit` and `npm run livetest`
+either pass on the real chain or they do not pass at all.
 
 Of the 52 errors these contracts can revert with, 21 are named by a unit test, 8 by the live suite,
 and 2 by another script in the loop. The remaining 21 are named nowhere. Most are behind `openLine`,
@@ -726,19 +884,22 @@ because removing it changes 61 characters of the solc metadata CBOR — the exec
 identical, measured — and the contracts already verified on Blockscout were built from a source
 tree that has this line in it.
 
-`forge coverage` says 100% of `EventScope.sol` and `SettlementLedger.sol`, 49% of `UtuhCredit.sol`,
-and **32% of `UtuhRegistry.sol`** — 47% of lines overall. That registry number is worth stating
-rather than leaving to be discovered: almost every path in it begins at `open`, `open` asks `0x0FD3`
-whether the range is attested, and that call cannot execute in a local EVM.
+`forge coverage` now reads:
 
-It read 9.6% until recently, and the sentence that followed it — that everything reachable without a
-precompile was covered — was not true when it was written. The guards that run *before* the
-precompile were reachable locally and tested only against a live chain, which meant they needed a
-funded account and could not run in CI at all. `test/UtuhRegistry.t.sol` covers them now. What is
-still uncovered locally is genuinely unreachable locally, and is covered live, on chain, where a
-stub could not have lied about it.
+| File                      | Lines             | Functions       |
+| ------------------------- | ----------------- | --------------- |
+| `src/UtuhCredit.sol`      | 97.16% (205/211)  | 100.00% (31/31) |
+| `src/UtuhRegistry.sol`    | 93.63% (147/157)  | 100.00% (21/21) |
+| `src/lib/EventScope.sol`  | 100.00% (25/25)   | 100.00% (6/6)   |
+| `src/source/SettlementLedger.sol` | 100.00% (8/8) | 100.00% (2/2) |
+| **Total**                 | **96.05%**        | **100.00%**     |
 
-`npm run livetest` is the one that reaches furthest: 95 guards, most of them `staticCall`s that
+It read 9.6%, then 47%, and the sentence that followed the first of those — that everything
+reachable without a precompile was covered — was not true when it was written. Branch coverage is
+54%, and that is the honest number to look at next: the uncovered branches are mostly revert arms
+of guards whose other side is exercised.
+
+`npm run livetest` is the one that reaches furthest: 107 guards, most of them `staticCall`s that
 prove a revert without spending gas, plus the steps that have to be real for the later ones to
 mean anything. It underwrites whichever address the source chain says was busiest in its window,
 which is a deliberate change — it used to underwrite a wallet derived from the operator's key,
@@ -748,7 +909,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 100 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 118 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings**, which is only worth stating alongside what it was allowed to look
 for.
 
@@ -823,6 +984,8 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 | `RawProofBuilder` over source RPCs               | proofs built locally when the hosted Proof Builder is down                      |
 | `PrecompileBlockProver`                          | `npm run probe` — the `view` twin of `verifyAndEmit`, over `eth_call`           |
 | `utils.gas.MAX_GAS_CAP` / `gasAsPercentageOfMax` | `npm run gas` — what a call costs against a 75M block                           |
+| Ethereum mainnet as source chain (`chainKey 3`)  | all demos                                                                       |
+| Hosted Proof Builder, both published hostnames   | `prover.` and `proof-gen-api.` are tried in turn before the local builder       |
 
 Two SDK modules are deliberately unused, which is worth saying so it does not read as an oversight.
 `queryBuilder` builds ABIs for the oracle's query subsystem, and Utuh does not go through it — it
@@ -831,7 +994,13 @@ transactions off-chain; Utuh decodes them _on_-chain through `EvmV1Decoder`, bec
 decode is a claim about bytes and an on-chain one is a check of them. The one thing an off-chain
 decode would have bought — knowing a call will succeed before paying for it — is bought more
 cheaply by the `eth_call` in `sendRegistryCall`.
-| Ethereum mainnet as source chain (`chainKey 3`) | all demos |
+
+Because every append and every refutation goes through `verifyAndEmit` rather than the `view`
+twin, Utuh's use of the oracle is visible from outside this repository: Creditcoin's own
+[USC Oracle dashboard](https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications)
+lists each verification against its source-chain height and the Creditcoin block it landed in. The
+Sepolia log there is where the full-flow run's settlements and its repayment show up, minutes after
+they happen, recorded by the network rather than by us.
 
 ## Known limits
 
@@ -862,6 +1031,14 @@ cheaply by the `eth_call` in `sendRegistryCall`.
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —
   refuting pays only when the claimant fails to defend, so watching is worth less than the reward
   suggests.
+- **A page open in a tab is not a daemon.** The console makes refuting available to anyone with a
+  browser, which is a real change — enforcement no longer depends on somebody deploying
+  infrastructure — but it does not make anyone watch. Nobody sweeps while the tab is closed, and a
+  challenge window can elapse with every watcher asleep. What the console removes is the excuse
+  that watching was hard to start; what still has to be true is that refuting pays enough for
+  someone to bother, and the front-running note above is why that is weaker than the reward
+  suggests.
+
 - **The union is safe for a watcher and was not for a claimant.** A watcher meeting a candidate it
   cannot prove shrugs and moves on; a claimant has to append everything it swept, so one
   unprovable candidate aborted the whole claim — and since the union deliberately trusts no
