@@ -30,6 +30,20 @@ test('boots with no server behind it', async ({ page }) => {
   expect(errors, `console errors: ${errors.join(' | ')}`).toHaveLength(0);
 });
 
+test('never scrolls the page sideways, whatever the tables hold', async ({ page }) => {
+  // The claims table has ten columns and no wrapping. It has to scroll inside its own box; if it
+  // scrolls the window instead, every phone and half the laptops get a page that slides.
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto('/static/');
+  await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
+
+  const overflow = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+  }));
+  expect(overflow.scroll).toBeLessThanOrEqual(overflow.client);
+});
+
 test('carries the same deployment the served build does', async ({ page }) => {
   const record = await (await page.request.get('/deployments.json')).json();
 

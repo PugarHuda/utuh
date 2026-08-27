@@ -93,6 +93,10 @@ section {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 1.1rem 1.25rem 1.25rem;
+  /* A grid item is `min-width: auto` by default, so a table wider than the column makes the
+     column wider — and the page, and the window. The tables scroll inside `.body`; this is what
+     lets them. */
+  min-width: 0;
 }
 
 h2 {
@@ -109,6 +113,7 @@ h2 {
 
 .body {
   overflow-x: auto;
+  min-width: 0;
 }
 
 table {
