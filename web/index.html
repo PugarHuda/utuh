@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Utuh Console — CC3 Testnet</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='14'>⛓</text></svg>"
+    />
+  </head>
+  <body data-state="loading">
+    <header>
+      <div>
+        <h1>Utuh</h1>
+        <p class="sub">
+          A completeness layer for the Attestcoin Protocol, and undercollateralized credit built on
+          it. Everything below is read from Creditcoin CC3 Testnet as this page draws it.
+        </p>
+      </div>
+      <div class="chip-row">
+        <span class="chip">chain id <b id="chain-id">…</b></span>
+        <span class="chip">block <b id="cc3-block">…</b></span>
+        <button id="connect" class="act">connect wallet</button>
+      </div>
+    </header>
+
+    <p id="boot-error" class="bad"></p>
+
+    <main>
+      <section>
+        <h2>What Creditcoin can read</h2>
+        <div id="attestcoin-body" class="body">reading the ChainInfo precompile…</div>
+      </section>
+
+      <section>
+        <h2>Deployment</h2>
+        <div id="addresses" class="body">…</div>
+      </section>
+
+      <section>
+        <h2>Claims</h2>
+        <p class="note">
+          A claim asserts that a set of source-chain events is <em>complete</em>. Every member was
+          verified by the Block Prover on the way in, so it cannot be inflated; the bond is what
+          stands behind the assertion that nothing was left out.
+        </p>
+        <div id="registry-body" class="body">reading the registry…</div>
+        <div id="actions" class="actions"></div>
+      </section>
+
+      <section>
+        <h2>Watch</h2>
+        <p class="note">
+          This is the part that has to be real. The sweep below runs in your browser, against
+          independent public endpoints, using the same code the watcher daemon runs. If it finds an
+          in-scope event a sealed claim does not contain, one proof breaks the claim and pays you
+          half the bond.
+        </p>
+        <div class="controls">
+          <select id="claim-select" data-testid="claim-select"></select>
+          <button id="sweep" class="act" data-testid="sweep">sweep the source chain</button>
+        </div>
+        <div id="refute-box" class="actions"></div>
+        <div id="log" class="log" data-testid="log"></div>
+      </section>
+
+      <section>
+        <h2>Credit</h2>
+        <p class="note">
+          Nothing bridges. The history stays on Ethereum, the credit is issued in CTC on
+          Creditcoin, repayment happens back on Ethereum, and only proof crosses.
+        </p>
+        <div id="credit-body" class="body">reading the credit contract…</div>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        No server holds a key and no indexer stands between this page and the chain. Point your own
+        client at <code>rpc.cc3-testnet.creditcoin.network</code> and you will get the same answers.
+      </p>
+    </footer>
+
+    <script type="module" src="/dist/main.js"></script>
+  </body>
+</html>

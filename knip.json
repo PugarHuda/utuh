@@ -1,10 +1,12 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
-    "offchain/*.ts"
+    "offchain/*.ts",
+    "web/*.ts"
   ],
   "project": [
-    "offchain/**/*.ts"
+    "offchain/**/*.ts",
+    "web/**/*.ts"
   ],
   "ignoreBinaries": [
     "forge",

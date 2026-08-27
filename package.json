@@ -19,6 +19,7 @@
     "redeploy:credit": "tsx offchain/redeployCredit.ts",
     "e2e": "tsx offchain/e2e.ts",
     "credit": "tsx offchain/creditDemo.ts",
+    "cure": "tsx offchain/cureDemo.ts",
     "balance": "tsx offchain/balance.ts",
     "typecheck": "tsc --noEmit",
     "test": "forge test",
@@ -37,6 +38,9 @@
     "fmt": "forge fmt",
     "check": "forge fmt --check && forge lint src/ && forge test && prettier --check \"offchain/**/*.ts\" && tsc --noEmit -p tsconfig.json && slither .",
     "gas": "tsx offchain/gas.ts",
+    "web:build": "esbuild web/main.ts --bundle --format=esm --target=es2022 --minify --outfile=web/dist/main.js",
+    "web": "npm run web:build && tsx web/serve.ts",
+    "web:test": "playwright test",
     "lint": "forge lint src/",
     "format": "prettier --write \"offchain/**/*.ts\"",
     "format:check": "prettier --check \"offchain/**/*.ts\"",
@@ -51,7 +55,9 @@
     "ethers": "^6.17.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^26.3.0",
+    "esbuild": "^0.28.2",
     "knip": "^6.32.3",
     "prettier": "^3.9.6",
     "tsx": "^4.23.12",

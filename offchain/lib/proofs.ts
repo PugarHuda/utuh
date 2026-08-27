@@ -1,6 +1,7 @@
 import { JsonRpcProvider } from 'ethers';
 import { proofProvider, chainInfo } from '@gluwa/usc-sdk';
 import { PROVER_URL, cc3, sources } from '../config';
+import { PROVER_URL_ALTERNATE } from './networks';
 import type { ScopedEvent } from './scope';
 
 /// Mirrors UtuhRegistry.EventProof.
@@ -121,19 +122,21 @@ class AnyOfBlockProvider implements proofProvider.raw.blockProvider.BlockProvide
 /// absence would let a claimant drop an event that is really there. Wrong in that direction costs
 /// the bond, wrong in the other costs an aborted claim, so anything ambiguous is not absence.
 export function isAbsence(prover: string, message: string): boolean {
-  if (prover === 'hosted') return message.includes('status code 404');
+  if (prover.startsWith('hosted')) return message.includes('status code 404');
   return /Transaction 0x[0-9a-fA-F]{64} not found$/.test(message.trim());
 }
 
 export class Prover {
   private builder: proofProvider.service.ProofBuilder;
+  /// The same service under its other published hostname. See {withHostedFallback}.
+  private builderAlt?: proofProvider.service.ProofBuilder;
   private local?: proofProvider.raw.RawProofBuilder;
   private localChainInfo?: chainInfo.PrecompileChainInfoProvider;
   private owned: JsonRpcProvider[] = [];
 
   constructor(
     private chainKey: number,
-    builderUrl: string,
+    private builderUrl: string,
     timeoutMs = 30000,
   ) {
     this.builder = new proofProvider.service.ProofBuilder(chainKey, builderUrl, timeoutMs);
@@ -151,7 +154,9 @@ export class Prover {
   static withDefaults(chainKey: number, timeoutMs = 30000, builderUrl = PROVER_URL): Prover {
     const rpcs = sources(chainKey).map((s) => s.provider);
     const cc = cc3();
-    const p = new Prover(chainKey, builderUrl, timeoutMs).withLocalFallback(rpcs, cc);
+    const p = new Prover(chainKey, builderUrl, timeoutMs)
+      .withHostedFallback(PROVER_URL_ALTERNATE, timeoutMs)
+      .withLocalFallback(rpcs, cc);
     p.owned = [...rpcs, cc];
     return p;
   }
@@ -162,6 +167,23 @@ export class Prover {
   close(): void {
     for (const p of this.owned) p.destroy();
     this.owned = [];
+  }
+
+  /// Ask the same service under its other published hostname before falling back to building
+  /// proofs locally.
+  ///
+  /// `prover.cc3-testnet` is the host the SDK's own examples use; `proof-gen-api.cc3-testnet` is
+  /// the one the Attestcoin docs publish. Both answer today, and there is no way to tell from
+  /// outside which of the two is the alias — so a name that goes away takes the hosted path with
+  /// it unless the other is already wired. It costs one HTTP request on a path that is already
+  /// failing.
+  ///
+  /// Passing a URL equal to the primary is a no-op rather than a duplicate request.
+  withHostedFallback(url: string, timeoutMs = 30000): this {
+    if (url && url !== this.builderUrl) {
+      this.builderAlt = new proofProvider.service.ProofBuilder(this.chainKey, url, timeoutMs);
+    }
+    return this;
   }
 
   /// Add a locally-built prover to fall back on.
@@ -200,6 +222,7 @@ export class Prover {
   private async ask(hashes: string[], batch: boolean): Promise<any> {
     const provers: [string, proofProvider.ProofProvider | undefined][] = [
       ['hosted', this.builder],
+      ['hosted-alt', this.builderAlt],
       ['local', this.local],
     ];
     let last = 'no prover available';

@@ -95,6 +95,51 @@ jobs:
       - name: dead code
         run: npx knip
 
+  console:
+    # The web console, driven by a real browser against the live CC3 testnet.
+    #
+    # It runs on every push rather than on the schedule the other live jobs use, because it is the
+    # product surface: a change that breaks the page should not wait until tomorrow morning to say
+    # so. The cost is that a public RPC having a bad minute reads as a red build, which is why the
+    # Playwright config retries once in CI and why the assertions are about invariants — the chain
+    # id, the claim count, the shape of a status — rather than about any particular claim.
+    name: console
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - run: npm ci
+
+      # The console reads its ABIs out of forge's artifacts, so there has to be a build first.
+      - name: build artifacts
+        run: forge build
+
+      - name: browser
+        run: npx playwright install --with-deps chromium
+
+      - name: console tests
+        run: npm run web:test
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
   analysis:
     name: static analysis
     runs-on: ubuntu-latest
