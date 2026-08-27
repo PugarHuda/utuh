@@ -39,7 +39,7 @@
     "check": "forge fmt --check && forge lint src/ && forge test && prettier --check \"offchain/**/*.ts\" && tsc --noEmit -p tsconfig.json && slither .",
     "gas": "tsx offchain/gas.ts",
     "web:build": "esbuild web/main.ts --bundle --format=esm --target=es2022 --minify --outfile=web/dist/main.js",
-    "web": "npm run web:build && tsx web/serve.ts",
+    "web": "npm run web:build && npm run web:static && tsx web/serve.ts",
     "web:static": "tsx web/build-static.ts",
     "web:test": "playwright test",
     "lint": "forge lint src/",
