@@ -1319,7 +1319,13 @@ they happen, recorded by the network rather than by us.
   claim omits, the Block Prover settles whether it is real, and a fabricated one just fails to
   prove. So `watch.ts` sweeps every endpoint it has and takes the union rather than a vote, and no
   endpoint has to be trusted for the positive case. The negative stays soft, and is reported that
-  way — "no gap found across 3 endpoints", or "inconclusive, 1 answered". Public RPCs tested here
+  way — "no gap found across 3 independent endpoints", or "inconclusive, 1 saw everything". The
+  count is of endpoints that saw _everything the union holds_, not of endpoints that returned: one
+  that answered with less than the others is behind or pruned, and its not mentioning a gap is not
+  a second opinion. Before that distinction, publicnode's empty answer counted, and a claim could
+  seal on one real source while the log said two. Three consecutive runs of the daemon's own sweep
+  over the four sources, same 300 blocks, 60,000 deep: `publicnode=10 tenderly=10 0xrpc=10
+ethpandaops=10`, then `publicnode=0 …` twice — answered 4, vouched 3. Public RPCs tested here
   **do not** always error rather than truncate. That was written here after testing simple
   queries and it was wrong. Measured on Sepolia, same query, same moment, WETH transfers over 200
   blocks:

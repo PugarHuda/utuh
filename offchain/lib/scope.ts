@@ -154,7 +154,14 @@ export async function scanScope(
 
 export interface UnionSweep {
   events: ScopedEvent[];
+  /// Endpoints that returned without error — including one that returned nothing.
   answered: number;
+  /// Endpoints that saw everything the union holds. This is the count that means "independent
+  /// sources agree": an endpoint that answered with less than the others is behind or pruned, and
+  /// its silence about a gap says nothing. publicnode on Sepolia answers the same deep query
+  /// `0 8 8 0` on four consecutive calls; counted as answering, it would let a claim seal on one
+  /// real source while the log said two.
+  vouched: number;
   attempted: number;
   perSource: string[];
   /// Events two endpoints described differently. The union is about presence — any endpoint
@@ -183,6 +190,7 @@ export async function scanScopeUnion(
   const byKey = new Map<bigint, ScopedEvent>();
   const perSource: string[] = [];
   const conflicts: string[] = [];
+  const seenBy: Set<bigint>[] = [];
   let answered = 0;
 
   for (const { url, provider } of endpoints) {
@@ -193,6 +201,7 @@ export async function scanScopeUnion(
       const seen = deadline ? await deadline(work) : await work;
       answered++;
       perSource.push(`${hostOf(url)}=${seen.length}`);
+      seenBy.push(new Set(seen.map(eventKey)));
       for (const e of seen) {
         const key = eventKey(e);
         const had = byKey.get(key);
@@ -216,7 +225,9 @@ export async function scanScopeUnion(
   }
 
   const events = [...byKey.values()].sort((a, b) => (eventKey(a) < eventKey(b) ? -1 : 1));
-  return { events, answered, attempted: endpoints.length, perSource, conflicts };
+  // The union is a superset of every answer, so "saw everything" is a size check.
+  const vouched = seenBy.filter((s) => s.size === byKey.size).length;
+  return { events, answered, vouched, attempted: endpoints.length, perSource, conflicts };
 }
 
 function hostOf(url: string): string {

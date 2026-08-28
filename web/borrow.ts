@@ -169,9 +169,9 @@ export async function buildClaim(
   log(`answered: ${sweep.perSource.join('  ')}`);
   for (const c of sweep.conflicts) log(`ENDPOINT CONFLICT: ${c}`);
 
-  if (sweep.answered < minSources) {
+  if (sweep.vouched < minSources) {
     throw new Error(
-      `only ${sweep.answered} of ${sweep.attempted} endpoints answered. A claim built on one node's ` +
+      `only ${sweep.vouched} of ${sweep.attempted} endpoints saw everything (${sweep.answered} answered). A claim built on one node's ` +
         `word is only as complete as that node, and the bond is what pays for being wrong.`,
     );
   }

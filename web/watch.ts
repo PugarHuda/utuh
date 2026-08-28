@@ -23,6 +23,8 @@ export interface Sweep {
   events: ScopedEvent[];
   gaps: ScopedEvent[];
   answered: number;
+  /// Endpoints that saw everything the union holds — the ones whose silence about a gap counts.
+  vouched: number;
   attempted: number;
   perSource: string[];
   conflicts: string[];
@@ -59,9 +61,9 @@ export async function sweepClaim(
 
   if (gaps.length === 0) {
     log(
-      union.answered >= 2
-        ? `no gap found across ${union.answered} independent endpoints`
-        : `no gap found — but only ${union.answered} endpoint answered, which settles nothing`,
+      union.vouched >= 2
+        ? `no gap found across ${union.vouched} independent endpoints`
+        : `no gap found — but only ${union.vouched} endpoint saw everything (${union.answered} answered), which settles nothing`,
     );
   } else {
     log(`INCOMPLETE: ${gaps.length} event(s) the claim does not contain`);
@@ -72,10 +74,11 @@ export async function sweepClaim(
     events: union.events,
     gaps,
     answered: union.answered,
+    vouched: union.vouched,
     attempted: union.attempted,
     perSource: union.perSource,
     conflicts: union.conflicts,
-    conclusive: union.answered >= 2,
+    conclusive: union.vouched >= 2,
   };
 }
 

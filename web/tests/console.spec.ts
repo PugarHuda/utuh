@@ -120,7 +120,7 @@ test('sweeps the source chain from the browser and reports what it found', async
   // endpoint is not the same claim as "no gap" from two, and the page must not blur them.
   const text = await log.innerText();
   if (text.includes('no gap found')) {
-    expect(text).toMatch(/across \d+ independent endpoints|only \d+ endpoint answered/);
+    expect(text).toMatch(/across \d+ independent endpoints|only \d+ endpoint saw everything/);
   }
 });
 

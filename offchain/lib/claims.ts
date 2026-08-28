@@ -41,18 +41,23 @@ export async function sweepForClaim(
     (work) => withDeadline(SOURCE_TIMEOUT_MS, work),
   );
 
-  log(`swept ${sweep.answered}/${sweep.attempted} endpoints: ${sweep.perSource.join('  ')}`);
+  log(
+    `swept ${sweep.answered}/${sweep.attempted} endpoints, ${sweep.vouched} saw everything: ${sweep.perSource.join('  ')}`,
+  );
   // Counts differing is normal — that is what the union is for. The same event described two
   // different ways is not, and means one of these endpoints is wrong about something it can see.
   for (const c of sweep.conflicts) log(`  ENDPOINT CONFLICT: ${c}`);
-  if (sweep.answered < minSources) {
+  // Counted on endpoints that saw the whole union, not on endpoints that returned. One that
+  // answered with less is behind or pruned, and a claim sealed on its word plus one real source
+  // is a claim sealed on one source.
+  if (sweep.vouched < minSources) {
     throw new Error(
-      `only ${sweep.answered} endpoint(s) answered and ${minSources} were required — ` +
+      `only ${sweep.vouched} endpoint(s) saw everything (${sweep.answered} answered) and ${minSources} were required — ` +
         'sealing on this would risk the bond on one node being complete',
     );
   }
-  if (sweep.answered === 1) {
-    log('WARNING: one endpoint answered. An omission it made would cost the bond.');
+  if (sweep.vouched === 1) {
+    log('WARNING: one endpoint saw everything. An omission it made would cost the bond.');
   }
   if (!sweep.perSource.every((c) => c.endsWith('=err')) && new Set(sweep.perSource.filter((c) => !c.endsWith('=err')).map((c) => c.split('=')[1])).size > 1) {
     log(`endpoints disagreed (${sweep.perSource.join('  ')}) — claiming the union, which is the safe direction`);

@@ -280,11 +280,15 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
   }
 
   if (gaps.length === 0) {
-    if (sweep.answered < 2) {
-      console.log(`  no gap found — but only ${sweep.answered} endpoint answered, so this is inconclusive`);
+    // "Independent" means saw everything: an endpoint that returned less than the union is behind
+    // or pruned, and its not mentioning a gap is not a second opinion.
+    if (sweep.vouched < 2) {
+      console.log(
+        `  no gap found — but only ${sweep.vouched} endpoint saw everything (${sweep.answered} answered), so this is inconclusive`,
+      );
       return 'inconclusive';
     }
-    console.log(`  no gap found across ${sweep.answered} independent endpoints`);
+    console.log(`  no gap found across ${sweep.vouched} independent endpoints`);
     return 'complete';
   }
 
