@@ -42,6 +42,7 @@
     "web": "npm run web:build && npm run web:static && tsx web/serve.ts",
     "web:static": "tsx web/build-static.ts",
     "web:test": "playwright test",
+    "web:shots": "tsx web/tests/shots.ts",
     "lint": "forge lint src/",
     "format": "prettier --write \"offchain/**/*.ts\"",
     "format:check": "prettier --check \"offchain/**/*.ts\"",

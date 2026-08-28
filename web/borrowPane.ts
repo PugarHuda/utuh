@@ -73,7 +73,7 @@ function button(label: string, testid: string, onClick: () => Promise<void> | vo
 /// One step: a heading, whatever it needs, and what the chain says about it.
 function step(n: number, title: string, done: boolean, body: (HTMLElement | string)[]): HTMLElement {
   const box = el('div', done ? 'step done' : 'step');
-  box.appendChild(el('h3', 'step-title', `${done ? '✓' : n}. ${title}`));
+  box.appendChild(el('h3', 'step-title', done ? `✓ ${title}` : `${n}. ${title}`));
   for (const b of body) box.appendChild(typeof b === 'string' ? el('p', 'note', b) : b);
   return box;
 }

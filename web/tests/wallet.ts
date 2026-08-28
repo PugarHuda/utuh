@@ -65,63 +65,61 @@ export async function injectWallet(
 
   const rpcs = Object.fromEntries(Object.entries(known).map(([id, c]) => [id, c.rpc]));
 
-  await page.addInitScript(
-    ({ account, start, rpcs }) => {
-      let current = start;
-
-      const passthrough = async (method: string, params: unknown[]) => {
-        const res = await fetch(rpcs[current]!, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
-        });
-        const body = await res.json();
-        if (body.error) throw Object.assign(new Error(body.error.message), body.error);
-        return body.result;
-      };
-
-      const listeners: Record<string, ((...a: unknown[]) => void)[]> = {};
-      const emit = (event: string, ...args: unknown[]) => (listeners[event] ?? []).forEach((l) => l(...args));
-
-      (window as unknown as { ethereum: unknown }).ethereum = {
-        isUtuhTestWallet: true,
-        request: async ({ method, params = [] }: { method: string; params?: unknown[] }) => {
-          switch (method) {
-            case 'eth_requestAccounts':
-            case 'eth_accounts':
-              return [account];
-            case 'eth_chainId':
-              return current;
-            case 'net_version':
-              return String(parseInt(current, 16));
-            case 'wallet_switchEthereumChain': {
-              const wanted = String((params as { chainId: string }[])[0]!.chainId).toLowerCase();
-              if (!rpcs[wanted]) throw Object.assign(new Error('unknown chain'), { code: 4902 });
-              current = wanted;
-              emit('chainChanged', current);
-              return null;
-            }
-            case 'wallet_addEthereumChain':
-              return null;
-            case 'eth_sendTransaction':
-              return (window as unknown as { __utuhSign: (c: string, tx: unknown) => Promise<string> }).__utuhSign(
-                current,
-                (params as Record<string, string>[])[0],
-              );
-            default:
-              return passthrough(method, params);
+  // Plain JavaScript in a string, not a function: Playwright serialises a function with
+  // `toString()`, and outside its own runner — under tsx, which the screenshot script uses — the
+  // transpiled body carries an `__name(...)` helper the browser has never heard of. The init script
+  // then throws before `window.ethereum` exists, silently, and the page says "no wallet".
+  const init = `(() => {
+    const account = ${JSON.stringify(address)};
+    const rpcs = ${JSON.stringify(rpcs)};
+    let current = ${JSON.stringify('0x' + CC3_CHAIN_ID.toString(16))};
+    const passthrough = async (method, params) => {
+      const res = await fetch(rpcs[current], {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
+      });
+      const body = await res.json();
+      if (body.error) throw Object.assign(new Error(body.error.message), body.error);
+      return body.result;
+    };
+    const listeners = {};
+    const emit = (event, ...args) => (listeners[event] || []).forEach((l) => l(...args));
+    window.ethereum = {
+      isUtuhTestWallet: true,
+      request: async ({ method, params = [] }) => {
+        switch (method) {
+          case 'eth_requestAccounts':
+          case 'eth_accounts':
+            return [account];
+          case 'eth_chainId':
+            return current;
+          case 'net_version':
+            return String(parseInt(current, 16));
+          case 'wallet_switchEthereumChain': {
+            const wanted = String(params[0].chainId).toLowerCase();
+            if (!rpcs[wanted]) throw Object.assign(new Error('unknown chain'), { code: 4902 });
+            current = wanted;
+            emit('chainChanged', current);
+            return null;
           }
-        },
-        on: (event: string, handler: (...a: unknown[]) => void) => {
-          (listeners[event] ??= []).push(handler);
-        },
-        removeListener: (event: string, handler: (...a: unknown[]) => void) => {
-          listeners[event] = (listeners[event] ?? []).filter((h) => h !== handler);
-        },
-      };
-    },
-    { account: address, start: '0x' + CC3_CHAIN_ID.toString(16), rpcs },
-  );
+          case 'wallet_addEthereumChain':
+            return null;
+          case 'eth_sendTransaction':
+            return window.__utuhSign(current, params[0]);
+          default:
+            return passthrough(method, params);
+        }
+      },
+      on: (event, handler) => {
+        (listeners[event] = listeners[event] || []).push(handler);
+      },
+      removeListener: (event, handler) => {
+        listeners[event] = (listeners[event] || []).filter((h) => h !== handler);
+      },
+    };
+  })();`;
+  await page.addInitScript({ content: init });
 
   return address;
 }
