@@ -109,7 +109,16 @@ export function creditAt(address: string, wallet: Wallet): Contract {
 /// the middle of a demonstration, and the two mains then raced inside one process. A function two
 /// scripts share belongs in a library, and a library is the thing with no side effects.
 export async function peersOf(credit: Contract): Promise<string[]> {
+  // A credit deployed before peers existed has no `peerCount` and reverts on the selector. That is
+  // the contract a redeploy is most likely to be replacing, and "it honoured nobody" is the true
+  // answer for it — so it is read as an empty list rather than as a failure to migrate.
+  let count: bigint;
+  try {
+    count = (await credit.peerCount()) as bigint;
+  } catch {
+    return [];
+  }
   const out: string[] = [];
-  for (let i = 0; i < Number(await credit.peerCount()); i++) out.push(await credit.peerAt(i));
+  for (let i = 0; i < Number(count); i++) out.push(await credit.peerAt(i));
   return out;
 }

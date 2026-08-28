@@ -384,7 +384,7 @@ usually does rather than a thing to rely on: the Sepolia ledger had not arrived 
 | Contract       | Address                                                                                                                                                   |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `UtuhRegistry` | [`0x8FA0BD5301D998Be873E31453E53d114929a5Fac`](https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac?tab=contract) |
-| `UtuhCredit`   | [`0xaF20895A1a130e4C6C3f6fa0238073Aa42fA080d`](https://creditcoin-testnet.blockscout.com/address/0xaF20895A1a130e4C6C3f6fa0238073Aa42fA080d?tab=contract) |
+| `UtuhCredit`   | [`0x89FB81b1e453b7Bd18ac1A6AF03C84A40Ce10C57`](https://creditcoin-testnet.blockscout.com/address/0x89FB81b1e453b7Bd18ac1A6AF03C84A40Ce10C57?tab=contract) |
 | `EvmV1Decoder` | [`0x5cab00c032D7d4436f312Dd51ef59Dc5b860df3F`](https://creditcoin-testnet.blockscout.com/address/0x5cab00c032D7d4436f312Dd51ef59Dc5b860df3F?tab=contract) |
 
 `npm run credit` runs against these, on Ethereum mainnet data.

@@ -17,6 +17,13 @@ test('switches to the mainnet-sourced deployment and reads the right registry', 
   const link = page.locator('[data-testid=addresses-table] a').first();
   await expect(link).toHaveAttribute('title', record.registry);
 
+  // The credit pane renders too. It did not, once: the mainnet-sourced UtuhCredit predated the
+  // current ABI, `activeLineOf` and `peerCount` reverted, and the pane showed an error nothing on
+  // this page was checking for.
+  await expect(page.locator('[data-testid=policy-table]')).toContainText('loan-to-value', { timeout: 60_000 });
+  await expect(page.locator('#credit-body .bad')).toHaveCount(0);
+  await expect(page.locator('#attestcoin-body .bad, #registry-body .bad')).toHaveCount(0);
+
   // Every claim on this deployment is about Ethereum mainnet, and the table says so.
   const chains = await page.locator('[data-testid=claims-table] tbody tr td:nth-child(5)').allInnerTexts();
   expect(chains.length).toBeGreaterThan(0);
