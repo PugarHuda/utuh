@@ -129,7 +129,7 @@ async function main(): Promise<void> {
       } catch (e) {
         // The reason goes to the terminal running the server, not to whoever asked. A dev server
         // that echoes its errors is one line of sudo away from echoing its file system.
-        console.error(`  ${req.method} ${req.url} failed:`, e);
+        console.error('  request failed:', JSON.stringify({ method: req.method, url: req.url }), e);
         res.writeHead(500, { 'content-type': 'text/plain' });
         res.end('internal error — see the server log');
       }
