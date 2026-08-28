@@ -1356,7 +1356,10 @@ ethpandaops=10`, then `publicnode=0 …` twice — answered 4, vouched 3. Public
   blocks, so an endpoint like this reports an empty history for most of the range and a claimant
   trusting it alone seals an empty claim and loses the bond. This is why the union exists, why
   sealing needs two sources, and why `npm run doctor` reports a pass as "this time" rather than as
-  a certificate: it catches persistent breakage, not intermittent lying. The union absorbs any
+  a certificate. It now asks each endpoint the same question three times, because one answer
+  cannot tell a node from a pool, and reports what it hears — `POOL publicnode answered 8, 0, 8 to
+the same question` — as a third verdict beside ok and FAIL: useful to the union, not one of the
+  two a claim can be sealed on. The union absorbs any
   subset of endpoints being wrong-empty. Nothing here detects all of them being wrong together.
 
 - **The mechanism punishes scale.** One omission voids the whole claim and there is no amend path

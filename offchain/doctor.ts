@@ -135,28 +135,35 @@ async function main() {
     // about a filtered query, and there is no need for a reference answer to find that out —
     // endpoints can be compared against each other. Whoever reports the most has seen the most,
     // and anyone reporting less than that is either behind or wrong.
-    const seen: { url: string; narrow: number | null; scoped: number | null }[] = [];
+    const seen: { url: string; narrow: number | null; answers: (number | null)[]; scoped: number | null }[] = [];
     let subjectTopic: string | null = null;
 
     for (const { url, provider } of endpoints) {
-      let narrow: number | null = null;
       // The probe range, cut to what this endpoint will answer in one call — the sweep does the
       // same, so a capped endpoint is judged on what it says, not on a question it refuses.
       const cap = chunkFor(url, key, to - from + 1);
       const to1 = cap < to - from + 1 ? from + cap - 1 : to;
-      try {
-        const logs = await withDeadline(
-          SOURCE_TIMEOUT_MS,
-          provider.getLogs({ address: probe.address, topics: probe.topics, fromBlock: from, toBlock: to1 }),
-        );
-        narrow = logs.length;
-        // Borrow a real indexed topic from whatever came back, so the second question is the shape
-        // a real scope uses rather than a filter nothing can match.
-        if (!subjectTopic) subjectTopic = logs.find((l: any) => l.topics?.length > 1)?.topics[1] ?? null;
-      } catch {
-        /* recorded as null below */
+      // Asked three times, because one answer cannot tell a node from a pool. publicnode on
+      // Sepolia answered the same deep query 0, 8, 8, 0 on four consecutive calls: some of the
+      // nodes behind its one hostname are pruned, and which one you reach is luck. One call would
+      // report it healthy or broken depending on the draw; three report what it is.
+      const answers: (number | null)[] = [];
+      for (let i = 0; i < 3; i++) {
+        try {
+          const logs = await withDeadline(
+            SOURCE_TIMEOUT_MS,
+            provider.getLogs({ address: probe.address, topics: probe.topics, fromBlock: from, toBlock: to1 }),
+          );
+          answers.push(logs.length);
+          // Borrow a real indexed topic from whatever came back, so the second question is the shape
+          // a real scope uses rather than a filter nothing can match.
+          if (!subjectTopic) subjectTopic = logs.find((l: any) => l.topics?.length > 1)?.topics[1] ?? null;
+        } catch {
+          answers.push(null);
+        }
       }
-      seen.push({ url, narrow, scoped: null });
+      const got = answers.filter((a): a is number => a !== null);
+      seen.push({ url, narrow: got.length ? Math.max(...got) : null, answers, scoped: null });
       provider.destroy();
     }
 
@@ -196,6 +203,17 @@ async function main() {
       if (row.narrow === 0) {
         problems++;
         console.log(`  FAIL  ${host(row.url)}  returned nothing where there is certainly something`);
+        continue;
+      }
+      if (row.answers.some((a) => a !== row.narrow)) {
+        // Not counted as reliable and not counted as a problem: the union sweep keeps whatever any
+        // endpoint saw, so a pool still widens what gets claimed or refuted. It just cannot be
+        // one of the two that vouch for a claim, and the sweeps do not count it as one.
+        console.log(
+          `  POOL  ${host(row.url)}  answered ${row.answers.map((a) => a ?? 'err').join(', ')} to the same question`,
+        );
+        console.log('        Some of the nodes behind it are pruned or down, and which one you reach is');
+        console.log('        luck. Useful to the union; not one of the two a claim can be sealed on.');
         continue;
       }
       if (row.scoped !== null && row.scoped < best) {
