@@ -3,6 +3,7 @@ import { eventKey, scanScopeUnion, type Scope, type ScopedEvent } from '../offch
 import { toScope } from '../offchain/lib/specs';
 import { fetchSingleProof } from '../offchain/lib/proofApi';
 import { sourceEndpoints } from './chain';
+import { SWEEP_CHUNK, requireChainKey } from '../offchain/lib/networks';
 
 /// The watcher, in the browser.
 ///
@@ -45,7 +46,7 @@ export async function sweepClaim(
   log(`sweeping source blocks ${from}..${to} from ${sourceEndpoints(scope.chainKey).length} endpoints`);
 
   const endpoints = sourceEndpoints(scope.chainKey);
-  const union = await scanScopeUnion(endpoints, scope, from, to, 500);
+  const union = await scanScopeUnion(endpoints, scope, from, to, SWEEP_CHUNK[requireChainKey(scope.chainKey)]);
 
   log(`answered: ${union.perSource.join('  ')}`);
   for (const c of union.conflicts) log(`ENDPOINT CONFLICT: ${c}`);

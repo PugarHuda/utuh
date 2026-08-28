@@ -530,6 +530,25 @@ The sweep is the daemon's own function, imported rather than reimplemented — `
 `offchain/lib/scope.ts`, bundled into the page. A browser cannot conclude that a claim is complete
 on different reasoning than the daemon would.
 
+### Both deployments, and a claim opened up
+
+The console reads either published deployment — `?deployment=mainnet` for the one that underwrites
+real Aave history, where the claims about real borrowers live, dozens of them, built by the daily
+live suite and the mainnet demo. It pages through them twenty-five at a time, and a sweep of a
+mainnet claim runs from the browser against Ethereum mainnet in ten-thousand-block pieces, the
+size both default endpoints serve; Sepolia's are swept in five-hundred-block pieces because
+publicnode stops answering past that. The daemon uses the same table, so the page and the daemon
+cannot reach different verdicts by asking in different pieces.
+
+Selecting a claim opens it: every member decoded from the ordering key the registry stores — source
+block, transaction index, log index — with the block linked into the source chain's explorer and a
+pointer to Creditcoin's own oracle dashboard, where the verification the precompile emitted for it
+sits by source height. The registry keeps only the key, so the block is what can be linked; the
+transaction at that index inside it is the one. "Read it back yourself" is a click now.
+
+Seventy-odd links sit between the top of that page and the one button that matters to a keyboard
+user, so the first Tab lands on a skip link and Enter puts focus on the sweep itself.
+
 ### A watcher that is always on, holding nothing
 
 "A page open in a tab is not a daemon" is under Known limits, and it stayed true after the console
@@ -654,6 +673,8 @@ test/
   EventScope.t.sol          the matcher, ordering key, metrics and leaf identity
   Consumer.t.sol            a thirty-line consumer that is not Utuh, compiled and tested, so the
                             claim that the registry is reusable is checked rather than asserted
+  RegistryInvariant.t.sol   four actors, random sequences, and the books have to balance after
+                            every move — every wei escrowed, credited or burned, nothing else
   UtuhCredit.t.sol          deployment floors, control binding, scope identity, terms, liquidity
   Lifecycle.t.sol           the whole loop locally — claim, refute, finalize, underwrite, draw,
                             settle, default, cure — on real Sepolia transaction bytes, with only
@@ -697,6 +718,8 @@ offchain/
                             across both of its published hostnames
   lib/batches.ts            how a claim is cut into batches the prover will accept — pure, so the
                             browser can plan one the same way
+  lib/revert.ts             what a call reverted with, by the contract's own name — CC3's RPC hides
+                            the data inside the message text
 web/
   index.html                the console — everything on it is read from CC3 as the page draws it
   main.ts                   panes: what Creditcoin attests, claims, the watcher, borrowing, credit
@@ -711,6 +734,8 @@ web/
   tests/static.spec.ts      the published build asks its host for nothing but its own files
   tests/a11y.spec.ts        axe over the rendered page; WCAG A/AA, zero violations
   tests/angles.spec.ts      dark mode, a phone, the keyboard, a wallet that refuses, a dead RPC
+  tests/deployments.spec.ts the mainnet-sourced deployment: switch, page, open a claim to its
+                            members, sweep one from the browser against Ethereum mainnet
   tests/wallet.ts           what stands in for MetaMask: a real key, real chains, chain switching
   tests/refute.live.spec.ts refuting through the page with a real wallet — off unless asked
   tests/borrow.live.spec.ts the whole underwriting through the page, a stranger's key, real money
@@ -732,7 +757,7 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 133 forge tests
+npm run test                # 136 forge tests, five of them invariants
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -983,7 +1008,7 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-133 tests, 9 of them fuzzed. Everything below runs with `forge test`, no key and no network.
+136 tests, 9 of them fuzzed and 5 of them invariants over random sequences. Everything below runs with `forge test`, no key and no network.
 
 Most of them cover the part that runs in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
@@ -1003,6 +1028,22 @@ failure that would make every other claim in this repo meaningless. Reaching it 
 demo's happy path. Eight tests now cover it, including a fuzzed round-trip asserting that what
 `controlCommitment` tells a borrower to send is exactly what the parser accepts, and a tag bent by
 a single byte.
+
+### Every wei, whatever order anyone does things in
+
+`test/RegistryInvariant.t.sol` is the suite the unit tests cannot be. Four actors open, append,
+seal, abandon, refute, finalize and withdraw in random order, with the clock rolled between moves —
+sixty-four sequences of forty-eight calls on every push — and after every step five things must
+still be true: the registry's balance is exactly the bonds still escrowed plus what is credited for
+withdrawal plus what was burned, with no other bucket; a refuted or abandoned claim holds nothing
+and promises nothing; what a standing claim guarantees is the burned share of what was posted and
+never more; members stay strictly ascending; burned only grows. The first of those is the sentence
+the registry cannot afford to break — a bond that leaks is a deterrent that quietly stopped
+deterring — and it is now checked three thousand times a run rather than once per hand-written
+path. Its gas is random and is excluded from the snapshot for the same reason the fuzz tests are.
+
+CI also refuses a push that drops line coverage under 90%; it reads 96% today, and the table below
+is that number.
 
 ### The precompiles, and what a local test may and may not say about them
 
@@ -1083,7 +1124,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 133 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 136 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings**, which is only worth stating alongside what it was allowed to look
 for.
 

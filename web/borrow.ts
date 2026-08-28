@@ -9,6 +9,7 @@ import {
 import { eventKey, scanScopeUnion, type Scope, type ScopedEvent } from '../offchain/lib/scope';
 import { toScope } from '../offchain/lib/specs';
 import { sourceEndpoints } from './chain';
+import { SWEEP_CHUNK, requireChainKey } from '../offchain/lib/networks';
 
 /// Borrowing, from a browser.
 ///
@@ -158,7 +159,13 @@ export async function buildClaim(
   await waitAttested(chainInfo, scope.chainKey, range.toBlock, log);
 
   log(`sweeping source blocks ${range.fromBlock}..${range.toBlock}`);
-  const sweep = await scanScopeUnion(sourceEndpoints(scope.chainKey), scope, range.fromBlock, range.toBlock, 500);
+  const sweep = await scanScopeUnion(
+    sourceEndpoints(scope.chainKey),
+    scope,
+    range.fromBlock,
+    range.toBlock,
+    SWEEP_CHUNK[requireChainKey(scope.chainKey)],
+  );
   log(`answered: ${sweep.perSource.join('  ')}`);
   for (const c of sweep.conflicts) log(`ENDPOINT CONFLICT: ${c}`);
 

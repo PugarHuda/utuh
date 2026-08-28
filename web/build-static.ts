@@ -2,6 +2,7 @@ import { buildSync } from 'esbuild';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runScript } from '../offchain/lib/cli';
+import { DEPLOYMENT_RECORDS } from '../offchain/lib/networks';
 
 /// Build the console as files a static host can serve, with no server of its own.
 ///
@@ -61,9 +62,15 @@ function main(): Promise<void> {
 
   copyFileSync(join(WEB, 'style.css'), join(DEST, 'style.css'));
 
+  // Both published deployments, so the page can switch between them without a server.
+  const records: Record<string, unknown> = {};
+  for (const [name, file] of Object.entries(DEPLOYMENT_RECORDS)) {
+    const at = join(ROOT, file);
+    if (existsSync(at)) records[name] = JSON.parse(readFileSync(at, 'utf8'));
+  }
   const baked = {
     abis: Object.fromEntries(Object.entries(ABIS).map(([k, [file, name]]) => [k, abi(file, name)])),
-    deployments,
+    deployments: records,
   };
 
   const html = readFileSync(join(WEB, 'index.html'), 'utf8')

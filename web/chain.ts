@@ -6,6 +6,7 @@ import {
   SOURCE_CHAIN_ID,
   SOURCE_RPCS_DEFAULT,
   requireChainKey,
+  type DeploymentName,
 } from '../offchain/lib/networks';
 
 /// Everything the console needs to talk to Creditcoin, and nothing it needs a server for.
@@ -65,7 +66,14 @@ export function sourceEndpoints(chainKey: number): { url: string; provider: Json
 /// to a public endpoint from the visitor's own browser.
 interface Baked {
   abis: Abis;
-  deployments: Deployments;
+  deployments: Record<string, Deployments>;
+}
+
+/// Which published deployment the page is looking at — `?deployment=mainnet` for the one that
+/// underwrites real Aave history, the completed Sepolia loop otherwise.
+export function deploymentName(): DeploymentName {
+  const asked = new URLSearchParams(location.search).get('deployment');
+  return asked === 'mainnet' ? 'mainnet' : 'sepolia';
 }
 
 function baked(): Baked | undefined {
@@ -100,14 +108,18 @@ export async function loadAbis(): Promise<Abis> {
   return { registry, credit, chainInfo };
 }
 
-export function loadDeployments(): Promise<Deployments> {
+export function loadDeployments(which: DeploymentName): Promise<Deployments> {
   const inPage = baked();
-  if (inPage) return Promise.resolve(inPage.deployments);
-  return json<Deployments>('/deployments.json');
+  if (inPage) {
+    const d = inPage.deployments[which];
+    return d ? Promise.resolve(d) : Promise.reject(new Error(`no ${which} deployment was baked into this build`));
+  }
+  return json<Deployments>(`/deployments/${which}.json`);
 }
 
 export interface Wired {
   abis: Abis;
+  which: DeploymentName;
   deployments: Deployments;
   registry: Contract;
   credit: Contract;
@@ -115,12 +127,14 @@ export interface Wired {
 }
 
 export async function wire(): Promise<Wired> {
-  const [abis, deployments] = await Promise.all([loadAbis(), loadDeployments()]);
+  const which = deploymentName();
+  const [abis, deployments] = await Promise.all([loadAbis(), loadDeployments(which)]);
   if (!deployments.registry || !deployments.credit) {
     throw new Error('the deployment record names no registry or credit — run: npm run full');
   }
   return {
     abis,
+    which,
     deployments,
     registry: new Contract(deployments.registry, abis.registry as never, cc3),
     credit: new Contract(deployments.credit, abis.credit as never, cc3),

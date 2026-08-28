@@ -11,6 +11,13 @@ optimizer_runs = 200
 fs_permissions = [{ access = "read", path = "./test/fixtures" }]
 via_ir = false
 
+# The invariant suite drives the registry through hundreds of random sequences per run. This is
+# enough to find an accounting hole and small enough to run on every push.
+[invariant]
+runs = 64
+depth = 48
+fail_on_revert = false
+
 [rpc_endpoints]
 cc3 = "https://rpc.cc3-testnet.creditcoin.network"
 

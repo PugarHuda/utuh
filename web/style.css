@@ -35,6 +35,22 @@ body {
   font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
+.skip a {
+  position: absolute;
+  left: -200vw;
+  top: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  background: var(--panel);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  z-index: 10;
+}
+
+.skip a:focus {
+  left: 1rem;
+}
+
 header {
   display: flex;
   flex-wrap: wrap;

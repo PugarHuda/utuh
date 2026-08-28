@@ -1,6 +1,6 @@
 import { Contract, formatEther, parseEther, toUtf8String, type Signer } from 'ethers';
 import { claimStatus, lineStatus } from '../offchain/lib/status';
-import { CHAIN_NAME } from '../offchain/lib/networks';
+import { CHAIN_NAME, ORACLE_DASHBOARD, SOURCE_EXPLORER, requireChainKey } from '../offchain/lib/networks';
 import { cc3, connect, EXPLORER, hasWallet, shortAddress, wire, within, type Wired } from './chain';
 import { refute, sweepClaim, type Sweep } from './watch';
 import { renderBorrow } from './borrowPane';
@@ -224,7 +224,7 @@ async function renderRegistry(): Promise<void> {
         String(c.id),
         link(c.claimant),
         claimStatus(c.status),
-        `${c.fromBlock}..${c.toBlock}`,
+        sourceRange(c.chainKey, Number(c.fromBlock), Number(c.toBlock)),
         CHAIN_NAME[c.chainKey as 1 | 3] ?? `key ${c.chainKey}`,
         String(c.members),
         String(c.aggregate),
@@ -284,6 +284,7 @@ async function renderRegistry(): Promise<void> {
       }),
     );
     if (chosen) select.value = chosen;
+    void renderClaimDetail();
 
     // A registry that has never been used has nothing to sweep, and a sweep button that produces
     // `BigInt("")` is worse than one that is plainly off.
@@ -527,6 +528,106 @@ async function renderCredit(): Promise<void> {
 // Watching
 // ------------------------------------------------------------------
 
+/// A source-chain block range as two links a person can open.
+function sourceRange(chainKey: number, from: number, to: number): HTMLElement {
+  const span = el('span');
+  try {
+    const ex = SOURCE_EXPLORER[requireChainKey(chainKey)];
+    const a = (n: number) => {
+      const x = el('a', 'addr', String(n)) as HTMLAnchorElement;
+      x.href = `${ex}/block/${n}`;
+      x.target = '_blank';
+      x.rel = 'noreferrer';
+      return x;
+    };
+    span.appendChild(a(from));
+    span.appendChild(document.createTextNode('..'));
+    span.appendChild(a(to));
+  } catch {
+    span.textContent = `${from}..${to}`;
+  }
+  return span;
+}
+
+/// What a claim actually holds, decoded and linked, so "read it back yourself" is a click.
+///
+/// The registry stores an ordering key per member — block, transaction index, log index packed
+/// into one number — and nothing else, so what can be linked is the block; the transaction at that
+/// index inside it is the one. Every member passed through the Block Prover on the way in, and the
+/// oracle dashboard has the verification the precompile emitted for it, by source height.
+async function renderClaimDetail(): Promise<void> {
+  const box = $('claim-detail');
+  const chosen = ($('claim-select') as HTMLSelectElement).value;
+  if (!chosen) {
+    box.replaceChildren();
+    return;
+  }
+  try {
+    const id = BigInt(chosen);
+    const [c, count] = await Promise.all([
+      wired.registry.claim(id),
+      wired.registry.memberCount(id) as Promise<bigint>,
+    ]);
+    const chainKey = Number(c.scope.chainKey);
+    const ex = SOURCE_EXPLORER[requireChainKey(chainKey)];
+
+    const emitter = el('a', 'addr', shortAddress(c.scope.emitter)) as HTMLAnchorElement;
+    emitter.href = `${ex}/address/${c.scope.emitter}`;
+    emitter.target = '_blank';
+    emitter.rel = 'noreferrer';
+    emitter.title = c.scope.emitter;
+
+    const head = el('p', 'note');
+    head.appendChild(document.createTextNode(`claim ${id}: events from `));
+    head.appendChild(emitter);
+    head.appendChild(
+      document.createTextNode(
+        ` with signature ${String(c.scope.eventSig).slice(0, 10)}…, ` +
+          `${Number(c.scope.metric) === 0 ? 'counted' : `summing data word ${c.scope.metricArg}`}, ` +
+          `${count} member(s), aggregate ${c.aggregate}.`,
+      ),
+    );
+
+    const shown = Number(count > 50n ? 50n : count);
+    const rows: (string | HTMLElement)[][] = [];
+    for (let i = 0; i < shown; i++) {
+      const k = (await wired.registry.keyAt(id, i)) as bigint;
+      const block = Number(k >> 96n);
+      const tx = Number((k >> 32n) & 0xffffffffn);
+      const log = Number(k & 0xffffffffn);
+      const b = el('a', 'addr', String(block)) as HTMLAnchorElement;
+      b.href = `${ex}/block/${block}`;
+      b.target = '_blank';
+      b.rel = 'noreferrer';
+      rows.push([String(i), b, `tx #${tx}`, `log #${log}`, String(k)]);
+    }
+
+    const dash = el('a', 'addr', "Creditcoin's oracle dashboard") as HTMLAnchorElement;
+    dash.href = ORACLE_DASHBOARD;
+    dash.target = '_blank';
+    dash.rel = 'noreferrer';
+    const foot = el('p', 'note');
+    foot.appendChild(
+      document.createTextNode(
+        (count > 50n ? `first 50 of ${count} members shown. ` : '') +
+          'Each member was verified by the Block Prover at 0x…0FD2 on the way in; the verification it emitted is on ',
+      ),
+    );
+    foot.appendChild(dash);
+    foot.appendChild(document.createTextNode(', by source height.'));
+
+    box.replaceChildren(
+      head,
+      ...(rows.length > 0
+        ? [table(['#', 'source block', 'transaction', 'log', 'ordering key'], rows, 'members-table')]
+        : []),
+      foot,
+    );
+  } catch (e) {
+    fail(box, e);
+  }
+}
+
 async function doSweep(): Promise<void> {
   const button = $('sweep') as HTMLButtonElement;
   const claimId = BigInt(($('claim-select') as HTMLSelectElement).value);
@@ -626,6 +727,31 @@ async function main(): Promise<void> {
   }
 
   ($('sweep') as HTMLButtonElement).onclick = () => void doSweep();
+
+  // A skip link moves focus, not just the scroll: the fragment alone leaves the next Tab landing
+  // after the target rather than on it.
+  for (const a of document.querySelectorAll<HTMLAnchorElement>('.skip a')) {
+    a.onclick = (e) => {
+      e.preventDefault();
+      const target = document.getElementById(a.dataset.skip ?? '');
+      if (!target) return;
+      if (!target.hasAttribute('tabindex') && target.tagName !== 'BUTTON') target.tabIndex = -1;
+      target.focus();
+      target.scrollIntoView({ block: 'center' });
+    };
+  }
+  ($('claim-select') as HTMLSelectElement).onchange = () => void renderClaimDetail();
+
+  // Switching deployments is a navigation, not a re-render: everything on the page is derived
+  // from one record, and a reload is the honest way to derive it again.
+  const picker = $('deployment') as HTMLSelectElement;
+  picker.value = new URLSearchParams(location.search).get('deployment') === 'mainnet' ? 'mainnet' : 'sepolia';
+  picker.onchange = () => {
+    const url = new URL(location.href);
+    if (picker.value === 'mainnet') url.searchParams.set('deployment', 'mainnet');
+    else url.searchParams.delete('deployment');
+    location.assign(url.toString());
+  };
 
   try {
     wired = await wire();

@@ -24,6 +24,12 @@
     />
   </head>
   <body data-state="loading">
+    <!-- Seventy-odd links sit between the top of the page and the one button that matters to a
+         keyboard user. These are invisible until focused, and the first Tab lands on them. -->
+    <nav class="skip" aria-label="skip links">
+      <a href="#sweep" data-skip="sweep">Skip to the watcher</a>
+      <a href="#borrow-body" data-skip="borrow-body">Skip to borrowing</a>
+    </nav>
     <header>
       <div>
         <h1>Utuh</h1>
@@ -33,6 +39,10 @@
         </p>
       </div>
       <div class="chip-row">
+        <select id="deployment" aria-label="which deployment to read" data-testid="deployment">
+          <option value="sepolia">Sepolia-sourced — the completed loop</option>
+          <option value="mainnet">Mainnet-sourced — real Aave history</option>
+        </select>
         <span class="chip">chain id <b id="chain-id">…</b></span>
         <span class="chip">block <b id="cc3-block">…</b></span>
         <button id="connect" class="act">connect wallet</button>
@@ -74,6 +84,7 @@
           <select id="claim-select" data-testid="claim-select" aria-label="claim to sweep"></select>
           <button id="sweep" class="act" data-testid="sweep">sweep the source chain</button>
         </div>
+        <div id="claim-detail" class="body" data-testid="claim-detail"></div>
         <div id="refute-box" class="actions"></div>
         <div id="log" class="log" data-testid="log"></div>
       </section>

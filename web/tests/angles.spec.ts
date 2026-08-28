@@ -55,13 +55,13 @@ test('the sweep can be started from the keyboard alone', async ({ page }) => {
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   test.skip((await page.locator('[data-testid=claim-select] option').count()) === 0, 'no claims to sweep');
 
-  // Tab from the top of the document until the sweep button has focus, then press it.
+  // The first Tab lands on the skip link — seventy-odd links sit between the top of the page and
+  // the sweep button, and nobody should have to tab through them — and Enter puts focus on the
+  // button itself, not after it. Then Enter again.
   await page.locator('body').press('Tab');
-  for (let i = 0; i < 40; i++) {
-    const id = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset?.testid ?? '');
-    if (id === 'sweep') break;
-    await page.keyboard.press('Tab');
-  }
+  const focused = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.textContent ?? '');
+  expect(focused).toContain('Skip to the watcher');
+  await page.keyboard.press('Enter');
   expect(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset?.testid)).toBe('sweep');
   await page.keyboard.press('Enter');
 

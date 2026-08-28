@@ -76,6 +76,33 @@ export const SOURCE_RPCS_DEFAULT: Record<ChainKey, string[]> = {
   [CHAIN_KEY.sepolia]: [SOURCE_RPC_DEFAULT[CHAIN_KEY.sepolia], 'https://sepolia.gateway.tenderly.co'],
 };
 
+/// Blocks per `eth_getLogs` call, per chain: the smallest cap among that chain's default
+/// endpoints. Mainnet's two both serve ten thousand; Sepolia's publicnode stops answering past a
+/// few hundred. A single sweep over 216,000 mainnet blocks is 22 calls per endpoint at this size
+/// and 432 at Sepolia's, which is the difference between a page and a spinner.
+export const SWEEP_CHUNK: Record<ChainKey, number> = {
+  [CHAIN_KEY.mainnet]: 10_000,
+  [CHAIN_KEY.sepolia]: 500,
+};
+
+/// Where a source-chain block or address can be read by a person.
+export const SOURCE_EXPLORER: Record<ChainKey, string> = {
+  [CHAIN_KEY.mainnet]: 'https://eth.blockscout.com',
+  [CHAIN_KEY.sepolia]: 'https://eth-sepolia.blockscout.com',
+};
+
+/// The two published deployments, named by the chain they read. `sepolia` is the completed loop
+/// a browser can borrow on; `mainnet` underwrites real Aave history and is where the claims about
+/// real borrowers live.
+export const DEPLOYMENT_RECORDS = {
+  sepolia: 'deployments.full.json',
+  mainnet: 'deployments.json',
+} as const;
+export type DeploymentName = keyof typeof DEPLOYMENT_RECORDS;
+
+/// Creditcoin's own record of every verification the precompile emitted, per source chain.
+export const ORACLE_DASHBOARD = 'https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications';
+
 /// Well-known mainnet fixtures used by the demo flows.
 export const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 export const AAVE_V3_POOL = '0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2';

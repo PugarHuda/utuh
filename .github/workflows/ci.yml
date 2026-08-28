@@ -61,8 +61,20 @@ jobs:
       # trading away the point of fuzzing to stabilise a gas number. Without them the figures are
       # deterministic, and the 5% left is for compiler and toolchain drift, far below what any
       # real regression costs on a path that spends hundreds of thousands of gas.
+      # Lines, over the contracts, with the invariant suite left out — it runs thousands of calls
+      # and adds nothing to which lines are reached. The floor is a regression guard, not a target:
+      # it reads 96% today, and the number in the README is this number.
+      - name: coverage floor
+        run: |
+          forge coverage --no-match-test "invariant" --no-match-coverage "test|script" --report summary | tee coverage.txt
+          pct=$(grep -E '^\| Total' coverage.txt | sed -E 's/.*\| *([0-9.]+)% .*/\1/' | head -1)
+          echo "line coverage: $pct%"
+          awk -v p="$pct" 'BEGIN { if (p+0 < 90) { print "::error::line coverage fell below 90%"; exit 1 } }'
+
       - name: gas snapshot
-        run: forge snapshot --check --tolerance 5 --no-match-test "testFuzz" || (echo "::error::the gas snapshot is out of date — either gas moved more than 5%, or a test was added without regenerating it. Run 'forge snapshot --no-match-test testFuzz' and commit .gas-snapshot" && exit 1)
+        # Invariant runs are random sequences and their gas is a different number every run, for
+        # the same reason the fuzz tests are excluded: pinning a seed would trade away the point.
+        run: forge snapshot --check --tolerance 5 --no-match-test "testFuzz|invariant" || (echo "::error::the gas snapshot is out of date — either gas moved more than 5%, or a test was added without regenerating it. Run 'forge snapshot --no-match-test \"testFuzz|invariant\"' and commit .gas-snapshot" && exit 1)
 
   offchain:
     name: offchain

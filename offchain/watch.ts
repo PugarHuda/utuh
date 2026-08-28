@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { Contract, JsonRpcProvider, Wallet, formatEther } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, sources, withDeadline, SOURCE_TIMEOUT_MS, requirePrivateKey } from './config';
+import { SWEEP_CHUNK, requireChainKey } from './lib/networks';
 import { readDeployments, registryAt, signer } from './lib/contracts';
 import { scanScopeUnion, eventKey, type Scope } from './lib/scope';
 import { toScope } from './lib/specs';
@@ -257,7 +258,9 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
     scope,
     Number(claim.fromBlock),
     Number(claim.toBlock),
-    500,
+    // The same chunk the console sweeps with, from the same table — the daemon and the page must
+    // not reach different verdicts because they asked the endpoints in different pieces.
+    SWEEP_CHUNK[requireChainKey(scope.chainKey)],
     (work) => withDeadline(SOURCE_TIMEOUT_MS, work),
   );
 

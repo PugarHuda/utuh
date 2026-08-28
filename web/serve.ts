@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { runScript } from '../offchain/lib/cli';
+import { DEPLOYMENT_RECORDS } from '../offchain/lib/networks';
 
 /// The console's static server.
 ///
@@ -100,6 +101,18 @@ async function main(): Promise<void> {
           const artifact = JSON.parse(await readFile(file, 'utf8')) as { abi: unknown };
           res.writeHead(200, { 'content-type': TYPES['.json']! });
           return res.end(JSON.stringify(artifact.abi));
+        }
+
+        // Either published deployment by name; the bare path stays as the default for the
+        // tests that compare the page against it.
+        const named = path.match(/^\/deployments\/(sepolia|mainnet)\.json$/);
+        if (named) {
+          const file = join(ROOT, DEPLOYMENT_RECORDS[named[1] as keyof typeof DEPLOYMENT_RECORDS]);
+          if (!existsSync(file)) {
+            res.writeHead(404, { 'content-type': 'application/json' });
+            return res.end(JSON.stringify({ error: `no ${named[1]} deployment recorded` }));
+          }
+          return await serveFile(file, res);
         }
 
         if (path === '/deployments.json') {
