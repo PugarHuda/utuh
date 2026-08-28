@@ -96,6 +96,17 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
 
   const progress = loadProgress(creditAddress, account);
   const subject = progress.subject ?? account;
+
+  // What this browser remembered is a convenience; what the chain holds is the truth. A borrower
+  // opening the page in a new browser — or the same one after clearing it — has whatever line the
+  // contract says they have, and the pane starts from there rather than from a blank step one.
+  // Measured before this: a live test with an open line sat forever on a button that was never
+  // rendered, because the page only knew about lines it had opened itself.
+  const onChain = (await wired.credit.activeLineOf(subject)) as bigint;
+  if (onChain !== 0n && progress.lineId !== String(onChain)) {
+    progress.lineId = String(onChain);
+    saveProgress(creditAddress, account, { subject, lineId: String(onChain) });
+  }
   const chainKey = Number((await wired.credit.volumeSpec()).chainKey);
   const controller: string = await wired.credit.controllerOf(subject);
   const bound = controller.toLowerCase() === account.toLowerCase();
@@ -166,6 +177,7 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
 
   const volumeId = progress.volumeClaimId ? BigInt(progress.volumeClaimId) : undefined;
   const cleanIds = (progress.cleanClaimIds ?? []).map(BigInt);
+  const hasLine = onChain !== 0n;
 
   const claimsBody: (HTMLElement | string)[] = [
     `Two claims, adversarial in opposite directions. The volume claim is what you have repaid — ` +
@@ -233,11 +245,13 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
   );
   claimsBody.push(buildRow);
 
-  const claimsDone = volumeId !== undefined && cleanIds.length >= cleanCount;
-  steps.push(step(2, 'Build the two claims', claimsDone, claimsBody));
+  const claimsDone = hasLine || (volumeId !== undefined && cleanIds.length >= cleanCount);
+  steps.push(step(2, 'Build the two claims', claimsDone, hasLine ? ['Done — a line is open on them.'] : claimsBody));
 
   // ---------------------------------------------------------------- 3. finalize
-  if (claimsDone) {
+  if (hasLine) {
+    steps.push(step(3, 'Wait out the challenge window', true, ['Done.']));
+  } else if (claimsDone) {
     const head = await cc3.getBlockNumber();
     const ids = [volumeId!, ...cleanIds];
     const rows: HTMLElement[] = [];
@@ -285,6 +299,19 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
     // -------------------------------------------------------------- 4. line
     if (allFinal) {
       const lineId = progress.lineId ? BigInt(progress.lineId) : undefined;
+      await renderLine(lineId);
+    }
+  }
+
+  if (hasLine) await renderLine(onChain);
+
+  // A function declaration so it can be reached from two places above; the narrowing of `signer`
+  // and `account` by the early return does not cross into it, so they are re-read here. Both are
+  // set, because this is only ever called after that return.
+  async function renderLine(lineId: bigint | undefined): Promise<void> {
+    const signer = ctx.signer()!;
+    const account = ctx.account()!;
+    {
       const lineBody: (HTMLElement | string)[] = [];
 
       if (lineId === undefined) {
