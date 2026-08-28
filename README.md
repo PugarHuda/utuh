@@ -418,19 +418,24 @@ without a terminal.
 | `defaultsOf(borrower)`                | 0                                                                           |
 | `activeLineOf(borrower)`              | 0 — the line settled, so the slot is back                                   |
 | `claim(6)`, `claim(7)`                | Finalized — 3 members and 0, built **from the browser** by a second borrower |
-| `line(2)`                             | Active, limit 5 CTC, drawn 1 CTC — opened and drawn from the console        |
+| `line(2)`                             | **Settled** — opened, drawn, repaid and settled entirely from the console    |
+| `claim(8)`                            | Finalized, 1 member — the repayment; opened by one run, resumed by the next  |
+| `claim(9)`, `claim(10)`               | Finalized, unspent, useless — a 4-block range against a 5-block floor; the  |
+|                                       | page now refuses that before a bond is posted                               |
+| `claim(11)`, `claim(12)`, `line(3)`   | The second underwriting of the same key, on later history — line 3 Settled — the whole loop, twice, from the page (claim 13 is its repayment) |
 | `peerCount()`                         | 0 — this lender takes nobody else's books, which is the safe default        |
 
 The borrower's sweep read `publicnode=3  tenderly=3`: two independent endpoints agreeing, and the
 claim built on the union rather than on whichever answered first.
 
-Line 2 belongs to `0x0C2ffE823f1b64c975D768c9822F31eFED6f6a83`, a key that has never run a script
-here. It paid the lender three times on Sepolia and then did everything else **through the page** —
-sent its control commitment (the wallet switched to Sepolia and back), proved it, built claims 6
-and 7, waited out their windows, finalized, opened the line and drew — as
-`web/tests/borrow.live.spec.ts`, in 20 minutes, against these contracts. The limit is 5 CTC and not
-the 12 the volume would justify, because it posted the 1 CTC minimum bond and a 1 CTC bond
-guarantees a 0.5 CTC loss.
+Lines 2 and 3 belong to `0x0C2ffE823f1b64c975D768c9822F31eFED6f6a83`, a key that has never run a
+script here. It paid the lender three times on Sepolia and then did everything else **through the
+page** — sent its control commitment (the wallet switched to Sepolia and back), proved it, built
+claims 6 and 7, waited out their windows, finalized, opened line 2, drew 1 CTC, paid the lender back
+through the ledger with the same wallet, built claim 8 over that payment, waited out that window,
+and settled — as `web/tests/borrow.live.spec.ts`, against these contracts. Then it did it again on
+later history, for line 3. The limit is 5 CTC and not the 12 the volume would justify, because it
+posted the 1 CTC minimum bond and a 1 CTC bond guarantees a 0.5 CTC loss.
 
 Claim 5 is the interesting one. `npm run bait` sealed it deliberately short by one event and told
 nobody. It was found and broken **from the console**, in a browser: the page swept Sepolia across
