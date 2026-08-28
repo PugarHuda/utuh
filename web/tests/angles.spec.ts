@@ -82,7 +82,9 @@ test('a wallet whose owner says no leaves the page usable and says what happened
   const withdraw = page.locator('[data-testid=withdraw]');
   await expect(withdraw).toBeVisible();
   await withdraw.click();
-  await expect(page.locator('[data-testid=log]')).toContainText(/failed: .*(NothingToWithdraw|revert|denied)/i, {
+  // By name — the contract's own — not "unknown custom error". Creditcoin's RPC hides the revert
+  // data inside the message text, and the page digs it out and decodes it.
+  await expect(page.locator('[data-testid=log]')).toContainText(/failed: NothingToWithdraw\(\)/, {
     timeout: 60_000,
   });
   await expect(withdraw).toBeEnabled();

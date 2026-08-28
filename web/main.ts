@@ -5,6 +5,7 @@ import { cc3, connect, EXPLORER, hasWallet, shortAddress, wire, within, type Wir
 import { refute, sweepClaim, type Sweep } from './watch';
 import { renderBorrow } from './borrowPane';
 import { abandonClaim } from './borrow';
+import { explainRevert } from '../offchain/lib/revert';
 
 /// The Utuh console.
 ///
@@ -359,7 +360,7 @@ async function send(button: HTMLButtonElement, work: () => Promise<{ wait: () =>
     say(`sent ${tx.hash}`);
     await refresh();
   } catch (e) {
-    say(`failed: ${(e as { shortMessage?: string; message?: string }).shortMessage ?? (e as Error).message}`);
+    say(`failed: ${explainRevert(e, [wired.registry.interface, wired.credit.interface])}`);
   } finally {
     button.textContent = was;
     button.disabled = false;

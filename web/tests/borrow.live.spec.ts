@@ -214,8 +214,12 @@ test.describe('borrowing from the browser', () => {
       }
 
       // ---------------------------------------------------------------- 2. the two claims, from the page
+      // At least the lender's minimum span — the settlements sit in consecutive blocks, and a range
+      // that only just covers them is shorter than that. The page now refuses such a range before
+      // any bond is posted; this is the number it checks against.
+      const minHistory = Number(await credit.MIN_HISTORY_BLOCKS());
       const from = Math.min(...blocks) - 1;
-      const to = Math.max(bindBlock, ...blocks) + 1;
+      const to = Math.max(bindBlock, ...blocks, from + minHistory) + 1;
       await pane.locator('[data-testid=range-from]').fill(String(from));
       await pane.locator('[data-testid=range-to]').fill(String(to));
 

@@ -25,6 +25,8 @@ import {
 } from './borrow';
 import { lineStatus } from '../offchain/lib/status';
 import { sameScope } from '../offchain/lib/specs';
+import { explainRevert } from '../offchain/lib/revert';
+import type { Interface } from 'ethers';
 import type { Scope } from '../offchain/lib/scope';
 import { sourceEndpoints } from './chain';
 
@@ -81,6 +83,7 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
   if (!box) return;
 
   const { wired } = ctx;
+  known = [wired.registry.interface, wired.credit.interface];
   const account = ctx.account();
   const signer = ctx.signer();
   const creditAddress = wired.deployments.credit!;
@@ -229,6 +232,20 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
   const from = input('range-from', 'from block', String(range.fromBlock));
   const to = input('range-to', 'to block', String(range.toBlock));
   const bondInput = input('bond', 'bond in CTC', bond);
+  const minHistory = Number(await wired.credit.MIN_HISTORY_BLOCKS());
+
+  // The lender's floor on how much history an underwriting must cover, checked before a bond is
+  // posted rather than after two claims and two windows. `openLine` would say HistoryTooShort;
+  // it said it once, ten minutes and two bonds after the range was typed.
+  const rangeOk = (): boolean => {
+    const span = Number(to.value) - Number(from.value);
+    if (span >= minHistory) return true;
+    say(
+      `that range covers ${span} source blocks and this lender underwrites on at least ${minHistory} — ` +
+        `widen it before building, or the line will be refused after both claims are paid for.`,
+    );
+    return false;
+  };
 
   const volumeId = progress.volumeClaimId ? BigInt(progress.volumeClaimId) : undefined;
   const cleanIds = (progress.cleanClaimIds ?? []).map(BigInt);
@@ -250,7 +267,7 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
   const buildRow = el('div', 'controls');
   buildRow.appendChild(
     button(volumeId ? `volume claim ${volumeId} built` : 'build the volume claim', 'build-volume', async () => {
-      if (volumeId) return;
+      if (volumeId || !rangeOk()) return;
       await building(
         'volume',
         () => scopeFor(wired.credit, 'volume', subject),
@@ -281,7 +298,7 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
         : `build the clean claim (${cleanIds.length + 1} of ${cleanCount})`,
       'build-clean',
       async () => {
-        if (cleanIds.length >= cleanCount) return;
+        if (cleanIds.length >= cleanCount || !rangeOk()) return;
         await building(
           'clean',
           () => scopeFor(wired.credit, 'clean', subject, cleanIds.length),
@@ -603,9 +620,11 @@ async function guard(say: (line: string) => void, work: () => Promise<void>): Pr
   }
 }
 
+/// The interfaces a revert might have come from, set once the contracts are wired.
+let known: Interface[] = [];
+
 function message(e: unknown): string {
-  const err = e as { shortMessage?: string; message?: string };
-  return err.shortMessage ?? err.message ?? String(e);
+  return explainRevert(e, known);
 }
 
 /// Send the control commitment on the source chain, with the wallet the visitor already has.
