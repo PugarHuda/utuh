@@ -37,14 +37,45 @@ export function proofHosts(): string[] {
 /// host is right. Treating an unanswered question as absence is how a watcher drops a real event.
 export class ProofAbsent extends Error {}
 
+/// A fetch that comes back, whatever the server does.
+///
+/// The hosted builder's answer to a request for a proof it has not built yet is to hold the
+/// connection open while it builds — measured at over three minutes for a block attested seconds
+/// earlier, then under three seconds for the same proof afterwards. A page that waits on that with
+/// nothing on screen has, as far as the person looking at it can tell, crashed. So the abort
+/// signal is one guard and a timer racing the whole exchange is the other, and the error names
+/// the likely cause rather than just the clock.
+async function fetchWithin(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await Promise.race([
+      fetch(url, { ...init, signal: controller.signal }),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                `no answer in ${Math.round(timeoutMs / 1000)}s — the builder may still be building this ` +
+                  `proof, which can take minutes right after attestation; try again shortly`,
+              ),
+            ),
+          timeoutMs + 500,
+        ),
+      ),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function fetchSingleProof(chainKey: number, txHash: string, timeoutMs = 60_000): Promise<SingleProof> {
   const failures: string[] = [];
 
   for (const host of proofHosts()) {
     const url = `${host.replace(/\/$/, '')}/api/v1/proof-by-tx/${chainKey}/${txHash}`;
-    const stop = AbortSignal.timeout(timeoutMs);
     try {
-      const res = await fetch(url, { signal: stop });
+      const res = await fetchWithin(url, {}, timeoutMs);
       if (res.status === 404) {
         throw new ProofAbsent(`the proof builder has no transaction ${txHash} on chain key ${chainKey}`);
       }
@@ -110,12 +141,11 @@ export async function fetchBatchProof(
   for (const host of proofHosts()) {
     const url = `${host.replace(/\/$/, '')}/api/v1/proof-batch-by-tx/${chainKey}`;
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(txHashes),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
+      const res = await fetchWithin(
+        url,
+        { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(txHashes) },
+        timeoutMs,
+      );
       if (!res.ok) {
         failures.push(`${hostOf(host)} → ${res.status}`);
         continue;

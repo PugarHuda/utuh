@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { Contract, JsonRpcProvider, formatEther } from 'ethers';
+import { Contract, JsonRpcProvider, Wallet, formatEther } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, sources, withDeadline, SOURCE_TIMEOUT_MS, requirePrivateKey } from './config';
 import { readDeployments, registryAt, signer } from './lib/contracts';
@@ -97,12 +97,17 @@ async function main() {
   const registryAddress = process.env.REGISTRY ?? d.registry;
   if (!registryAddress) throw new Error('no registry — set REGISTRY or run npm run deploy');
 
-  const wallet = signer(CC3_RPC, CC3_CHAIN_ID, requirePrivateKey());
-  const cc3 = wallet.provider as JsonRpcProvider;
+  // A dry run reads and never signs, so it needs no key — which is what lets it run on a
+  // schedule in a public repository's CI with nothing to leak. Anything that might refute gets a
+  // real wallet, and the key is demanded up front rather than at the moment a gap is found.
+  const cc3 = new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
+  const wallet = dry
+    ? new Wallet(Wallet.createRandom().privateKey, cc3)
+    : signer(CC3_RPC, CC3_CHAIN_ID, requirePrivateKey());
   const registry = registryAt(registryAddress, wallet);
 
   console.log(`watching ${registryAddress}`);
-  console.log(`as        ${wallet.address}${dry ? '  (dry run — will not refute)' : ''}`);
+  console.log(dry ? 'as        nobody — dry run, reading only, will not refute' : `as        ${wallet.address}`);
 
   const head = await cc3.getBlockNumber();
   let from = 0;
@@ -122,6 +127,7 @@ async function main() {
   /// that matters: a watcher reporting zero refutations after a week is either watching an honest
   /// world or is quietly broken, and the other counters are what tell those apart.
   const tally = { seen: 0, refuted: 0, complete: 0, settled: 0, expired: 0, inconclusive: 0, sweeps: 0 };
+  incomplete = 0;
 
   /// Find newly sealed claims and order them by how soon their windows close.
   async function discover(): Promise<bigint[]> {
@@ -184,7 +190,19 @@ async function main() {
     if (once) break;
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
+
+  // A dry run that found a gap and left it is a finding, and the only channel a scheduled job has
+  // is its exit code. Red means "somebody is lying and nobody has taken the bond yet".
+  if (dry && incomplete > 0) {
+    console.log(
+      `${NL}${incomplete} incomplete claim(s) left standing — a refuter with a key would be paid to break them`,
+    );
+    process.exitCode = 1;
+  }
 }
+
+/// Gaps a dry run saw and did not act on.
+let incomplete = 0;
 
 /// Order a batch of claim ids by how soon their windows close.
 async function byDeadline(registry: Contract, ids: string[]): Promise<bigint[]> {
@@ -273,6 +291,7 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
 
   if (dry) {
     console.log('  dry run — leaving it');
+    incomplete++;
     return 'inconclusive';
   }
 

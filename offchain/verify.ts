@@ -164,7 +164,55 @@ async function main(): Promise<void> {
     console.log('\nSettlementLedger: set LEDGER=<address> to verify the source-chain contract too');
   }
 
+  // The same four, on Sourcify. Blockscout forwards what it verifies, so the Creditcoin contracts
+  // usually arrive there on their own — but "usually" is not a property to build a claim on, and
+  // the Sepolia ledger did not arrive at all. Sourcify is the one that reports a *full* match
+  // where Blockscout reports partial: it compares the metadata hash too, and it agreed. Two
+  // verifiers that do not share a backend, both reading this tree, is a stronger sentence than one.
+  console.log('\nSourcify');
+  const sourcify = ['--verifier', 'sourcify', '--compiler-version', '0.8.28', '--num-of-optimizations', '200'];
+  const libs = ['--libraries', `${DECODER_PATH}:${d.decoder}`];
+  const onCc3 = ['--chain', '102031'];
+  forge(['verify-contract', d.decoder, DECODER_PATH, ...onCc3, ...sourcify]);
+  forge([
+    'verify-contract',
+    d.registry,
+    'src/UtuhRegistry.sol:UtuhRegistry',
+    ...onCc3,
+    '--constructor-args',
+    argsFor(
+      d.registryArgs,
+      () => AbiCoder.defaultAbiCoder().encode(['uint64'], [d.challengeWindow ?? MIN_CHALLENGE_WINDOW]),
+      'registry arguments',
+      d.challengeWindow === undefined ? d.ledger : undefined,
+      d.challengeWindow === undefined ? 'the environment' : `the recorded challenge window of ${d.challengeWindow}`,
+    ),
+    ...libs,
+    ...sourcify,
+  ]);
+  forge([
+    'verify-contract',
+    d.credit,
+    'src/UtuhCredit.sol:UtuhCredit',
+    ...onCc3,
+    '--constructor-args',
+    argsFor(d.creditArgs, () => encodeCreditArgs(d.registry!), 'credit arguments', d.ledger),
+    ...libs,
+    ...sourcify,
+  ]);
+  if (ledger) {
+    forge([
+      'verify-contract',
+      ledger,
+      'src/source/SettlementLedger.sol:SettlementLedger',
+      '--chain',
+      '11155111',
+      ...sourcify,
+    ]);
+  }
+
   console.log('\nhttps://creditcoin-testnet.blockscout.com/address/' + d.registry);
+  console.log('https://repo.sourcify.dev/102031/' + d.registry);
 }
 
 runScript(main);

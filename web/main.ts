@@ -356,19 +356,47 @@ async function renderCredit(): Promise<void> {
   const box = $('credit-body');
   try {
     const c = wired.credit;
-    const [available, ltv, bondMultiple, rate, minHistory, staleness, repaymentBps, repayWindow, lender, nextLineId] =
-      await Promise.all([
-        c.available() as Promise<bigint>,
-        c.LTV_BPS() as Promise<bigint>,
-        c.BOND_MULTIPLE() as Promise<bigint>,
-        c.VOLUME_UNIT_IN_CTC() as Promise<bigint>,
-        c.MIN_HISTORY_BLOCKS() as Promise<bigint>,
-        c.MAX_STALENESS_BLOCKS() as Promise<bigint>,
-        c.REPAYMENT_BPS() as Promise<bigint>,
-        c.REPAY_WINDOW_BLOCKS() as Promise<bigint>,
-        c.LENDER() as Promise<string>,
-        c.nextLineId() as Promise<bigint>,
-      ]);
+    const [
+      available,
+      ltv,
+      bondMultiple,
+      rate,
+      minHistory,
+      staleness,
+      repaymentBps,
+      repayWindow,
+      lender,
+      nextLineId,
+      peerCount,
+    ] = await Promise.all([
+      c.available() as Promise<bigint>,
+      c.LTV_BPS() as Promise<bigint>,
+      c.BOND_MULTIPLE() as Promise<bigint>,
+      c.VOLUME_UNIT_IN_CTC() as Promise<bigint>,
+      c.MIN_HISTORY_BLOCKS() as Promise<bigint>,
+      c.MAX_STALENESS_BLOCKS() as Promise<bigint>,
+      c.REPAYMENT_BPS() as Promise<bigint>,
+      c.REPAY_WINDOW_BLOCKS() as Promise<bigint>,
+      c.LENDER() as Promise<string>,
+      c.nextLineId() as Promise<bigint>,
+      c.peerCount() as Promise<bigint>,
+    ]);
+
+    // Whose defaults this lender honours besides its own. Read off the contract, because it is
+    // immutable there and a page that said otherwise would be the thing that was wrong.
+    const peers: HTMLElement[] = [];
+    for (let i = 0n; i < peerCount; i++) peers.push(link(await c.peerAt(i)));
+    const peersCell =
+      peers.length === 0
+        ? "none — this lender takes nobody else's books, which is the safe default"
+        : (() => {
+            const span = el('span');
+            peers.forEach((p, i) => {
+              if (i > 0) span.appendChild(document.createTextNode(', '));
+              span.appendChild(p);
+            });
+            return span;
+          })();
 
     const policy = table(
       ['lender policy', 'value'],
@@ -381,6 +409,7 @@ async function renderCredit(): Promise<void> {
         ['repayment', `${Number(repaymentBps) / 100}% of what was drawn`],
         ['repayment window', `${repayWindow} Creditcoin blocks`],
         ['lender', link(lender)],
+        ['peers whose defaults are honoured', peersCell],
         ['undrawn liquidity', `${formatEther(available)} CTC`],
       ],
       'policy-table',

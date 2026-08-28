@@ -371,6 +371,14 @@ Blockscout reports a _partial_ match: the runtime bytecode agrees and the traili
 does not, which is what happens when the compilation environment is not reproduced byte for byte.
 The code is readable and the functions are callable.
 
+[Sourcify](https://sourcify.dev) disagrees, in the right direction. It compares the metadata hash
+too, and reports every contract below as a **full match** — `exact_match` for the decoder and the
+Sepolia ledger, `match` for the registry and both credits — from a tree it read itself. `npm run
+verify` now submits to both, because two verifiers that do not share a backend agreeing on the same
+source is a stronger sentence than one, and because Blockscout forwarding to Sourcify is a thing it
+usually does rather than a thing to rely on: the Sepolia ledger had not arrived until it was sent.
+`repo.sourcify.dev/102031/<address>` has the sources.
+
 ### Mainnet-sourced deployment
 
 | Contract       | Address                                                                                                                                                   |
@@ -507,6 +515,19 @@ The sweep is the daemon's own function, imported rather than reimplemented — `
 `offchain/lib/scope.ts`, bundled into the page. A browser cannot conclude that a claim is complete
 on different reasoning than the daemon would.
 
+### A watcher that is always on, holding nothing
+
+"A page open in a tab is not a daemon" is under Known limits, and it stayed true after the console
+shipped: the page makes refuting available to anyone and makes nobody do it. The smallest thing
+that does it without being paid is `.github/workflows/watch.yml` — every hour, a dry sweep of both
+published registries, the same union across independent endpoints the daemon and the console run,
+and a red run if a sealed claim is short of an event.
+
+It holds no key. `npm run watch -- --dry` reads and never signs, so it no longer asks for one, and a
+public repository can run it with nothing in its secrets. The red run is the alert: somebody sealed
+a lie and nobody has taken the bond yet, and whoever reads that with a key and a few minutes is
+paid half the bond to act on it.
+
 ### Borrowing from the page
 
 The scripts could always do this, and that was the problem: being underwritten meant cloning a
@@ -529,6 +550,22 @@ page boots, reads the live chain, and asks its host for nothing but `index.html`
 `style.css`. A GitHub Actions workflow builds it from each commit's own artifacts, so the ABI the
 page carries is the ABI the contracts were compiled with.
 
+`web/tests/borrow.live.spec.ts` is the test that makes the Borrow pane a claim rather than a hope.
+A fresh key — derived from the operator's, holding nothing but a little Sepolia ETH and a little
+CTC — pays a lender three times on Sepolia, then, **through the page**: sends the control commitment
+(the wallet is switched to Sepolia and back), proves it, builds the volume and clean claims, waits
+out the challenge window, finalizes, opens a line and draws. Every step is a real transaction
+against the published contracts, and the assertions read the registry and the credit back rather
+than the page. What stands in for MetaMask is `web/tests/wallet.ts`: a real key in the test process,
+an EIP-1193 provider on the page that routes reads to the real RPC of whichever chain it is on and
+hands every `eth_sendTransaction` back to be signed. It spends money and takes twenty minutes, so it
+is off unless asked for — `UTUH_LIVE_UI=1 npm run web:test -- borrow.live`.
+
+`web/tests/a11y.spec.ts` runs axe over the rendered page — the real DOM with the chain's answers in
+it — against the WCAG 2.x A and AA rules, and any violation fails the build by name. The console
+exists so that people who would never run a daemon can still refute or borrow, and "people" is not
+"sighted people with a mouse". It reports zero.
+
 `npm run web:test` drives it in a real browser against the live chain: the chain id it reports has
 to match an independent RPC call, the attestation frontier has to be past genesis, the claims it
 lists have to be the ones the registry holds, and the sweep has to produce a verdict with its
@@ -540,6 +577,7 @@ slashing a real bond.
 
 ```
 .github/workflows/pages.yml the published console, rebuilt from each commit's own artifacts
+.github/workflows/watch.yml an hourly keyless sweep of both registries; red if a claim is short
 .github/workflows/ci.yml    fmt, build, tests, gas snapshot, typecheck, slither — and a daily
                             job that proves real mainnet events against the live precompile,
                             checks the hosted and local provers still agree, and reports what the
@@ -618,7 +656,10 @@ web/
   build-static.ts           the published build: three files, no server, ABIs baked in
   tests/console.spec.ts     Playwright, against the live chain: no fixtures, no stubs
   tests/static.spec.ts      the published build asks its host for nothing but its own files
+  tests/a11y.spec.ts        axe over the rendered page; WCAG A/AA, zero violations
+  tests/wallet.ts           what stands in for MetaMask: a real key, real chains, chain switching
   tests/refute.live.spec.ts refuting through the page with a real wallet — off unless asked
+  tests/borrow.live.spec.ts the whole underwriting through the page, a stranger's key, real money
 playwright.config.ts        one worker, generous timeouts, because the sweeps are real
 ```
 
@@ -659,6 +700,7 @@ npm run cure                # a default recorded on chain, then made good — ne
 npm run finish -- <registry> <credit> <lineId>             # resume an interrupted run
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
+                            # (--dry needs no PRIVATE_KEY at all — it is what CI runs hourly)
 npm run bait                # seal a deliberately short claim for the watcher to find
 npm run livetest            # 107 guards asserted against the live chain, refunds included
 
@@ -1109,13 +1151,13 @@ they happen, recorded by the network rather than by us.
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —
   refuting pays only when the claimant fails to defend, so watching is worth less than the reward
   suggests.
-- **A page open in a tab is not a daemon.** The console makes refuting available to anyone with a
-  browser, which is a real change — enforcement no longer depends on somebody deploying
-  infrastructure — but it does not make anyone watch. Nobody sweeps while the tab is closed, and a
-  challenge window can elapse with every watcher asleep. What the console removes is the excuse
-  that watching was hard to start; what still has to be true is that refuting pays enough for
-  someone to bother, and the front-running note above is why that is weaker than the reward
-  suggests.
+- **A page open in a tab is not a daemon, and an hourly sweep is not one either.** The console
+  makes refuting available to anyone with a browser, and the scheduled dry sweep makes sure a short
+  claim is at least _noticed_ within the hour — but noticing is not refuting, and a window at the
+  20-block floor closes in five minutes. A watcher that acts needs a key and a process that stays
+  up; what the console and the workflow remove is the excuse that watching was hard to start. What
+  still has to be true is that refuting pays enough for someone to bother, and the front-running
+  note above is why that is weaker than the reward suggests.
 
 - **The union is safe for a watcher and was not for a claimant.** A watcher meeting a candidate it
   cannot prove shrugs and moves on; a claimant has to append everything it swept, so one

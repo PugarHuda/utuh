@@ -4,6 +4,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Utuh Console — CC3 Testnet</title>
+    <meta
+      name="description"
+      content="A completeness layer for Creditcoin's Attestcoin Protocol. Read every claim live, sweep Ethereum from your browser and break an incomplete one, or be underwritten for undercollateralized credit — no server, no key, no indexer."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Utuh — completeness for the Attestcoin Protocol" />
+    <meta
+      property="og:description"
+      content="Attestcoin proves a transaction happened. It cannot prove a set is complete. Utuh bonds that assertion and lets anyone break it with one proof — and underwrites credit on it. Live on Creditcoin CC3 Testnet."
+    />
+    <meta property="og:url" content="https://pugarhuda.github.io/utuh/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="theme-color" content="#1d4ed8" />
     <link rel="stylesheet" href="/style.css" />
     <link
       rel="icon"
@@ -15,8 +28,8 @@
       <div>
         <h1>Utuh</h1>
         <p class="sub">
-          A completeness layer for the Attestcoin Protocol, and undercollateralized credit built on
-          it. Everything below is read from Creditcoin CC3 Testnet as this page draws it.
+          A completeness layer for the Attestcoin Protocol, and undercollateralized credit built on it. Everything
+          below is read from Creditcoin CC3 Testnet as this page draws it.
         </p>
       </div>
       <div class="chip-row">
@@ -42,9 +55,9 @@
       <section>
         <h2>Claims</h2>
         <p class="note">
-          A claim asserts that a set of source-chain events is <em>complete</em>. Every member was
-          verified by the Block Prover on the way in, so it cannot be inflated; the bond is what
-          stands behind the assertion that nothing was left out.
+          A claim asserts that a set of source-chain events is <em>complete</em>. Every member was verified by the
+          Block Prover on the way in, so it cannot be inflated; the bond is what stands behind the assertion that
+          nothing was left out.
         </p>
         <div id="registry-body" class="body">reading the registry…</div>
         <div id="actions" class="actions"></div>
@@ -53,13 +66,12 @@
       <section>
         <h2>Watch</h2>
         <p class="note">
-          This is the part that has to be real. The sweep below runs in your browser, against
-          independent public endpoints, using the same code the watcher daemon runs. If it finds an
-          in-scope event a sealed claim does not contain, one proof breaks the claim and pays you
-          half the bond.
+          This is the part that has to be real. The sweep below runs in your browser, against independent public
+          endpoints, using the same code the watcher daemon runs. If it finds an in-scope event a sealed claim does
+          not contain, one proof breaks the claim and pays you half the bond.
         </p>
         <div class="controls">
-          <select id="claim-select" data-testid="claim-select"></select>
+          <select id="claim-select" data-testid="claim-select" aria-label="claim to sweep"></select>
           <button id="sweep" class="act" data-testid="sweep">sweep the source chain</button>
         </div>
         <div id="refute-box" class="actions"></div>
@@ -69,9 +81,8 @@
       <section>
         <h2>Borrow</h2>
         <p class="note">
-          The whole underwriting, from this page: bind your Ethereum address, build the two claims,
-          wait out their challenge window, open the line. Same contracts the scripts use, your
-          wallet, real bonds.
+          The whole underwriting, from this page: bind your Ethereum address, build the two claims, wait out their
+          challenge window, open the line. Same contracts the scripts use, your wallet, real bonds.
         </p>
         <div id="borrow-body" class="body">connect a wallet to borrow.</div>
         <div id="borrow-log" class="log" data-testid="borrow-log"></div>
@@ -80,8 +91,8 @@
       <section>
         <h2>Credit</h2>
         <p class="note">
-          Nothing bridges. The history stays on Ethereum, the credit is issued in CTC on
-          Creditcoin, repayment happens back on Ethereum, and only proof crosses.
+          Nothing bridges. The history stays on Ethereum, the credit is issued in CTC on Creditcoin, repayment happens
+          back on Ethereum, and only proof crosses.
         </p>
         <div id="credit-body" class="body">reading the credit contract…</div>
       </section>
@@ -89,8 +100,8 @@
 
     <footer>
       <p>
-        No server holds a key and no indexer stands between this page and the chain. Point your own
-        client at <code>rpc.cc3-testnet.creditcoin.network</code> and you will get the same answers.
+        No server holds a key and no indexer stands between this page and the chain. Point your own client at
+        <code>rpc.cc3-testnet.creditcoin.network</code> and you will get the same answers.
       </p>
     </footer>
 
