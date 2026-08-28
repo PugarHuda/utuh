@@ -57,6 +57,42 @@ async function untilLogged(page: Page, pattern: RegExp, timeout: number): Promis
   return text;
 }
 
+test.describe('a borrower in a fresh browser', () => {
+  test.skip(!ENABLED, 'set UTUH_LIVE_UI=1 and PRIVATE_KEY');
+
+  /// Read-only, one minute. The page has to show a borrower their own history from the chain
+  /// alone — a settled line in a browser that never opened it — because the alternative, found by
+  /// the run above, was a pane that forgot the line the moment it was paid off.
+  test('sees their last line, settled or not, with nothing remembered', async ({ page }) => {
+    const master = KEY!.startsWith('0x') ? KEY! : `0x${KEY!}`;
+    const borrowerKey = derive(master, 'utuh/browser-borrower');
+    const borrower = new Wallet(borrowerKey).address;
+    const cc3 = new JsonRpcProvider(CC3_RPC_DEFAULT, CC3_CHAIN_ID, { staticNetwork: true });
+    const record = JSON.parse(readFileSync(join(ROOT, 'deployments.full.json'), 'utf8')) as { credit: string };
+    const credit = new Contract(record.credit, abi('UtuhCredit.sol', 'UtuhCredit') as never, cc3);
+
+    const next = (await credit.nextLineId()) as bigint;
+    let latest = 0n;
+    for (let id = next - 1n; id >= 1n; id--) {
+      if ((await credit.line(id)).subject.toLowerCase() === borrower.toLowerCase()) {
+        latest = id;
+        break;
+      }
+    }
+    test.skip(latest === 0n, 'this borrower has never had a line');
+    const status = ['None', 'Active', 'Settled', 'Defaulted', 'Closed'][Number((await credit.line(latest)).status)];
+
+    await injectWallet(page, borrowerKey);
+    await page.goto('/');
+    await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
+    await page.locator('#connect').click();
+
+    const pane = page.locator('#borrow-body');
+    await expect(pane).toContainText(`line ${latest}`, { timeout: 90_000 });
+    if (status !== 'Active') await expect(pane).toContainText(`line ${latest} is ${status}`);
+  });
+});
+
 test.describe('borrowing from the browser', () => {
   test.skip(!ENABLED, 'set UTUH_LIVE_UI=1 and PRIVATE_KEY — this spends CTC and Sepolia ETH on live testnets');
   test.setTimeout(60 * 60_000);
@@ -123,52 +159,59 @@ test.describe('borrowing from the browser', () => {
     if (resume) {
       lineId = existing;
     } else {
-      await expect(pane.locator('[data-testid=send-commitment]')).toBeVisible({ timeout: 60_000 });
+      // A borrower bound by an earlier run stays bound; the page shows that and skips the step.
+      const alreadyBound = (await credit.controllerOf(borrower)).toLowerCase() === borrower.toLowerCase();
+      let bindBlock = Math.max(...blocks);
+      if (alreadyBound) {
+        await expect(pane).toContainText(`Bound: controllerOf(${borrower})`, { timeout: 60_000 });
+      } else {
+        await expect(pane.locator('[data-testid=send-commitment]')).toBeVisible({ timeout: 60_000 });
 
-      // ---------------------------------------------------------------- 1. bind, from the page
-      await pane.locator('[data-testid=send-commitment]').click();
-      const sent = await untilLogged(page, /sent on Ethereum Sepolia: (0x[0-9a-f]{64})/, 120_000);
-      const bindHash = sent.match(/sent on Ethereum Sepolia: (0x[0-9a-f]{64})/)![1]!;
-      await expect(pane.locator('[data-testid=bind-hash]')).toHaveValue(bindHash);
+        // ---------------------------------------------------------------- 1. bind, from the page
+        await pane.locator('[data-testid=send-commitment]').click();
+        const sent = await untilLogged(page, /sent on Ethereum Sepolia: (0x[0-9a-f]{64})/, 120_000);
+        const bindHash = sent.match(/sent on Ethereum Sepolia: (0x[0-9a-f]{64})/)![1]!;
+        await expect(pane.locator('[data-testid=bind-hash]')).toHaveValue(bindHash);
 
-      // The wallet answers with the hash the moment it has broadcast, the way a wallet does; the
-      // block comes later. Asking for the receipt before it exists got `null` here, once.
-      const bindBlock = (await sepolia.waitForTransaction(bindHash))!.blockNumber;
-      console.log(`commitment in Sepolia block ${bindBlock}; waiting for Creditcoin to attest it`);
-      await attested(chainInfo, CHAIN_KEY.sepolia, bindBlock);
+        // The wallet answers with the hash the moment it has broadcast, the way a wallet does; the
+        // block comes later. Asking for the receipt before it exists got `null` here, once.
+        bindBlock = (await sepolia.waitForTransaction(bindHash))!.blockNumber;
+        console.log(`commitment in Sepolia block ${bindBlock}; waiting for Creditcoin to attest it`);
+        await attested(chainInfo, CHAIN_KEY.sepolia, bindBlock);
 
-      // The precompile saying "attested" and the hosted builder having the proof ready are two
-      // different moments, and the builder's answer to a request in between is to hold the
-      // connection while it builds — measured at over three minutes once, then three seconds for
-      // the same proof afterwards. The page tells a person to wait and press again; this does the
-      // same, and asks the builder directly first so the press lands on a proof that exists.
-      await proofReady(CHAIN_KEY.sepolia, bindHash);
-      for (let attempt = 1; ; attempt++) {
-        const logged = (await page.locator('[data-testid=borrow-log]').innerText()).length;
-        await pane.locator('[data-testid=prove-control]').click();
-        const outcome = await expect
-          .poll(
-            async () => {
-              if ((await pane.innerText()).includes(`Bound: controllerOf(${borrower})`)) return 'bound';
-              const fresh = (await page.locator('[data-testid=borrow-log]').innerText()).slice(logged);
-              return /binding failed/.test(fresh) ? `failed: ${fresh.trim()}` : 'pending';
-            },
-            { timeout: 150_000, intervals: [2_000] },
-          )
-          .not.toBe('pending')
-          .then(async () => ((await pane.innerText()).includes('Bound:') ? 'bound' : 'failed'))
-          .catch(() => 'pending');
-        if (outcome === 'bound') break;
-        if (attempt >= 6) throw new Error(`the commitment never bound after ${attempt} attempts`);
-        console.log(`prove attempt ${attempt} did not bind (${outcome}); pressing again in 20s`);
-        await page.reload();
-        await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
-        await page.locator('#connect').click();
-        await expect(pane.locator('[data-testid=prove-control]')).toBeVisible({ timeout: 60_000 });
-        await pane.locator('[data-testid=bind-hash]').fill(bindHash);
-        await new Promise((r) => setTimeout(r, 20_000));
+        // The precompile saying "attested" and the hosted builder having the proof ready are two
+        // different moments, and the builder's answer to a request in between is to hold the
+        // connection while it builds — measured at over three minutes once, then three seconds for
+        // the same proof afterwards. The page tells a person to wait and press again; this does the
+        // same, and asks the builder directly first so the press lands on a proof that exists.
+        await proofReady(CHAIN_KEY.sepolia, bindHash);
+        for (let attempt = 1; ; attempt++) {
+          const logged = (await page.locator('[data-testid=borrow-log]').innerText()).length;
+          await pane.locator('[data-testid=prove-control]').click();
+          const outcome = await expect
+            .poll(
+              async () => {
+                if ((await pane.innerText()).includes(`Bound: controllerOf(${borrower})`)) return 'bound';
+                const fresh = (await page.locator('[data-testid=borrow-log]').innerText()).slice(logged);
+                return /binding failed/.test(fresh) ? `failed: ${fresh.trim()}` : 'pending';
+              },
+              { timeout: 150_000, intervals: [2_000] },
+            )
+            .not.toBe('pending')
+            .then(async () => ((await pane.innerText()).includes('Bound:') ? 'bound' : 'failed'))
+            .catch(() => 'pending');
+          if (outcome === 'bound') break;
+          if (attempt >= 6) throw new Error(`the commitment never bound after ${attempt} attempts`);
+          console.log(`prove attempt ${attempt} did not bind (${outcome}); pressing again in 20s`);
+          await page.reload();
+          await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
+          await page.locator('#connect').click();
+          await expect(pane.locator('[data-testid=prove-control]')).toBeVisible({ timeout: 60_000 });
+          await pane.locator('[data-testid=bind-hash]').fill(bindHash);
+          await new Promise((r) => setTimeout(r, 20_000));
+        }
+        expect((await credit.controllerOf(borrower)).toLowerCase()).toBe(borrower.toLowerCase());
       }
-      expect((await credit.controllerOf(borrower)).toLowerCase()).toBe(borrower.toLowerCase());
 
       // ---------------------------------------------------------------- 2. the two claims, from the page
       const from = Math.min(...blocks) - 1;

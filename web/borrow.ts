@@ -1,6 +1,11 @@
 import { Contract, Interface, formatEther, parseEther, type Signer } from 'ethers';
 import { planBatches } from '../offchain/lib/batches';
-import { fetchBatchProof, fetchSingleProof, proofFromBatch } from '../offchain/lib/proofApi';
+import {
+  builderAttestedHeight,
+  fetchBatchProofPatiently,
+  fetchSingleProof,
+  proofFromBatch,
+} from '../offchain/lib/proofApi';
 import { eventKey, scanScopeUnion, type Scope, type ScopedEvent } from '../offchain/lib/scope';
 import { toScope } from '../offchain/lib/specs';
 import { sourceEndpoints } from './chain';
@@ -130,11 +135,20 @@ export async function buildClaim(
   chainInfo: Contract,
   signer: Signer,
   scope: Scope,
-  range: Range,
-  opts: { bond: bigint; challengeWindow: number; minSources?: number },
+  requested: Range,
+  opts: { bond: bigint; challengeWindow: number; minSources?: number; resume?: bigint },
   log: Log,
 ): Promise<BuiltClaim> {
+  let range = requested;
   const minSources = opts.minSources ?? 2;
+
+  // Resuming means the range is already decided — it is the open claim's, and the registry will
+  // refuse an event outside it whatever the inputs now say.
+  if (opts.resume !== undefined) {
+    const c = await registry.claim(opts.resume);
+    if (Number(c.status) !== 1) throw new Error(`claim ${opts.resume} is not open, so there is nothing to resume`);
+    range = { fromBlock: Number(c.fromBlock), toBlock: Number(c.toBlock) };
+  }
 
   // The whole range has to be attested before the registry will open a claim over it — that is
   // what makes a challenge window sound, since a watcher can then prove anything inside it from
@@ -157,21 +171,41 @@ export async function buildClaim(
   log(`${sweep.events.length} in-scope event(s) to claim`);
 
   const writable = registry.connect(signer) as Contract;
-  // eth_call first, here and on every write below. A bond under the floor or a window under the
-  // deployment's minimum is the registry's answer to give, by name, before the wallet asks anyone
-  // to sign a transaction that will fail.
-  const openArgs = [scope, range.fromBlock, range.toBlock, opts.challengeWindow, { value: opts.bond }] as const;
-  await writable.open.staticCall(...openArgs);
-  const opened = await writable.open(...openArgs);
-  const receipt = await opened.wait();
-  const claimId = await claimIdFrom(registry, receipt);
-  log(`claim ${claimId} opened with ${formatEther(opts.bond)} CTC at stake`);
 
-  const batches = planBatches(sweep.events);
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i]!;
-    log(`batch ${i + 1}/${batches.length}: ${batch.length} event(s)`);
-    await appendBatch(writable, claimId, scope.chainKey, batch, log);
+  // A build can die between `open` and `seal` — an endpoint that stops answering, a signature
+  // refused, a tab closed — and leave a claim Open with a bond in it. Picking it up is cheaper
+  // than abandoning it and paying to open another: the registry keeps the last appended key, so
+  // what is left to append is exactly the events after it.
+  let claimId: bigint;
+  let events = sweep.events;
+  if (opts.resume !== undefined) {
+    const c = await registry.claim(opts.resume);
+    claimId = opts.resume;
+    const lastKey = c.lastKey as bigint;
+    events = sweep.events.filter((e) => eventKey(e) > lastKey);
+    log(`resuming claim ${claimId}: ${sweep.events.length - events.length} already in it, ${events.length} to go`);
+  } else {
+    // eth_call first, here and on every write below. A bond under the floor or a window under the
+    // deployment's minimum is the registry's answer to give, by name, before the wallet asks anyone
+    // to sign a transaction that will fail.
+    const openArgs = [scope, range.fromBlock, range.toBlock, opts.challengeWindow, { value: opts.bond }] as const;
+    await writable.open.staticCall(...openArgs);
+    const opened = await writable.open(...openArgs);
+    const receipt = await opened.wait();
+    claimId = await claimIdFrom(registry, receipt);
+    log(`claim ${claimId} opened with ${formatEther(opts.bond)} CTC at stake`);
+  }
+
+  const batches = planBatches(events);
+  try {
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i]!;
+      log(`batch ${i + 1}/${batches.length}: ${batch.length} event(s)`);
+      await appendBatch(writable, claimId, scope.chainKey, batch, log);
+    }
+  } catch (e) {
+    // Say where the money is. The claim is Open, the bond is in it, and the same button resumes.
+    throw new OpenClaimLeft(claimId, (e as Error).message);
   }
 
   await writable.seal.staticCall(claimId);
@@ -187,15 +221,38 @@ export async function buildClaim(
   };
 }
 
-/// Block until Creditcoin has attested `height`, saying how far off it is while it waits.
+/// A build that failed after `open`. Carries the claim so the caller can offer to resume it.
+export class OpenClaimLeft extends Error {
+  constructor(
+    public readonly claimId: bigint,
+    cause: string,
+  ) {
+    super(
+      `claim ${claimId} is open with your bond in it, and appending failed: ${cause}. Press build again to resume it.`,
+    );
+  }
+}
+
+/// Block until Creditcoin has attested `height` — and the proof builder has indexed it, which is
+/// a later moment, and the one that matters for the request that comes next.
 async function waitAttested(chainInfo: Contract, chainKey: number, height: number, log: Log): Promise<void> {
   let said = -1;
   for (;;) {
     const frontier = Number((await chainInfo.get_latest_attestation_height_and_hash(chainKey)).height);
-    if (frontier >= height) return;
+    if (frontier >= height) break;
     if (frontier !== said) {
       log(`waiting for Creditcoin to attest source block ${height} — at ${frontier}, ${height - frontier} to go`);
       said = frontier;
+    }
+    await new Promise((r) => setTimeout(r, 15_000));
+  }
+  said = -1;
+  for (;;) {
+    const indexed = await builderAttestedHeight(chainKey);
+    if (indexed >= height) return;
+    if (indexed !== said) {
+      log(`waiting for the proof builder to index source block ${height} — at ${indexed}`);
+      said = indexed;
     }
     await new Promise((r) => setTimeout(r, 15_000));
   }
@@ -211,7 +268,7 @@ async function appendBatch(
   // One proof request per batch, not per event: the batch endpoint returns the shared continuity
   // proof the array form of `verifyAndEmit` is shaped for.
   const hashes = [...new Set(batch.map((e) => e.txHash))];
-  const proof = await fetchBatchProof(chainKey, hashes);
+  const proof = await fetchBatchProofPatiently(chainKey, hashes, log);
 
   const proofs = batch.map((e) => {
     const { txBytes, merkleProof } = proofFromBatch(proof, e.blockNumber, e.txIndex);
@@ -280,6 +337,23 @@ export async function draw(
   log(`drawing ${amount} CTC — ${tx.hash}`);
   await tx.wait();
   log(`drawn. ${due} source units must be proven repaid before the deadline.`);
+}
+
+/// The line this subject should be looking at: the open one, else the most recent one.
+///
+/// The contract keeps one slot per subject and the slot empties on settlement, so a borrower who
+/// has just paid off a line — or who defaulted on one, or closed one — has `activeLineOf` of zero
+/// and a history the page should still show. Read off the chain, newest first, because a browser
+/// that was not the one that opened the line knows nothing, and the chain knows everything.
+export async function lineToShow(credit: Contract, subject: string): Promise<bigint | undefined> {
+  const active = (await credit.activeLineOf(subject)) as bigint;
+  if (active !== 0n) return active;
+  const next = (await credit.nextLineId()) as bigint;
+  for (let id = next - 1n; id >= 1n; id--) {
+    const l = await credit.line(id);
+    if (l.subject.toLowerCase() === subject.toLowerCase()) return id;
+  }
+  return undefined;
 }
 
 /// What a drawn line owes, and where the proof of paying it has to come from.
@@ -389,6 +463,8 @@ export interface Progress {
   cleanClaimIds?: string[];
   lineId?: string;
   repayClaimId?: string;
+  /// A claim a build left Open, keyed by which build: 'volume', 'clean', 'repay'.
+  openClaims?: Record<string, string>;
 }
 
 /// Keyed by the lender *and* the account. Two people sharing a browser — or one person with two

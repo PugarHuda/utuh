@@ -112,6 +112,32 @@ function hostOf(url: string): string {
   }
 }
 
+/// How far the hosted builder's own index has got, which is not the same question as how far the
+/// precompile has attested.
+///
+/// The SDK's `waitUntilHeightAttested` asks the builder; the precompile can answer "attested" for
+/// a block the builder has not indexed yet, and a proof request in that gap comes back 422 from the
+/// batch endpoint — measured, on a block the precompile had attested a minute earlier. Anything
+/// that is about to ask for proofs waits on this as well.
+export async function builderAttestedHeight(chainKey: number): Promise<number> {
+  const failures: string[] = [];
+  for (const host of proofHosts()) {
+    try {
+      const res = await fetchWithin(`${host.replace(/\/$/, '')}/api/v1/attested-height/${chainKey}`, {}, 20_000);
+      if (!res.ok) {
+        failures.push(`${hostOf(host)} → ${res.status}`);
+        continue;
+      }
+      const body = (await res.json()) as { attestedHeight?: number };
+      if (typeof body.attestedHeight === 'number') return body.attestedHeight;
+      failures.push(`${hostOf(host)} → no height in the response`);
+    } catch (e) {
+      failures.push(`${hostOf(host)} → ${(e as Error).message}`);
+    }
+  }
+  throw new Error(`no proof builder answered: ${failures.join('; ')}`);
+}
+
 /// One proof for each of up to {MAX_BATCH_SIZE} transactions, sharing a continuity proof.
 ///
 /// This is the shape `appendBatch` is built around: the array form of `verifyAndEmit` takes one
@@ -146,6 +172,12 @@ export async function fetchBatchProof(
         { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(txHashes) },
         timeoutMs,
       );
+      if (res.status === 422) {
+        // The builder knows the block is attested and has not indexed it yet. Not an error about
+        // the request — the same request answered 200 a minute later — so it is retried, here,
+        // rather than handed back as a failed build with a bond left in an open claim.
+        throw new NotIndexedYet(`${hostOf(host)} has not indexed these transactions yet`);
+      }
       if (!res.ok) {
         failures.push(`${hostOf(host)} → ${res.status}`);
         continue;
@@ -158,11 +190,33 @@ export async function fetchBatchProof(
       }
       return proof;
     } catch (e) {
+      if (e instanceof NotIndexedYet) throw e;
       failures.push(`${hostOf(host)} → ${(e as Error).message}`);
     }
   }
 
   throw new Error(`no proof builder answered: ${failures.join('; ')}`);
+}
+
+/// The builder has the block attested but not indexed. Retry, do not fail.
+export class NotIndexedYet extends Error {}
+
+/// `fetchBatchProof`, retried while the builder catches up — bounded, and saying so each time.
+export async function fetchBatchProofPatiently(
+  chainKey: number,
+  txHashes: string[],
+  log: (line: string) => void,
+  attempts = 20,
+): Promise<BatchProof> {
+  for (let i = 1; ; i++) {
+    try {
+      return await fetchBatchProof(chainKey, txHashes);
+    } catch (e) {
+      if (!(e instanceof NotIndexedYet) || i >= attempts) throw e;
+      log(`${e.message} — asking again in 15s (${i}/${attempts})`);
+      await new Promise((r) => setTimeout(r, 15_000));
+    }
+  }
 }
 
 /// Pull one transaction's proof out of a batch response.

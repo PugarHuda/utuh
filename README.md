@@ -561,6 +561,16 @@ sealed — a closed tab, a rejected signature — shows up under Claims with one
 it and returns the bond, because the alternative is a borrower who does not know the money is
 there.
 
+Two more things the live test taught the page. The precompile saying a block is attested and the
+hosted builder having *indexed* it are different moments, and a proof request in the gap comes back
+422 — measured on a payment the precompile had attested a minute earlier, and answered 200 by the
+same builder a minute later. The page now waits on both, the way the SDK does, and treats a 422 as
+"ask again" rather than as a failed build. And a build that dies after `open` — that 422 did it
+once — leaves a claim Open with a bond in it; the page finds that claim again on the next press,
+by its scope and claimant rather than by anything the browser remembered, and resumes it from the
+last key the registry recorded. Claim 8 on the published registry is the receipt: opened by one
+run, appended and sealed by the next, one bond.
+
 The lender has controls too, shown only to the lender: fund, withdraw undrawn. And an overdue line
 carries a *mark default* button for anyone, because recording a default is permissionless, unpaid,
 and — since an overdue line blocks the next one by itself — no longer something the guards depend

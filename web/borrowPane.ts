@@ -5,6 +5,7 @@ import { cc3, type Wired } from './chain';
 import {
   bindingFor,
   buildClaim,
+  OpenClaimLeft,
   closeLine,
   cureLine,
   defaultRange,
@@ -12,6 +13,7 @@ import {
   finalize,
   forgetProgress,
   ledgerPayment,
+  lineToShow,
   loadProgress,
   obligationOf,
   openLine,
@@ -22,6 +24,8 @@ import {
   settleLine,
 } from './borrow';
 import { lineStatus } from '../offchain/lib/status';
+import { sameScope } from '../offchain/lib/specs';
+import type { Scope } from '../offchain/lib/scope';
 import { sourceEndpoints } from './chain';
 
 /// The borrow pane: the whole underwriting, step by step, in the page.
@@ -102,16 +106,65 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
   // contract says they have, and the pane starts from there rather than from a blank step one.
   // Measured before this: a live test with an open line sat forever on a button that was never
   // rendered, because the page only knew about lines it had opened itself.
-  const onChain = (await wired.credit.activeLineOf(subject)) as bigint;
-  if (onChain !== 0n && progress.lineId !== String(onChain)) {
-    progress.lineId = String(onChain);
-    saveProgress(creditAddress, account, { subject, lineId: String(onChain) });
+  const shown = await lineToShow(wired.credit, subject);
+  const onChain = shown ?? 0n;
+  if (shown !== undefined && progress.lineId !== String(shown)) {
+    progress.lineId = String(shown);
+    saveProgress(creditAddress, account, { subject, lineId: String(shown) });
   }
   const chainKey = Number((await wired.credit.volumeSpec()).chainKey);
   const controller: string = await wired.credit.controllerOf(subject);
   const bound = controller.toLowerCase() === account.toLowerCase();
 
   const steps: HTMLElement[] = [];
+
+  /// Run one build, remembering a claim it leaves Open so the next press resumes it rather than
+  /// opening another and posting another bond. The key is which build, because a volume claim
+  /// left open is not a clean claim half done.
+  async function building(
+    kind: string,
+    scopeWanted: () => Promise<Scope>,
+    log: (l: string) => void,
+    work: (resume?: bigint) => Promise<void>,
+  ) {
+    // A function declaration: the early return's narrowing does not reach in here.
+    const account = ctx.account()!;
+    const open = loadProgress(creditAddress, account).openClaims?.[kind];
+    let resume: bigint | undefined;
+    if (open) {
+      const c = await wired.registry.claim(BigInt(open));
+      if (Number(c.status) === 1) resume = BigInt(open);
+    }
+    // What this browser remembered is a convenience. An open claim of this account's, carrying
+    // exactly the scope about to be built, is the same claim whether or not it was opened here —
+    // and leaving it to open a second one costs a second bond.
+    if (resume === undefined) {
+      const wanted = await scopeWanted();
+      const next = Number(await wired.registry.nextClaimId());
+      for (let id = next - 1; id >= Math.max(1, next - 25); id--) {
+        const c = await wired.registry.claim(id);
+        if (Number(c.status) !== 1 || c.claimant.toLowerCase() !== account.toLowerCase()) continue;
+        if (sameScope(c.scope, wanted)) {
+          resume = BigInt(id);
+          log(`claim ${id} is open with your bond in it and matches — resuming it`);
+          break;
+        }
+      }
+    }
+    try {
+      await work(resume);
+      const left = { ...(loadProgress(creditAddress, account).openClaims ?? {}) };
+      delete left[kind];
+      saveProgress(creditAddress, account, { openClaims: left });
+    } catch (e) {
+      if (e instanceof OpenClaimLeft) {
+        saveProgress(creditAddress, account, {
+          openClaims: { ...(loadProgress(creditAddress, account).openClaims ?? {}), [kind]: String(e.claimId) },
+        });
+      }
+      log(`failed: ${message(e)}`);
+    }
+  }
 
   // ---------------------------------------------------------------- 1. bind
   const binding = await bindingFor(wired.credit, subject, account);
@@ -196,20 +249,25 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
   buildRow.appendChild(
     button(volumeId ? `volume claim ${volumeId} built` : 'build the volume claim', 'build-volume', async () => {
       if (volumeId) return;
-      await guard(say, async () => {
-        const scope = await scopeFor(wired.credit, 'volume', subject);
-        const built = await buildClaim(
-          wired.registry,
-          wired.chainInfo,
-          signer,
-          scope,
-          { fromBlock: Number(from.value), toBlock: Number(to.value) },
-          { bond: parseEther(bondInput.value), challengeWindow: window },
-          say,
-        );
-        saveProgress(creditAddress, account, { subject, volumeClaimId: String(built.claimId) });
-        await ctx.onChange();
-      });
+      await building(
+        'volume',
+        () => scopeFor(wired.credit, 'volume', subject),
+        say,
+        async (resume) => {
+          const scope = await scopeFor(wired.credit, 'volume', subject);
+          const built = await buildClaim(
+            wired.registry,
+            wired.chainInfo,
+            signer,
+            scope,
+            { fromBlock: Number(from.value), toBlock: Number(to.value) },
+            { bond: parseEther(bondInput.value), challengeWindow: window, ...(resume ? { resume } : {}) },
+            say,
+          );
+          saveProgress(creditAddress, account, { subject, volumeClaimId: String(built.claimId) });
+          await ctx.onChange();
+        },
+      );
     }),
   );
 
@@ -222,24 +280,29 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
       'build-clean',
       async () => {
         if (cleanIds.length >= cleanCount) return;
-        await guard(say, async () => {
-          // The next class the lender listed. One empty claim per class, in order.
-          const scope = await scopeFor(wired.credit, 'clean', subject, cleanIds.length);
-          const built = await buildClaim(
-            wired.registry,
-            wired.chainInfo,
-            signer,
-            scope,
-            { fromBlock: Number(from.value), toBlock: Number(to.value) },
-            { bond: parseEther(bondInput.value), challengeWindow: window },
-            say,
-          );
-          saveProgress(creditAddress, account, {
-            subject,
-            cleanClaimIds: [...cleanIds, String(built.claimId)].map(String),
-          });
-          await ctx.onChange();
-        });
+        await building(
+          'clean',
+          () => scopeFor(wired.credit, 'clean', subject, cleanIds.length),
+          say,
+          async (resume) => {
+            // The next class the lender listed. One empty claim per class, in order.
+            const scope = await scopeFor(wired.credit, 'clean', subject, cleanIds.length);
+            const built = await buildClaim(
+              wired.registry,
+              wired.chainInfo,
+              signer,
+              scope,
+              { fromBlock: Number(from.value), toBlock: Number(to.value) },
+              { bond: parseEther(bondInput.value), challengeWindow: window, ...(resume ? { resume } : {}) },
+              say,
+            );
+            saveProgress(creditAddress, account, {
+              subject,
+              cleanClaimIds: [...cleanIds, String(built.claimId)].map(String),
+            });
+            await ctx.onChange();
+          },
+        );
       },
     ),
   );
@@ -440,29 +503,35 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
             const buildRow = el('div', 'controls');
             buildRow.appendChild(
               button('build the repayment claim', 'build-repay', async () => {
-                await guard(say, async () => {
-                  const scope = await repayScopeFor(wired.credit, subject);
-                  const built = await buildClaim(
-                    wired.registry,
-                    wired.chainInfo,
-                    signer,
-                    scope,
-                    { fromBlock: Number(rFrom.value), toBlock: Number(rTo.value) },
-                    {
-                      bond: parseEther(rBond.value),
-                      challengeWindow: Number(await wired.registry.MIN_CHALLENGE_WINDOW()),
-                    },
-                    say,
-                  );
-                  if (built.aggregate < o.repayRequired) {
-                    say(
-                      `the claim proves ${built.aggregate} against ${o.repayRequired} owed — it will not ` +
-                        `settle. Pay the rest and build another over a later range.`,
+                await building(
+                  'repay',
+                  () => repayScopeFor(wired.credit, subject),
+                  say,
+                  async (resume) => {
+                    const scope = await repayScopeFor(wired.credit, subject);
+                    const built = await buildClaim(
+                      wired.registry,
+                      wired.chainInfo,
+                      signer,
+                      scope,
+                      { fromBlock: Number(rFrom.value), toBlock: Number(rTo.value) },
+                      {
+                        bond: parseEther(rBond.value),
+                        challengeWindow: Number(await wired.registry.MIN_CHALLENGE_WINDOW()),
+                        ...(resume ? { resume } : {}),
+                      },
+                      say,
                     );
-                  }
-                  saveProgress(creditAddress, account, { repayClaimId: String(built.claimId) });
-                  await ctx.onChange();
-                });
+                    if (built.aggregate < o.repayRequired) {
+                      say(
+                        `the claim proves ${built.aggregate} against ${o.repayRequired} owed — it will not ` +
+                          `settle. Pay the rest and build another over a later range.`,
+                      );
+                    }
+                    saveProgress(creditAddress, account, { repayClaimId: String(built.claimId) });
+                    await ctx.onChange();
+                  },
+                );
               }),
             );
             repayBody.push(buildRow);
