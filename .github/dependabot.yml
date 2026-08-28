@@ -1,0 +1,18 @@
+# Two kinds of pinned things move under this repository: npm packages and the actions the
+# workflows run. Both are pinned on purpose, and a pin nobody revisits is a vulnerability with a
+# comment on it. Weekly pull requests are the revisit. Foundry is pinned by hand in each workflow
+# and stays that way — see the comment in ci.yml — because its bumps have changed what the gates
+# measure, and that is a review, not a merge.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dev-tooling:
+        patterns: ['prettier', 'knip', 'typescript', 'tsx', 'esbuild', '@playwright/*', '@axe-core/*', '@types/*']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

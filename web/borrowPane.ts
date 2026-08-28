@@ -5,16 +5,24 @@ import { cc3, type Wired } from './chain';
 import {
   bindingFor,
   buildClaim,
+  closeLine,
+  cureLine,
   defaultRange,
   draw,
   finalize,
   forgetProgress,
+  ledgerPayment,
   loadProgress,
+  obligationOf,
   openLine,
   proveControl,
+  repayScopeFor,
   saveProgress,
   scopeFor,
+  settleLine,
 } from './borrow';
+import { lineStatus } from '../offchain/lib/status';
+import { sourceEndpoints } from './chain';
 
 /// The borrow pane: the whole underwriting, step by step, in the page.
 ///
@@ -320,6 +328,159 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
       }
 
       steps.push(step(4, 'Open the line and draw', lineId !== undefined, lineBody));
+
+      // ------------------------------------------------------------ 5. repay, prove it, settle
+      if (lineId !== undefined) {
+        const o = await obligationOf(wired.credit, lineId);
+        const repayBody: (HTMLElement | string)[] = [];
+        const done = o.status === 2 || o.status === 4;
+
+        if (o.status === 1 && o.drawn === 0n) {
+          repayBody.push(
+            'Nothing has been drawn, so there is nothing to repay. The line can be given back — the ' +
+              'history it consumed stays consumed, but the slot comes free for a later one.',
+          );
+          const row = el('div', 'controls');
+          row.appendChild(
+            button('close the line', 'close-line', async () => {
+              await guard(say, async () => {
+                await closeLine(wired.credit, signer, lineId, say);
+                await ctx.onChange();
+              });
+            }),
+          );
+          repayBody.push(row);
+        } else if (!done) {
+          const head = await cc3.getBlockNumber();
+          const overdue = o.dueBlock !== 0 && head > o.dueBlock;
+          repayBody.push(
+            el(
+              'p',
+              overdue || o.status === 3 ? 'note bad' : 'note',
+              o.status === 3
+                ? `line ${lineId} is in default. Proving the repayment late clears it, on exactly the ` +
+                    `terms it was owed — nothing is forgiven, and nothing stays held against you once ` +
+                    `it is paid.`
+                : `owed: ${o.repayRequired} source units (${formatEther(o.repayRequired)} if the asset ` +
+                    `is ether), proven by CC3 block ${o.dueBlock}` +
+                    (overdue ? ` — which has passed; anyone may now mark this line in default` : ''),
+            ),
+          );
+          repayBody.push(
+            `The proof is a finalized claim over the payment: the event ${o.eventSig.slice(0, 10)}… from ` +
+              `${o.emitter}, paying ${o.payee}, in a range starting at source block ${o.repayFrom} or ` +
+              `later. Same registry, same bond, same window as the underwriting.`,
+          );
+
+          // Paying: one click when the lender is paid through the SettlementLedger, because the
+          // page knows that contract's shape. A lender paid in USDC is paid in USDC, by the
+          // borrower, however they like — the sweep finds the transfer either way.
+          const ledger = wired.deployments.ledger;
+          if (ledger && ledger.toLowerCase() === o.emitter.toLowerCase()) {
+            const payRow = el('div', 'controls');
+            payRow.appendChild(
+              button(
+                `pay ${formatEther(o.repayRequired)} ETH to the lender with this wallet`,
+                'pay-ledger',
+                async () => {
+                  await guard(say, async () => {
+                    await sendOnSourceChain(o.chainKey, subject, ledgerPayment(o.payee), say, {
+                      to: ledger,
+                      valueWei: o.repayRequired,
+                      then: 'wait for Creditcoin to attest that block, then build the repayment claim.',
+                    });
+                  });
+                },
+              ),
+            );
+            repayBody.push(payRow);
+          }
+
+          const repayId = progress.repayClaimId ? BigInt(progress.repayClaimId) : undefined;
+          if (repayId === undefined) {
+            // From the first block a repayment may count, to the source chain's head — the sweep
+            // covers whatever was paid, and the build waits for the head to be attested.
+            const sourceHead = await sourceEndpoints(o.chainKey)[0]!.provider.getBlockNumber();
+            const rFrom = input('repay-from', 'from block', String(o.repayFrom));
+            const rTo = input('repay-to', 'to block', String(Math.max(o.repayFrom + 1, sourceHead - 2)));
+            const rBond = input('repay-bond', 'bond in CTC', formatEther(await wired.registry.MIN_BOND()));
+            const rangeRow = el('div', 'controls');
+            rangeRow.appendChild(rFrom);
+            rangeRow.appendChild(rTo);
+            rangeRow.appendChild(rBond);
+            repayBody.push(rangeRow);
+
+            const buildRow = el('div', 'controls');
+            buildRow.appendChild(
+              button('build the repayment claim', 'build-repay', async () => {
+                await guard(say, async () => {
+                  const scope = await repayScopeFor(wired.credit, subject);
+                  const built = await buildClaim(
+                    wired.registry,
+                    wired.chainInfo,
+                    signer,
+                    scope,
+                    { fromBlock: Number(rFrom.value), toBlock: Number(rTo.value) },
+                    {
+                      bond: parseEther(rBond.value),
+                      challengeWindow: Number(await wired.registry.MIN_CHALLENGE_WINDOW()),
+                    },
+                    say,
+                  );
+                  if (built.aggregate < o.repayRequired) {
+                    say(
+                      `the claim proves ${built.aggregate} against ${o.repayRequired} owed — it will not ` +
+                        `settle. Pay the rest and build another over a later range.`,
+                    );
+                  }
+                  saveProgress(creditAddress, account, { repayClaimId: String(built.claimId) });
+                  await ctx.onChange();
+                });
+              }),
+            );
+            repayBody.push(buildRow);
+          } else {
+            const rc = await wired.registry.claim(repayId);
+            const until = Number(await wired.registry.challengeUntil(repayId));
+            const final = Number(rc.status) === 3;
+            repayBody.push(
+              el(
+                'p',
+                'note',
+                `repayment claim ${repayId}: ${claimStatus(rc.status)}, proves ${rc.aggregate} of ` +
+                  `${o.repayRequired}` +
+                  (final ? '' : `, window closes at CC3 block ${until} (${Math.max(0, until - head)} to go)`),
+              ),
+            );
+            const row = el('div', 'controls');
+            if (!final) {
+              row.appendChild(
+                button('finalize it', 'finalize-repay', async () => {
+                  await guard(say, async () => {
+                    await finalize(wired.registry, signer, repayId, say);
+                    await ctx.onChange();
+                  });
+                }),
+              );
+            } else {
+              row.appendChild(
+                button(o.status === 3 ? 'cure the default' : 'settle the line', 'settle-line', async () => {
+                  await guard(say, async () => {
+                    if (o.status === 3) await cureLine(wired.credit, signer, lineId, repayId, say);
+                    else await settleLine(wired.credit, signer, lineId, repayId, say);
+                    await ctx.onChange();
+                  });
+                }),
+              );
+            }
+            repayBody.push(row);
+          }
+        } else {
+          repayBody.push(el('p', 'note good', `line ${lineId} is ${lineStatus(o.status)}.`));
+        }
+
+        steps.push(step(5, 'Repay, prove it, settle', done, repayBody));
+      }
     }
   }
 
@@ -356,28 +517,33 @@ async function sendOnSourceChain(
   subject: string,
   calldata: string,
   say: (line: string) => void,
+  target: { to: string; valueWei: bigint; then: string } = {
+    to: subject,
+    valueWei: 0n,
+    then: 'wait for Creditcoin to attest that block, then press "prove it".',
+  },
 ): Promise<string> {
   if (!window.ethereum) throw new Error('no wallet');
   const key = requireChainKey(chainKey);
-  const target = '0x' + SOURCE_CHAIN_ID[key].toString(16);
+  const wanted = '0x' + SOURCE_CHAIN_ID[key].toString(16);
   const provider = new BrowserProvider(window.ethereum, 'any');
 
   const from = (await provider.send('eth_accounts', []))[0] as string;
   if (from.toLowerCase() !== subject.toLowerCase()) {
     throw new Error(
-      `this wallet is ${from}, and the commitment has to come from ${subject}. Switch accounts, or ` +
-        `send it yourself and paste the hash.`,
+      `this wallet is ${from}, and the transaction has to come from ${subject}. Switch accounts, or ` +
+        `send it yourself.`,
     );
   }
 
   const was = (await provider.send('eth_chainId', [])) as string;
   say(`switching the wallet to ${CHAIN_NAME[key]}…`);
   try {
-    await provider.send('wallet_switchEthereumChain', [{ chainId: target }]);
+    await provider.send('wallet_switchEthereumChain', [{ chainId: wanted }]);
   } catch {
     await provider.send('wallet_addEthereumChain', [
       {
-        chainId: target,
+        chainId: wanted,
         chainName: CHAIN_NAME[key],
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
         rpcUrls: [SOURCE_RPC_DEFAULT[key]],
@@ -387,13 +553,13 @@ async function sendOnSourceChain(
 
   try {
     const hash = (await provider.send('eth_sendTransaction', [
-      { from, to: subject, value: '0x0', data: calldata },
+      { from, to: target.to, value: '0x' + target.valueWei.toString(16), data: calldata },
     ])) as string;
     say(`sent on ${CHAIN_NAME[key]}: ${hash}`);
-    say('wait for Creditcoin to attest that block, then press "prove it".');
+    say(target.then);
     return hash;
   } finally {
-    if (was !== target) {
+    if (was !== wanted) {
       await provider.send('wallet_switchEthereumChain', [{ chainId: was }]).catch(() => {});
     }
   }

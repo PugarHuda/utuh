@@ -1,0 +1,26 @@
+name: codeql
+
+# Static analysis for the half of this repository Slither does not read: the TypeScript that
+# builds claims, refutes them, signs transactions and serves the console. It runs on every push
+# and weekly, and a finding is a failed check rather than a badge.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: '41 4 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v3

@@ -26,6 +26,24 @@ export interface Deployments {
   deployer?: string;
 }
 
+/// Give a read this long, then call the endpoint unreachable.
+///
+/// A provider pointed at an endpoint that refuses connections does not fail fast; it retries, and
+/// the page it was drawing sits at "loading" with nothing on screen for as long as the retries go
+/// on. Measured: ninety seconds and still loading. A page that cannot reach the chain has to say so
+/// inside the time a person is willing to wait, which is not ninety seconds.
+export async function within<T>(ms: number, what: string, work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const bell = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what}: no answer from Creditcoin in ${ms / 1000}s`)), ms);
+  });
+  try {
+    return await Promise.race([work, bell]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /// The read-only side, always available, wallet or no wallet.
 export const cc3 = new JsonRpcProvider(CC3_RPC_DEFAULT, CC3_CHAIN_ID, { staticNetwork: true });
 

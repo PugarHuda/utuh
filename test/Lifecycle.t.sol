@@ -230,6 +230,44 @@ contract LifecycleTest is Test {
         registry.appendBatch(claimId, _batch(_one(VOL_FROM + 1, 0)), _continuity());
     }
 
+    /// @notice A claim opened and never sealed can be withdrawn, and its bond comes straight back.
+    /// @dev This is the recovery path for a build that died between `open` and `seal`. Nothing
+    ///      downstream can have relied on an unsealed claim, so there is nothing to wait for.
+    function test_anOpenClaimCanBeAbandonedAndTheBondComesBack() public {
+        uint256 claimId = _open(_volumeScope(), VOL_FROM, VOL_TO);
+        vm.prank(payer);
+        registry.appendBatch(claimId, _batch(_one(VOL_FROM + 10, 0)), _continuity());
+
+        uint256 before = payer.balance;
+        vm.prank(payer);
+        registry.abandon(claimId);
+
+        assertEq(payer.balance - before, BOND, "the whole bond, immediately");
+        assertEq(uint8(registry.claim(claimId).status), uint8(UtuhRegistry.Status.None));
+        assertEq(registry.enforceableLoss(claimId), 0, "an abandoned claim guarantees nothing");
+
+        // And it cannot be sealed, finalized or refuted afterwards — it is gone.
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UtuhRegistry.WrongStatus.selector, UtuhRegistry.Status.Open, UtuhRegistry.Status.None
+            )
+        );
+        vm.prank(payer);
+        registry.seal(claimId);
+    }
+
+    /// @notice A sealed claim cannot be abandoned: the moment it is published, it can be relied on.
+    function test_aSealedClaimCannotBeAbandoned() public {
+        uint256 claimId = _sealedClaim(_volumeScope(), VOL_FROM, VOL_TO, _heights(1));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UtuhRegistry.WrongStatus.selector, UtuhRegistry.Status.Open, UtuhRegistry.Status.Sealed
+            )
+        );
+        vm.prank(payer);
+        registry.abandon(claimId);
+    }
+
     /// @notice The empty claim — "nothing of this kind happened here" — is a real claim.
     function test_anEmptyClaimFinalizesAndIsWhatCleanMeans() public {
         uint256 claimId = _sealedClaim(_adverseScope(), VOL_FROM, VOL_TO, new uint64[](0));

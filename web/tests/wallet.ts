@@ -37,11 +37,22 @@ function chains(privateKey: string): Record<string, { rpc: string; wallet: Walle
 }
 
 /// Put a working EIP-1193 provider on the page. Returns the account it will answer with.
-export async function injectWallet(page: Page, privateKey: string): Promise<string> {
+///
+/// `rejectSends` makes it a wallet whose owner presses "Reject" on every signature — error 4001,
+/// the way MetaMask reports it — which is how the page's every write path gets exercised for what
+/// it does when the person says no.
+export async function injectWallet(
+  page: Page,
+  privateKey: string,
+  opts: { rejectSends?: boolean } = {},
+): Promise<string> {
   const known = chains(privateKey);
   const address = await new Wallet(privateKey).getAddress();
 
   await page.exposeFunction('__utuhSign', async (chainIdHex: string, tx: Record<string, string>) => {
+    if (opts.rejectSends) {
+      throw Object.assign(new Error('MetaMask Tx Signature: User denied transaction signature.'), { code: 4001 });
+    }
     const chain = known[chainIdHex.toLowerCase()];
     if (!chain) throw new Error(`the test wallet has no key for chain ${chainIdHex}`);
     const sent = await chain.wallet.sendTransaction({

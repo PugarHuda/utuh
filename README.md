@@ -552,6 +552,20 @@ the watcher in the pane above, and finalized only once the window has actually e
 ids are kept in the browser's own storage, so closing the tab during a window costs nothing —
 which matters, because a window is measured in blocks and nobody is going to sit and watch one.
 
+The loop closes in the page too. Step 5 reads what a drawn line owes off the contract — source
+units, deadline, the exact event and payee a repayment claim must contain — pays the lender through
+the source-chain ledger with the same wallet when that is how the lender is paid, builds the
+repayment claim, waits out its window, and settles. A line in default is cured the same way, on the
+terms it was owed. A line never drawn on is given back. And a claim that was opened and never
+sealed — a closed tab, a rejected signature — shows up under Claims with one button that abandons
+it and returns the bond, because the alternative is a borrower who does not know the money is
+there.
+
+The lender has controls too, shown only to the lender: fund, withdraw undrawn. And an overdue line
+carries a *mark default* button for anyone, because recording a default is permissionless, unpaid,
+and — since an overdue line blocks the next one by itself — no longer something the guards depend
+on. It is still the record peers read, so whoever notices may write it.
+
 ### Published without a server
 
 `npm run web:static` bakes the ABIs and the deployment record into the page and writes three files.
@@ -564,12 +578,23 @@ page carries is the ABI the contracts were compiled with.
 A fresh key — derived from the operator's, holding nothing but a little Sepolia ETH and a little
 CTC — pays a lender three times on Sepolia, then, **through the page**: sends the control commitment
 (the wallet is switched to Sepolia and back), proves it, builds the volume and clean claims, waits
-out the challenge window, finalizes, opens a line and draws. Every step is a real transaction
-against the published contracts, and the assertions read the registry and the credit back rather
-than the page. What stands in for MetaMask is `web/tests/wallet.ts`: a real key in the test process,
+out the challenge window, finalizes, opens a line and draws — then pays the lender back through
+the ledger with the same wallet, builds the repayment claim, waits out that window too, and
+settles. Every step is a real transaction against the published contracts, and the assertions read
+the registry and the credit back rather than the page. It resumes: a borrower with a drawn line
+open picks up at repayment, the way a person would. What stands in for MetaMask is `web/tests/wallet.ts`: a real key in the test process,
 an EIP-1193 provider on the page that routes reads to the real RPC of whichever chain it is on and
 hands every `eth_sendTransaction` back to be signed. It spends money and takes twenty minutes, so it
 is off unless asked for — `UTUH_LIVE_UI=1 npm run web:test -- borrow.live`.
+
+`web/tests/angles.spec.ts` is the console from the angles nobody demos, and two of them found
+things. In dark mode, with contrast checked: clean. At 375px: nothing sideways, everything
+reachable. From the keyboard alone: Tab to the sweep, Enter, and it sweeps. With a wallet whose
+owner presses *Reject* on every signature — a real EIP-1193 provider answering 4001 — every write
+path reports the refusal and stays usable. And with `rpc.cc3-testnet.creditcoin.network`
+unreachable from the browser, the page used to sit on *loading* for as long as anyone cared to
+wait, because a provider pointed at a dead endpoint retries rather than failing; it now says
+Creditcoin is not answering, inside twenty seconds, and shows no number it did not just read.
 
 `web/tests/a11y.spec.ts` runs axe over the rendered page — the real DOM with the chain's answers in
 it — against the WCAG 2.x A and AA rules, and any violation fails the build by name. The console
@@ -588,6 +613,9 @@ slashing a real bond.
 ```
 .github/workflows/pages.yml the published console, rebuilt from each commit's own artifacts
 .github/workflows/watch.yml an hourly keyless sweep of both registries; red if a claim is short
+.github/workflows/codeql.yml CodeQL over the TypeScript that builds, proves, refutes and signs
+.github/dependabot.yml      weekly bumps for npm and the actions; foundry stays pinned by hand
+SECURITY.md                 how to report a way to make a false claim stand
 .github/workflows/ci.yml    fmt, build, tests, gas snapshot, typecheck, slither — and a daily
                             job that proves real mainnet events against the live precompile,
                             checks the hosted and local provers still agree, and reports what the
@@ -667,6 +695,7 @@ web/
   tests/console.spec.ts     Playwright, against the live chain: no fixtures, no stubs
   tests/static.spec.ts      the published build asks its host for nothing but its own files
   tests/a11y.spec.ts        axe over the rendered page; WCAG A/AA, zero violations
+  tests/angles.spec.ts      dark mode, a phone, the keyboard, a wallet that refuses, a dead RPC
   tests/wallet.ts           what stands in for MetaMask: a real key, real chains, chain switching
   tests/refute.live.spec.ts refuting through the page with a real wallet — off unless asked
   tests/borrow.live.spec.ts the whole underwriting through the page, a stranger's key, real money

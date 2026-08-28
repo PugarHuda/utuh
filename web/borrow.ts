@@ -1,4 +1,4 @@
-import { Contract, formatEther, parseEther, type Signer } from 'ethers';
+import { Contract, Interface, formatEther, parseEther, type Signer } from 'ethers';
 import { planBatches } from '../offchain/lib/batches';
 import { fetchBatchProof, fetchSingleProof, proofFromBatch } from '../offchain/lib/proofApi';
 import { eventKey, scanScopeUnion, type Scope, type ScopedEvent } from '../offchain/lib/scope';
@@ -282,6 +282,102 @@ export async function draw(
   log(`drawn. ${due} source units must be proven repaid before the deadline.`);
 }
 
+/// What a drawn line owes, and where the proof of paying it has to come from.
+export interface Obligation {
+  lineId: bigint;
+  status: number;
+  drawn: bigint;
+  /// In the source asset's own units — wei of ether for the ledger, 1e6 units for USDC.
+  repayRequired: bigint;
+  dueBlock: number;
+  /// The first source-chain block a repayment claim may start at: after the underwriting, and
+  /// after anything this subject already settled with.
+  repayFrom: number;
+  /// The event the claim must contain, and who must be paid.
+  emitter: string;
+  eventSig: string;
+  payee: string;
+  chainKey: number;
+}
+
+export async function obligationOf(credit: Contract, lineId: bigint): Promise<Obligation> {
+  const [line, spec] = await Promise.all([credit.line(lineId), credit.repaySpec()]);
+  const settled = Number(await credit.settledThrough(line.subject));
+  return {
+    lineId,
+    status: Number(line.status),
+    drawn: line.drawn,
+    repayRequired: line.repayRequired,
+    dueBlock: Number(line.dueBlock),
+    repayFrom: Math.max(Number(line.repayFrom), settled),
+    emitter: spec.emitter,
+    eventSig: spec.eventSig,
+    payee: spec.counterparty,
+    chainKey: Number(spec.chainKey),
+  };
+}
+
+/// The scope a repayment claim must carry — the lender's repay spec, pinned to this subject.
+export async function repayScopeFor(credit: Contract, subject: string): Promise<Scope> {
+  const spec = await credit.repaySpec();
+  const plain = {
+    chainKey: spec.chainKey,
+    emitter: spec.emitter,
+    eventSig: spec.eventSig,
+    subjectTopic: spec.subjectTopic,
+    counterpartyTopic: spec.counterpartyTopic,
+    counterparty: spec.counterparty,
+    metric: spec.metric,
+    metricArg: spec.metricArg,
+  };
+  return toScope(await credit.expectedScope(plain, subject));
+}
+
+/// The calldata that pays through the source-chain SettlementLedger: `settle(payee)`, with the
+/// amount as the transaction's value. Only that contract; a lender whose repay spec names USDC
+/// transfers is paid the way USDC is paid, and the page says so rather than pretending.
+export function ledgerPayment(payee: string): string {
+  return new Interface(['function settle(address payee) payable']).encodeFunctionData('settle', [payee]);
+}
+
+export async function settleLine(credit: Contract, signer: Signer, lineId: bigint, claimId: bigint, log: Log) {
+  const writable = credit.connect(signer) as Contract;
+  await writable.settle.staticCall(lineId, claimId);
+  const tx = await writable.settle(lineId, claimId);
+  log(`settling line ${lineId} with claim ${claimId} — ${tx.hash}`);
+  await tx.wait();
+}
+
+export async function cureLine(credit: Contract, signer: Signer, lineId: bigint, claimId: bigint, log: Log) {
+  const writable = credit.connect(signer) as Contract;
+  await writable.cure.staticCall(lineId, claimId);
+  const tx = await writable.cure(lineId, claimId);
+  log(`curing line ${lineId} with claim ${claimId} — ${tx.hash}`);
+  await tx.wait();
+}
+
+export async function closeLine(credit: Contract, signer: Signer, lineId: bigint, log: Log) {
+  const writable = credit.connect(signer) as Contract;
+  await writable.closeLine.staticCall(lineId);
+  const tx = await writable.closeLine(lineId);
+  log(`closing line ${lineId} — ${tx.hash}`);
+  await tx.wait();
+}
+
+/// Take back an unpublished claim and its bond.
+///
+/// A build that died between `open` and `seal` — a closed tab, a rejected signature, an endpoint
+/// that stopped answering — leaves a claim Open with a real bond in it. Nothing downstream can have
+/// relied on it, so the registry hands the bond straight back. This is the recovery path, and it
+/// has to be one click, because the alternative is a borrower who does not know the money is there.
+export async function abandonClaim(registry: Contract, signer: Signer, claimId: bigint, log: Log) {
+  const writable = registry.connect(signer) as Contract;
+  await writable.abandon.staticCall(claimId);
+  const tx = await writable.abandon(claimId);
+  log(`abandoning claim ${claimId}, bond coming back — ${tx.hash}`);
+  await tx.wait();
+}
+
 /// Where a borrower got to, so a reload does not lose a bonded claim.
 ///
 /// The bond is real money and the claim id is the only handle on it. Keeping this in the page's own
@@ -292,6 +388,7 @@ export interface Progress {
   volumeClaimId?: string;
   cleanClaimIds?: string[];
   lineId?: string;
+  repayClaimId?: string;
 }
 
 /// Keyed by the lender *and* the account. Two people sharing a browser — or one person with two

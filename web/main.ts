@@ -1,9 +1,10 @@
-import { Contract, formatEther, toUtf8String, type Signer } from 'ethers';
+import { Contract, formatEther, parseEther, toUtf8String, type Signer } from 'ethers';
 import { claimStatus, lineStatus } from '../offchain/lib/status';
 import { CHAIN_NAME } from '../offchain/lib/networks';
-import { cc3, connect, EXPLORER, hasWallet, shortAddress, wire, type Wired } from './chain';
+import { cc3, connect, EXPLORER, hasWallet, shortAddress, wire, within, type Wired } from './chain';
 import { refute, sweepClaim, type Sweep } from './watch';
 import { renderBorrow } from './borrowPane';
+import { abandonClaim } from './borrow';
 
 /// The Utuh console.
 ///
@@ -45,6 +46,8 @@ function row(cells: (string | HTMLElement)[], head = false): HTMLElement {
     const td = el(head ? 'th' : 'td');
     if (typeof c === 'string') td.textContent = c;
     else td.appendChild(c);
+    // A header with no text is a column of controls; a screen reader still needs a name for it.
+    if (head && c === '') td.setAttribute('aria-label', 'actions');
     tr.appendChild(td);
   }
   return tr;
@@ -113,7 +116,7 @@ async function renderAttestcoin(): Promise<void> {
 }
 
 async function renderHeader(): Promise<void> {
-  const block = await cc3.getBlockNumber();
+  const block = await within(20_000, 'reading the head', cc3.getBlockNumber());
   const net = await cc3.getNetwork();
   $('chain-id').textContent = String(net.chainId);
   $('cc3-block').textContent = String(block);
@@ -308,6 +311,30 @@ function renderActions(claims: ClaimView[], head: number): void {
     items.push(b);
   }
 
+  // A claim of the connected account's that was opened and never sealed has a bond in it and
+  // nothing relying on it. A build that died — a closed tab, a rejected signature — leaves exactly
+  // this behind, and the registry gives the bond straight back. One click, because the alternative
+  // is a borrower who does not know the money is there.
+  if (account) {
+    const me = account.toLowerCase();
+    const stranded = claims.filter((c) => c.status === 1 && c.claimant.toLowerCase() === me);
+    for (const c of stranded) {
+      const b = el(
+        'button',
+        'act',
+        `abandon claim ${c.id} and recover ${formatEther(c.bondPosted)} CTC`,
+      ) as HTMLButtonElement;
+      b.dataset.testid = `abandon-${c.id}`;
+      b.title = 'this claim was opened and never sealed; nothing relies on it';
+      b.onclick = () =>
+        send(b, async () => {
+          await abandonClaim(wired.registry, signer!, c.id, say);
+          return { hash: 'abandoned', wait: async () => undefined };
+        });
+      items.push(b);
+    }
+  }
+
   if (account) {
     const w = el('button', 'act', 'withdraw refunded bonds') as HTMLButtonElement;
     w.dataset.testid = 'withdraw';
@@ -420,6 +447,23 @@ async function renderCredit(): Promise<void> {
     for (let i = 1n; i < nextLineId; i++) {
       const l = await c.line(i);
       const due = Number(l.dueBlock);
+      const overdue = Number(l.status) === 1 && l.drawn > 0n && due !== 0 && head > due;
+
+      // Recording a default is permissionless and unpaid, and the guards no longer depend on it —
+      // an overdue line blocks the next one by itself. It is still the record the peers read, so
+      // whoever notices may write it. The button says exactly what it does and to whom.
+      let action: HTMLElement | string = '';
+      if (overdue) {
+        const b = el('button', 'act danger', 'mark default') as HTMLButtonElement;
+        b.dataset.testid = `mark-default-${i}`;
+        b.disabled = !signer;
+        b.title = signer
+          ? `records that line ${i} passed its deadline with no proven repayment`
+          : 'connect a wallet first';
+        b.onclick = () => send(b, () => (c.connect(signer!) as Contract).markDefault(i));
+        action = b;
+      }
+
       lines.push([
         String(i),
         link(l.borrower),
@@ -430,14 +474,39 @@ async function renderCredit(): Promise<void> {
         String(l.repayRequired),
         due === 0 ? 'not drawn' : due < head ? `overdue since ${due}` : `block ${due}`,
         String(await c.defaultsOf(l.subject)),
+        action,
       ]);
     }
 
-    const body: HTMLElement[] = [policy];
+    // The lender's own controls, shown only to the lender. LENDER is msg.sender at construction
+    // and immutable, so this is a comparison, not a permission.
+    const lenderBox = el('div', 'actions');
+    if (account && lender.toLowerCase() === account.toLowerCase()) {
+      const amount = document.createElement('input');
+      amount.placeholder = 'CTC';
+      amount.setAttribute('aria-label', 'CTC to fund or withdraw');
+      amount.dataset.testid = 'lender-amount';
+      const fund = el('button', 'act', 'fund') as HTMLButtonElement;
+      fund.dataset.testid = 'lender-fund';
+      fund.title = 'deposit CTC for borrowers to draw on';
+      fund.onclick = () =>
+        send(fund, () => (c.connect(signer!) as Contract).fund({ value: parseEther(amount.value.trim() || '0') }));
+      const withdraw = el('button', 'act', 'withdraw undrawn') as HTMLButtonElement;
+      withdraw.dataset.testid = 'lender-withdraw';
+      withdraw.title = 'take back liquidity nobody has drawn';
+      withdraw.onclick = () =>
+        send(withdraw, () => (c.connect(signer!) as Contract).withdraw(parseEther(amount.value.trim() || '0')));
+      lenderBox.appendChild(el('span', 'note', 'you are the lender —'));
+      lenderBox.appendChild(amount);
+      lenderBox.appendChild(fund);
+      lenderBox.appendChild(withdraw);
+    }
+
+    const body: HTMLElement[] = [policy, lenderBox];
     if (lines.length > 0) {
       body.push(
         table(
-          ['line', 'borrower', 'subject', 'status', 'limit', 'drawn', 'owed (source units)', 'due', 'defaults'],
+          ['line', 'borrower', 'subject', 'status', 'limit', 'drawn', 'owed (source units)', 'due', 'defaults', ''],
           lines,
           'lines-table',
         ),
@@ -566,7 +635,24 @@ async function main(): Promise<void> {
     return;
   }
 
-  await Promise.all([renderHeader(), renderAttestcoin(), renderRegistry(), renderCredit(), renderBorrowPane()]);
+  // The first read of the chain decides whether this is a page or an apology. If Creditcoin does
+  // not answer, say so where the person is looking and stop, rather than leaving every pane on its
+  // placeholder text and the body on "loading" until they give up.
+  try {
+    await renderHeader();
+  } catch (e) {
+    const why = (e as Error).message;
+    $('boot-error').textContent = `Creditcoin is not answering from this browser — ${why}. Nothing below is current.`;
+    $('chain-id').textContent = '—';
+    $('cc3-block').textContent = '—';
+    fail($('attestcoin-body'), e);
+    fail($('registry-body'), e);
+    fail($('credit-body'), e);
+    document.body.dataset.state = 'failed';
+    return;
+  }
+
+  await Promise.all([renderAttestcoin(), renderRegistry(), renderCredit(), renderBorrowPane()]);
   document.body.dataset.state = 'ready';
 }
 
