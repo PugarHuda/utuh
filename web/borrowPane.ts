@@ -106,12 +106,14 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
   // contract says they have, and the pane starts from there rather than from a blank step one.
   // Measured before this: a live test with an open line sat forever on a button that was never
   // rendered, because the page only knew about lines it had opened itself.
-  const shown = await lineToShow(wired.credit, subject);
-  const onChain = shown ?? 0n;
-  if (shown !== undefined && progress.lineId !== String(shown)) {
-    progress.lineId = String(shown);
-    saveProgress(creditAddress, account, { subject, lineId: String(shown) });
-  }
+  // Two different questions. `active` is the line that holds this subject's one slot, and it
+  // decides which step the pane is on: while it is set, steps two to four are done and step five
+  // is what matters. `latest` is the line to *show* when none is active — the one just settled,
+  // or defaulted, or closed — so a borrower who paid off a line does not come back to a blank
+  // step one. Confusing the two once made a settled line hide the build buttons for good.
+  const active = (await wired.credit.activeLineOf(subject)) as bigint;
+  const latest = active !== 0n ? active : await lineToShow(wired.credit, subject);
+  const onChain = active;
   const chainKey = Number((await wired.credit.volumeSpec()).chainKey);
   const controller: string = await wired.credit.controllerOf(subject);
   const bound = controller.toLowerCase() === account.toLowerCase();
@@ -361,12 +363,12 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
 
     // -------------------------------------------------------------- 4. line
     if (allFinal) {
-      const lineId = progress.lineId ? BigInt(progress.lineId) : undefined;
-      await renderLine(lineId);
+      await renderLine(undefined);
     }
   }
 
   if (hasLine) await renderLine(onChain);
+  else if (latest !== undefined && !claimsDone) await renderLine(latest);
 
   // A function declaration so it can be reached from two places above; the narrowing of `signer`
   // and `account` by the early return does not cross into it, so they are re-read here. Both are
@@ -395,26 +397,30 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
           el(
             'p',
             'note good',
-            `line ${lineId}: limit ${formatEther(line.limit)} CTC, drawn ${formatEther(line.drawn)} CTC`,
+            `line ${lineId}: ${lineStatus(line.status)}, limit ${formatEther(line.limit)} CTC, drawn ` +
+              `${formatEther(line.drawn)} CTC`,
           ),
         );
-        const amount = input('draw-amount', 'CTC to draw', formatEther(line.limit - line.drawn));
-        const row = el('div', 'controls');
-        row.appendChild(amount);
-        row.appendChild(
-          button('draw', 'draw', async () => {
-            await guard(say, async () => {
-              await draw(wired.credit, signer, lineId, amount.value.trim(), say);
-              await ctx.onChange();
-            });
-          }),
-        );
-        lineBody.push(row);
-        lineBody.push(
-          `Repayment is proven the same way this was: pay on the source chain, build a claim over ` +
-            `that payment, and settle. The line defaults on silence rather than on a proven missed ` +
-            `payment — nobody has to establish a negative.`,
-        );
+        // Drawing is for a line that is open. A settled or closed one is shown for what it was.
+        if (Number(line.status) === 1) {
+          const amount = input('draw-amount', 'CTC to draw', formatEther(line.limit - line.drawn));
+          const row = el('div', 'controls');
+          row.appendChild(amount);
+          row.appendChild(
+            button('draw', 'draw', async () => {
+              await guard(say, async () => {
+                await draw(wired.credit, signer, lineId, amount.value.trim(), say);
+                await ctx.onChange();
+              });
+            }),
+          );
+          lineBody.push(row);
+          lineBody.push(
+            `Repayment is proven the same way this was: pay on the source chain, build a claim over ` +
+              `that payment, and settle. The line defaults on silence rather than on a proven missed ` +
+              `payment — nobody has to establish a negative.`,
+          );
+        }
       }
 
       steps.push(step(4, 'Open the line and draw', lineId !== undefined, lineBody));
