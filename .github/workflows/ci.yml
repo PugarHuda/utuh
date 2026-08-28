@@ -21,9 +21,12 @@ jobs:
         with:
           submodules: recursive
 
+      # Pinned, not `stable`. 1.8.0 promoted a set of lints from note to warning and the build went
+      # red on a push that changed no Solidity. A toolchain that moves under the repository is a
+      # review that happens on its own schedule; bumping this line is where that review belongs.
       - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: stable
+          version: 1.8.0
 
       - uses: actions/setup-node@v4
         with:
@@ -76,7 +79,7 @@ jobs:
 
       - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: stable
+          version: 1.8.0
 
       - run: npm ci
 
@@ -117,7 +120,7 @@ jobs:
 
       - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: stable
+          version: 1.8.0
 
       - run: npm ci
 
@@ -170,7 +173,7 @@ jobs:
 
       - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: stable
+          version: 1.8.0
 
       - uses: actions/setup-node@v4
         with:
@@ -216,7 +219,7 @@ jobs:
 
       - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: stable
+          version: 1.8.0
 
       - run: npm ci
       - run: forge build

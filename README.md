@@ -1060,6 +1060,16 @@ checking for the zero address. A call to the zero address _succeeds_ and burns t
 ledger would have stood behind a `Settled` event for ether nobody received — and a lender whose
 `HistorySpec` leaves the counterparty unpinned would have been counting burns as proven volume.
 
+`forge lint` is the same story one toolchain over. Foundry 1.8.0 promoted seven lints from note
+to warning — bounded loops that revert, ok-flags returned as boolean constants, `uint64(block.number)`,
+events after a call to a precompile that has no bytecode — and CI's `stable` picked it up on a push
+that changed no Solidity. Every one of the seven is off in `foundry.toml`, each with the sentence
+saying what it fires on here and why that is deliberate; most are the same findings Slither already
+reports and the same reasoning. The sources were not touched to satisfy it, on purpose: every
+published contract is a full match on Sourcify against this exact tree, and a comment changes the
+metadata hash. CI is pinned to 1.8.0 now, because a toolchain that moves under the repository is a
+review that happens on its own schedule.
+
 solc also suggests two functions could be `pure`. They could not: both read through a `storage`
 pointer parameter, which the mutability checker does not track. Accepting the suggestion compiles
 and makes the signature a lie, so both say so in a comment.

@@ -39,7 +39,7 @@ jobs:
 
       - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: stable
+          version: 1.8.0
 
       - run: npm ci
 
