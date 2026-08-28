@@ -557,7 +557,11 @@ user, so the first Tab lands on a skip link and Enter puts focus on the sweep it
 shipped: the page makes refuting available to anyone and makes nobody do it. The smallest thing
 that does it without being paid is `.github/workflows/watch.yml` — every hour, a dry sweep of both
 published registries, the same union across independent endpoints the daemon and the console run,
-and a red run if a sealed claim is short of an event.
+and a red run if a sealed claim is short of an event. The same hour, the same workflow opens the
+published console in a real browser and asks what a visitor would: it loads, it says which chain it
+is on, the block it shows is this hour's, both deployments read, no pane is broken, and the page
+asked its host for nothing but its own three files. Pages can serve a stale or broken build with
+nothing else in CI noticing; this notices.
 
 It holds no key. `npm run watch -- --dry` reads and never signs, so it no longer asks for one, and a
 public repository can run it with nothing in its secrets. The red run is the alert: somebody sealed
@@ -648,7 +652,7 @@ slashing a real bond.
 
 ```
 .github/workflows/pages.yml the published console, rebuilt from each commit's own artifacts
-.github/workflows/watch.yml an hourly keyless sweep of both registries; red if a claim is short
+.github/workflows/watch.yml hourly: a keyless sweep of both registries, and a browser smoke of the published console
 .github/workflows/codeql.yml CodeQL over the TypeScript that builds, proves, refutes and signs
 .github/dependabot.yml      weekly bumps for npm and the actions; foundry stays pinned by hand
 SECURITY.md                 how to report a way to make a false claim stand
