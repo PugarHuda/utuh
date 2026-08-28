@@ -509,7 +509,25 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
             repayBody.push(payRow);
           }
 
-          const repayId = progress.repayClaimId ? BigInt(progress.repayClaimId) : undefined;
+          // A repayment claim this account already built — sealed or finalized, over a range this
+          // line may use, and not yet spent on anything — is the one to use, whether or not this
+          // browser built it. Building another would post another bond for the same payment.
+          let repayId = progress.repayClaimId ? BigInt(progress.repayClaimId) : undefined;
+          if (repayId === undefined) {
+            const wanted = await repayScopeFor(wired.credit, subject);
+            const next = Number(await wired.registry.nextClaimId());
+            for (let id = next - 1; id >= Math.max(1, next - 25); id--) {
+              const c = await wired.registry.claim(id);
+              const st = Number(c.status);
+              if ((st !== 2 && st !== 3) || c.claimant.toLowerCase() !== account.toLowerCase()) continue;
+              if (Number(c.fromBlock) < o.repayFrom || !sameScope(c.scope, wanted)) continue;
+              if (await wired.credit.claimSpent(id)) continue;
+              repayId = BigInt(id);
+              saveProgress(creditAddress, account, { repayClaimId: String(id) });
+              say(`claim ${id} is yours, covers this line's repayment range and is unspent — using it`);
+              break;
+            }
+          }
           if (repayId === undefined) {
             // From the first block a repayment may count, to the source chain's head — the sweep
             // covers whatever was paid, and the build waits for the head to be attested.

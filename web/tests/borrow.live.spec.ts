@@ -47,14 +47,33 @@ function abi(file: string, name: string): unknown[] {
   return (JSON.parse(readFileSync(join(ROOT, 'out', file, `${name}.json`), 'utf8')) as { abi: unknown[] }).abi;
 }
 
-/// Wait for a step's log to say something, or for it to say it failed — and fail loudly on the
+/// Wait for a step's log to say something *new*, or to say it failed — and fail loudly on the
 /// latter rather than timing out with no idea why.
+///
+/// Only text appended since the last wait counts. "claim 12 sealed" from the clean build satisfied
+/// a wait for "claim N sealed" that was meant for the repayment claim, once, and the test walked
+/// on to look for a button the page had not drawn yet.
+let logCursor = 0;
 async function untilLogged(page: Page, pattern: RegExp, timeout: number): Promise<string> {
   const log = page.locator('[data-testid=borrow-log]');
-  await expect(log).toContainText(new RegExp(pattern.source + '|failed:|could not send'), { timeout });
-  const text = await log.innerText();
-  if (!pattern.test(text)) throw new Error(`the page reported a failure:\n${text}`);
-  return text;
+  const failure = /failed:|could not send/;
+  let fresh = '';
+  await expect
+    .poll(
+      async () => {
+        const text = await log.innerText();
+        if (text.length < logCursor) logCursor = 0; // the page reloaded; the log started over
+        fresh = text.slice(logCursor);
+        return pattern.test(fresh) || failure.test(fresh);
+      },
+      { timeout, intervals: [1_000] },
+    )
+    .toBe(true);
+  if (!pattern.test(fresh))
+    throw new Error(`the page reported a failure:
+${fresh}`);
+  logCursor += fresh.length;
+  return fresh;
 }
 
 test.describe('a borrower in a fresh browser', () => {
