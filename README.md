@@ -1042,7 +1042,7 @@ the registry cannot afford to break — a bond that leaks is a deterrent that qu
 deterring — and it is now checked three thousand times a run rather than once per hand-written
 path. Its gas is random and is excluded from the snapshot for the same reason the fuzz tests are.
 
-CI also refuses a push that drops line coverage under 90%; it reads 96% today, and the table below
+CI also refuses a push that drops line coverage under 90%; it reads 97.69% today, and the table below
 is that number.
 
 ### The precompiles, and what a local test may and may not say about them
@@ -1103,15 +1103,15 @@ tree that has this line in it.
 
 | File                      | Lines             | Functions       |
 | ------------------------- | ----------------- | --------------- |
-| `src/UtuhCredit.sol`      | 97.16% (205/211)  | 100.00% (31/31) |
-| `src/UtuhRegistry.sol`    | 93.63% (147/157)  | 100.00% (21/21) |
+| `src/UtuhCredit.sol`      | 97.48% (232/238)  | 100.00% (35/35) |
+| `src/UtuhRegistry.sol`    | 97.45% (153/157)  | 100.00% (21/21) |
 | `src/lib/EventScope.sol`  | 100.00% (25/25)   | 100.00% (6/6)   |
 | `src/source/SettlementLedger.sol` | 100.00% (8/8) | 100.00% (2/2) |
-| **Total**                 | **96.05%**        | **100.00%**     |
+| **Total**                 | **97.69%**        | **100.00%**     |
 
-It read 9.6%, then 47%, and the sentence that followed the first of those — that everything
+It read 9.6%, then 47%, then 96%, and the sentence that followed the first of those — that everything
 reachable without a precompile was covered — was not true when it was written. Branch coverage is
-54%, and that is the honest number to look at next: the uncovered branches are mostly revert arms
+58%, and that is the honest number to look at next: the uncovered branches are mostly revert arms
 of guards whose other side is exercised.
 
 `npm run livetest` is the one that reaches furthest: 107 guards, most of them `staticCall`s that
