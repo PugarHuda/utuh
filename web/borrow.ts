@@ -65,8 +65,18 @@ export async function proveControl(
 }
 
 /// The scope a claim must carry, rebuilt by the contract rather than alongside it.
-export async function scopeFor(credit: Contract, which: 'volume' | 'clean', subject: string): Promise<Scope> {
-  const spec = which === 'volume' ? await credit.volumeSpec() : await credit.cleanSpecAt(0);
+///
+/// `cleanIndex` is which adverse-event class, because a lender lists one per protocol it watches
+/// and a line needs a finalized empty claim for each. This read `cleanSpecAt(0)` for every one of
+/// them at first, which builds N claims about the first class and has `openLine` refuse the second
+/// with ScopeMismatch — after N bonds and N windows.
+export async function scopeFor(
+  credit: Contract,
+  which: 'volume' | 'clean',
+  subject: string,
+  cleanIndex = 0,
+): Promise<Scope> {
+  const spec = which === 'volume' ? await credit.volumeSpec() : await credit.cleanSpecAt(cleanIndex);
   const plain = {
     chainKey: spec.chainKey,
     emitter: spec.emitter,
@@ -117,6 +127,7 @@ export interface BuiltClaim {
 /// it is an incomplete one.
 export async function buildClaim(
   registry: Contract,
+  chainInfo: Contract,
   signer: Signer,
   scope: Scope,
   range: Range,
@@ -124,6 +135,13 @@ export async function buildClaim(
   log: Log,
 ): Promise<BuiltClaim> {
   const minSources = opts.minSources ?? 2;
+
+  // The whole range has to be attested before the registry will open a claim over it — that is
+  // what makes a challenge window sound, since a watcher can then prove anything inside it from
+  // block one. Attestation runs a few minutes behind the source chain, so a range ending near the
+  // head has a real wait in front of it, and `open` sent early reverts RangeNotAttested after the
+  // wallet has already asked the borrower to sign.
+  await waitAttested(chainInfo, scope.chainKey, range.toBlock, log);
 
   log(`sweeping source blocks ${range.fromBlock}..${range.toBlock}`);
   const sweep = await scanScopeUnion(sourceEndpoints(scope.chainKey), scope, range.fromBlock, range.toBlock, 500);
@@ -139,9 +157,12 @@ export async function buildClaim(
   log(`${sweep.events.length} in-scope event(s) to claim`);
 
   const writable = registry.connect(signer) as Contract;
-  const opened = await writable.open(scope, range.fromBlock, range.toBlock, opts.challengeWindow, {
-    value: opts.bond,
-  });
+  // eth_call first, here and on every write below. A bond under the floor or a window under the
+  // deployment's minimum is the registry's answer to give, by name, before the wallet asks anyone
+  // to sign a transaction that will fail.
+  const openArgs = [scope, range.fromBlock, range.toBlock, opts.challengeWindow, { value: opts.bond }] as const;
+  await writable.open.staticCall(...openArgs);
+  const opened = await writable.open(...openArgs);
   const receipt = await opened.wait();
   const claimId = await claimIdFrom(registry, receipt);
   log(`claim ${claimId} opened with ${formatEther(opts.bond)} CTC at stake`);
@@ -153,6 +174,7 @@ export async function buildClaim(
     await appendBatch(writable, claimId, scope.chainKey, batch, log);
   }
 
+  await writable.seal.staticCall(claimId);
   await (await writable.seal(claimId)).wait();
   const until = Number(await registry.challengeUntil(claimId));
   log(`claim ${claimId} sealed — challengeable until CC3 block ${until}`);
@@ -163,6 +185,20 @@ export async function buildClaim(
     aggregate: (await registry.claim(claimId)).aggregate,
     challengeUntil: until,
   };
+}
+
+/// Block until Creditcoin has attested `height`, saying how far off it is while it waits.
+async function waitAttested(chainInfo: Contract, chainKey: number, height: number, log: Log): Promise<void> {
+  let said = -1;
+  for (;;) {
+    const frontier = Number((await chainInfo.get_latest_attestation_height_and_hash(chainKey)).height);
+    if (frontier >= height) return;
+    if (frontier !== said) {
+      log(`waiting for Creditcoin to attest source block ${height} — at ${frontier}, ${height - frontier} to go`);
+      said = frontier;
+    }
+    await new Promise((r) => setTimeout(r, 15_000));
+  }
 }
 
 async function appendBatch(
@@ -258,26 +294,33 @@ export interface Progress {
   lineId?: string;
 }
 
-export function loadProgress(credit: string): Progress {
+/// Keyed by the lender *and* the account. Two people sharing a browser — or one person with two
+/// wallets — must not inherit each other's claim ids, because the next thing the pane would do
+/// with an inherited id is try to open a line on somebody else's underwriting.
+function progressKey(credit: string, account: string): string {
+  return `utuh:borrow:${credit.toLowerCase()}:${account.toLowerCase()}`;
+}
+
+export function loadProgress(credit: string, account: string): Progress {
   try {
-    return JSON.parse(localStorage.getItem(`utuh:borrow:${credit.toLowerCase()}`) ?? '{}') as Progress;
+    return JSON.parse(localStorage.getItem(progressKey(credit, account)) ?? '{}') as Progress;
   } catch {
     return {};
   }
 }
 
-export function saveProgress(credit: string, next: Progress): void {
+export function saveProgress(credit: string, account: string, next: Progress): void {
   try {
-    const merged = { ...loadProgress(credit), ...next };
-    localStorage.setItem(`utuh:borrow:${credit.toLowerCase()}`, JSON.stringify(merged));
+    const merged = { ...loadProgress(credit, account), ...next };
+    localStorage.setItem(progressKey(credit, account), JSON.stringify(merged));
   } catch {
     // A browser with storage disabled still borrows fine; it just cannot be closed mid-window.
   }
 }
 
-export function forgetProgress(credit: string): void {
+export function forgetProgress(credit: string, account: string): void {
   try {
-    localStorage.removeItem(`utuh:borrow:${credit.toLowerCase()}`);
+    localStorage.removeItem(progressKey(credit, account));
   } catch {
     /* nothing to forget */
   }

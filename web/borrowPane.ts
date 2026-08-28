@@ -40,6 +40,9 @@ function input(id: string, placeholder: string, value = ''): HTMLInputElement {
   const i = document.createElement('input');
   i.id = id;
   i.placeholder = placeholder;
+  // A placeholder disappears the moment somebody types, and is not read as a name by assistive
+  // technology either. The label is the placeholder's text, kept.
+  i.setAttribute('aria-label', placeholder);
   i.value = value;
   i.dataset.testid = id;
   i.spellcheck = false;
@@ -83,7 +86,7 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
     return;
   }
 
-  const progress = loadProgress(creditAddress);
+  const progress = loadProgress(creditAddress, account);
   const subject = progress.subject ?? account;
   const chainKey = Number((await wired.credit.volumeSpec()).chainKey);
   const controller: string = await wired.credit.controllerOf(subject);
@@ -124,7 +127,7 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
       button('prove it', 'prove-control', async () => {
         try {
           await proveControl(wired.credit, signer, chainKey, hash.value.trim(), say);
-          saveProgress(creditAddress, { subject });
+          saveProgress(creditAddress, account, { subject });
           await ctx.onChange();
         } catch (e) {
           say(`binding failed: ${message(e)}`);
@@ -177,13 +180,14 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
         const scope = await scopeFor(wired.credit, 'volume', subject);
         const built = await buildClaim(
           wired.registry,
+          wired.chainInfo,
           signer,
           scope,
           { fromBlock: Number(from.value), toBlock: Number(to.value) },
           { bond: parseEther(bondInput.value), challengeWindow: window },
           say,
         );
-        saveProgress(creditAddress, { subject, volumeClaimId: String(built.claimId) });
+        saveProgress(creditAddress, account, { subject, volumeClaimId: String(built.claimId) });
         await ctx.onChange();
       });
     }),
@@ -192,21 +196,28 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
   const cleanCount = Number(await wired.credit.cleanSpecCount());
   buildRow.appendChild(
     button(
-      cleanIds.length >= cleanCount ? `clean claim(s) ${cleanIds.join(', ')} built` : 'build the clean claim',
+      cleanIds.length >= cleanCount
+        ? `clean claim(s) ${cleanIds.join(', ')} built`
+        : `build the clean claim (${cleanIds.length + 1} of ${cleanCount})`,
       'build-clean',
       async () => {
         if (cleanIds.length >= cleanCount) return;
         await guard(say, async () => {
-          const scope = await scopeFor(wired.credit, 'clean', subject);
+          // The next class the lender listed. One empty claim per class, in order.
+          const scope = await scopeFor(wired.credit, 'clean', subject, cleanIds.length);
           const built = await buildClaim(
             wired.registry,
+            wired.chainInfo,
             signer,
             scope,
             { fromBlock: Number(from.value), toBlock: Number(to.value) },
             { bond: parseEther(bondInput.value), challengeWindow: window },
             say,
           );
-          saveProgress(creditAddress, { subject, cleanClaimIds: [...cleanIds, String(built.claimId)].map(String) });
+          saveProgress(creditAddress, account, {
+            subject,
+            cleanClaimIds: [...cleanIds, String(built.claimId)].map(String),
+          });
           await ctx.onChange();
         });
       },
@@ -274,7 +285,7 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
           button('open the line', 'open-line', async () => {
             await guard(say, async () => {
               const opened = await openLine(wired.credit, signer, subject, volumeId!, cleanIds, say);
-              saveProgress(creditAddress, { lineId: String(opened) });
+              saveProgress(creditAddress, account, { lineId: String(opened) });
               await ctx.onChange();
             });
           }),
@@ -313,7 +324,7 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
   }
 
   const reset = button('start over', 'reset-borrow', () => {
-    forgetProgress(creditAddress);
+    forgetProgress(creditAddress, account);
     void ctx.onChange();
   });
   reset.title = 'Forgets the claim ids this browser remembered. The claims themselves stay on chain.';

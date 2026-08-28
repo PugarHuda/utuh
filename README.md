@@ -417,10 +417,20 @@ without a terminal.
 | `settledThrough(borrower)`            | 11575986 — one past the range that discharged it                            |
 | `defaultsOf(borrower)`                | 0                                                                           |
 | `activeLineOf(borrower)`              | 0 — the line settled, so the slot is back                                   |
+| `claim(6)`, `claim(7)`                | Finalized — 3 members and 0, built **from the browser** by a second borrower |
+| `line(2)`                             | Active, limit 5 CTC, drawn 1 CTC — opened and drawn from the console        |
 | `peerCount()`                         | 0 — this lender takes nobody else's books, which is the safe default        |
 
 The borrower's sweep read `publicnode=3  tenderly=3`: two independent endpoints agreeing, and the
 claim built on the union rather than on whichever answered first.
+
+Line 2 belongs to `0x0C2ffE823f1b64c975D768c9822F31eFED6f6a83`, a key that has never run a script
+here. It paid the lender three times on Sepolia and then did everything else **through the page** —
+sent its control commitment (the wallet switched to Sepolia and back), proved it, built claims 6
+and 7, waited out their windows, finalized, opened the line and drew — as
+`web/tests/borrow.live.spec.ts`, in 20 minutes, against these contracts. The limit is 5 CTC and not
+the 12 the volume would justify, because it posted the 1 CTC minimum bond and a 1 CTC bond
+guarantees a 0.5 CTC loss.
 
 Claim 5 is the interesting one. `npm run bait` sealed it deliberately short by one event and told
 nobody. It was found and broken **from the console**, in a browser: the page swept Sepolia across
