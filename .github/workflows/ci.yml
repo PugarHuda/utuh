@@ -151,7 +151,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: crytic/slither-action@v0.4.1
+      - uses: crytic/slither-action@v0.4.2
         with:
           fail-on: medium
           slither-args: --filter-paths "node_modules|lib" --exclude-dependencies
