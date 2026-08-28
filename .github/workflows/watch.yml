@@ -54,3 +54,22 @@ jobs:
           REGISTRY: ${{ matrix.registry.address }}
           WATCH_STATE: .watch-${{ matrix.registry.name }}.json
         run: npm run watch -- --once --dry
+
+  published:
+    # The console people actually open, checked hourly the way a person would: it loads, it says
+    # which chain it is on, the numbers are this hour's, both deployments read, no pane is broken.
+    # Pages can serve a stale or broken build without anything in CI noticing; this notices.
+    name: published console
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: smoke the published console
+        env:
+          PUBLISHED_URL: https://pugarhuda.github.io/utuh/
+        run: npx playwright test published

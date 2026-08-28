@@ -17,15 +17,23 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [['list']],
   use: {
-    baseURL: `http://127.0.0.1:${process.env.WEB_PORT ?? 5173}`,
+    // PUBLISHED_URL points the suite at the console GitHub Pages serves rather than at a local
+    // server — the smoke test the watch workflow runs hourly against the thing people actually open.
+    baseURL: process.env.PUBLISHED_URL ?? `http://127.0.0.1:${process.env.WEB_PORT ?? 5173}`,
     trace: 'retain-on-failure',
     ...devices['Desktop Chrome'],
   },
-  webServer: {
-    command: 'npm run web',
-    url: `http://127.0.0.1:${process.env.WEB_PORT ?? 5173}`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 180_000,
-    stdout: 'pipe',
-  },
+  // No local server when the target is the published page — spread in rather than set to
+  // undefined, because `exactOptionalPropertyTypes` is on and means it.
+  ...(process.env.PUBLISHED_URL
+    ? {}
+    : {
+        webServer: {
+          command: 'npm run web',
+          url: `http://127.0.0.1:${process.env.WEB_PORT ?? 5173}`,
+          reuseExistingServer: !process.env.CI,
+          timeout: 180_000,
+          stdout: 'pipe' as const,
+        },
+      }),
 });

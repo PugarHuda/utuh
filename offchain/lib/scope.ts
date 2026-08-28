@@ -1,4 +1,5 @@
 import { JsonRpcProvider, zeroPadValue, getAddress } from 'ethers';
+import { chunkFor, requireChainKey } from './networks';
 
 export enum Metric {
   COUNT = 0,
@@ -186,7 +187,9 @@ export async function scanScopeUnion(
 
   for (const { url, provider } of endpoints) {
     try {
-      const work = scanScope(provider, scope, fromBlock, toBlock, chunkSize);
+      // Each endpoint is asked in pieces it will answer. One that caps at fifty blocks is still a
+      // second opinion; it is just a slower one.
+      const work = scanScope(provider, scope, fromBlock, toBlock, chunkFor(url, requireChainKey(scope.chainKey), chunkSize));
       const seen = deadline ? await deadline(work) : await work;
       answered++;
       perSource.push(`${hostOf(url)}=${seen.length}`);

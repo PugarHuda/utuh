@@ -73,8 +73,45 @@ export const SOURCE_RPC_DEFAULT: Record<ChainKey, string> = {
 /// Independent endpoints for the same chain, for anything that needs a second opinion.
 export const SOURCE_RPCS_DEFAULT: Record<ChainKey, string[]> = {
   [CHAIN_KEY.mainnet]: [SOURCE_RPC_DEFAULT[CHAIN_KEY.mainnet], 'https://rpc.mevblocker.io'],
-  [CHAIN_KEY.sepolia]: [SOURCE_RPC_DEFAULT[CHAIN_KEY.sepolia], 'https://sepolia.gateway.tenderly.co'],
+  // Two truthful endpoints is the floor for sealing a claim, and publicnode alone does not clear
+  // it: it is a pool, and some of its backends are pruned — the same 300-block WETH query 60,000
+  // blocks deep answered 0, 8, 8, 0 on four consecutive calls while tenderly answered 8 each time.
+  // The union sweep survives that (it keeps whatever any endpoint saw), so publicnode stays as a
+  // source; it just cannot be one of the two. Of every free Sepolia endpoint that could be found,
+  // these two answered the same query the same way four times running, answered a 2,000-block
+  // window 300,000 blocks deep with all 5,691 logs, serve eth_getBlockReceipts, and allow a
+  // browser to call them: 0xrpc.io and the Ethereum Foundation's ethpandaops. The rest: onfinality
+  // rate-limits after one call, thirdweb refuses the deep window as too large a response, 1rpc
+  // caps eth_getLogs, drpc/blastapi/blockpi/rpc2.sepolia.org refuse or time out, alchemy's demo
+  // key is throttled, infura and nodereal want a key. Measured on 2026-08-28; `npm run doctor`
+  // re-measures.
+  [CHAIN_KEY.sepolia]: [
+    SOURCE_RPC_DEFAULT[CHAIN_KEY.sepolia],
+    'https://sepolia.gateway.tenderly.co',
+    'https://0xrpc.io/sep',
+    'https://rpc.sepolia.ethpandaops.io',
+  ],
 };
+
+/// Endpoints that refuse `eth_getLogs` past a certain span, by host. The chain's default chunk
+/// applies to everyone else. A sweep asks each endpoint in pieces it will actually answer, so a
+/// small cap costs calls, not coverage. Measured, not read off a pricing page.
+export const RANGE_CAP: Record<string, number> = {
+  '1rpc.io': 50,
+  'nodies.app': 50,
+};
+
+/// Blocks per `eth_getLogs` call for one endpoint on one chain.
+export function chunkFor(url: string, chainKey: ChainKey, wanted = SWEEP_CHUNK[chainKey]): number {
+  let host = url;
+  try {
+    host = new URL(url).host;
+  } catch {
+    /* leave it */
+  }
+  const cap = Object.entries(RANGE_CAP).find(([h]) => host === h || host.endsWith('.' + h))?.[1];
+  return cap ? Math.min(wanted, cap) : wanted;
+}
 
 /// Blocks per `eth_getLogs` call, per chain: the smallest cap among that chain's default
 /// endpoints. Mainnet's two both serve ten thousand; Sepolia's publicnode stops answering past a

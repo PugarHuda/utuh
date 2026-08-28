@@ -13,7 +13,7 @@ pugarhuda.github.io/utuh](https://pugarhuda.github.io/utuh/)** — it reads the 
 browser, lets anyone sweep Ethereum and break an incomplete claim, and lets a borrower be
 underwritten end to end without cloning anything. `npm run web` runs the same page locally.
 
-Building something else on Creditcoin that needs a sentence about events that did *not* happen?
+Building something else on Creditcoin that needs a sentence about events that did _not_ happen?
 The registry is usable on its own — see **[docs/INTEGRATING.md](docs/INTEGRATING.md)**.
 
 ---
@@ -107,14 +107,14 @@ cost model. No explorer involved. Across the four registries deployed so far, 13
 
 Member count alone does not explain those. One append of **three** events cost 541,464 gas while
 an append of **two** cost 878,903, because the cost follows the _size of the transactions being
-proven_, not how many events sit inside them. A least-squares fit over all 36 appends, against the
-call's own calldata gas and its member count:
+proven_, not how many events sit inside them. A least-squares fit over all 56 appends the published
+registries have seen, against the call's own calldata gas and its member count:
 
 ```
-  273,022 gas fixed
-    1.97 x the call's own calldata gas   (1.00 would be exact)
-   61,265 gas per member on top of its bytes
-  worst residual 232,253 gas, 20% of the mean append
+  290,899 gas fixed
+    1.51 x the call's own calldata gas   (1.00 would be exact)
+   81,427 gas per member on top of its bytes
+  worst residual 294,878 gas, 32% of the mean append
 ```
 
 The calldata term is the solid one, and it is the interesting one: **a proven transaction costs
@@ -125,7 +125,9 @@ choice the claimant has.
 
 The per-member term is **not** well determined, and it is worth saying so rather than quoting it.
 An earlier fit over 25 appends put it at 20,526 gas — almost exactly a cold `SSTORE`, which was a
-satisfying number and the reason to distrust it. Eleven more appends moved it to 61,265. Members
+satisfying number and the reason to distrust it. Eleven more appends moved it to 61,265, and twenty
+more to 81,427 while the calldata multiplier fell from 2.3× to 1.5× — the two terms trading against
+each other, which is what collinear regressors do. Members
 and bytes are correlated in this data (more members generally means more bytes), so separating the
 two needs appends this repo has not made: many members with small transactions, and few with large
 ones. What the data does support is the shape — fixed cost, a dominant per-byte cost, and some
@@ -308,7 +310,7 @@ unmarked. The guard was resting on a transaction nobody was obliged to send.
 
 `activeLineOf[subject]` removes the dependency. A subject has one line at a time; an overdue line is
 still `Active`, so it blocks by itself, and `markDefault` goes back to being bookkeeping. Each guard
-then has exactly one job — the slot says *you have a line open*, the count says *you failed one*.
+then has exactly one job — the slot says _you have a line open_, the count says _you failed one_.
 
 The rule needs an exit, or it is a trap. An undrawn line cannot be settled (nothing was borrowed)
 and cannot be defaulted (`markDefault` refuses a `drawn` of zero, correctly — no money went out, so
@@ -327,7 +329,7 @@ permission, and a permissioned bureau is the centralised thing this whole reposi
 avoid.
 
 So there is no bureau. A lender names the peers whose word it takes, in its constructor, and the
-answer is *pulled* from the peer's own storage — where the fact was recorded by the contract that
+answer is _pulled_ from the peer's own storage — where the fact was recorded by the contract that
 actually extended the credit. No reports, no writes, nothing to forge: a peer can only ever say what
 happened on its own books, and the worst a hostile one can do is refuse credit it was never going to
 extend. A lender that names nobody is unaffected by everyone, which is the safe default and has to
@@ -391,39 +393,39 @@ usually does rather than a thing to rely on: the Sepolia ledger had not arrived 
 
 ### Sepolia-sourced deployment — the completed loop
 
-| Contract                     | Address                                                                                                                                                    |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UtuhRegistry`               | [`0x26880c8980Cd54827543bD34c6c613253c69347b`](https://creditcoin-testnet.blockscout.com/address/0x26880c8980Cd54827543bD34c6c613253c69347b?tab=contract)   |
-| `UtuhCredit`                 | [`0x0177aDb82152c8673a85271F7F06336B820324b6`](https://creditcoin-testnet.blockscout.com/address/0x0177aDb82152c8673a85271F7F06336B820324b6?tab=contract)   |
-| `EvmV1Decoder`               | [`0x084c45552A6c45C7269F4a7041E757ABf4Bcc008`](https://creditcoin-testnet.blockscout.com/address/0x084c45552A6c45C7269F4a7041E757ABf4Bcc008?tab=contract)   |
-| `SettlementLedger` (Sepolia) | [`0xC8C9053C4E2c0590df684c12e5f2610EFeC9575B`](https://eth-sepolia.blockscout.com/address/0xC8C9053C4E2c0590df684c12e5f2610EFeC9575B?tab=contract)          |
+| Contract                     | Address                                                                                                                                                   |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UtuhRegistry`               | [`0x26880c8980Cd54827543bD34c6c613253c69347b`](https://creditcoin-testnet.blockscout.com/address/0x26880c8980Cd54827543bD34c6c613253c69347b?tab=contract) |
+| `UtuhCredit`                 | [`0x0177aDb82152c8673a85271F7F06336B820324b6`](https://creditcoin-testnet.blockscout.com/address/0x0177aDb82152c8673a85271F7F06336B820324b6?tab=contract) |
+| `EvmV1Decoder`               | [`0x084c45552A6c45C7269F4a7041E757ABf4Bcc008`](https://creditcoin-testnet.blockscout.com/address/0x084c45552A6c45C7269F4a7041E757ABf4Bcc008?tab=contract) |
+| `SettlementLedger` (Sepolia) | [`0xC8C9053C4E2c0590df684c12e5f2610EFeC9575B`](https://eth-sepolia.blockscout.com/address/0xC8C9053C4E2c0590df684c12e5f2610EFeC9575B?tab=contract)        |
 
 Everything below is readable at those addresses rather than taken on trust — `claim(id)`,
 `memberCount(id)`, `keyAt(id, i)`, `enforceableLoss(id)`, `line(1)`, `underwrittenThrough(subject)`
 and `settledThrough(subject)` all answer to anyone, and the console at `npm run web` shows them
 without a terminal.
 
-| Read                                  | Answer                                                                     |
-| ------------------------------------- | -------------------------------------------------------------------------- |
-| `claim(1)`                            | Finalized, 3 members, aggregate 0.003 ETH of proven volume                  |
-| `keyAt(1, 0..2)`                      | Sepolia blocks 11575883, 11575885, 11575886                                 |
-| `claim(2)`                            | Finalized, 0 members — the clean claim, and there is nothing to show        |
-| `claim(3)`                            | Refuted, `enforceableLoss` collapsed to 0                                   |
-| `claim(4)`                            | Finalized, repayment of 0.000525 ETH                                        |
-| `claim(5)`                            | Refuted — planted short by one, and broken from a browser                   |
-| `burned()`                            | 2 CTC, two refuted claimants' halves that nobody collected                  |
-| `line(1)`                             | Settled, limit 10 CTC, drawn 10 CTC, `repayRequired` 525000000000000        |
-| `underwrittenThrough(borrower)`       | 11575891 — one past the range that opened the line                          |
-| `settledThrough(borrower)`            | 11575986 — one past the range that discharged it                            |
-| `defaultsOf(borrower)`                | 0                                                                           |
-| `activeLineOf(borrower)`              | 0 — the line settled, so the slot is back                                   |
-| `claim(6)`, `claim(7)`                | Finalized — 3 members and 0, built **from the browser** by a second borrower |
-| `line(2)`                             | **Settled** — opened, drawn, repaid and settled entirely from the console    |
-| `claim(8)`                            | Finalized, 1 member — the repayment; opened by one run, resumed by the next  |
-| `claim(9)`, `claim(10)`               | Finalized, unspent, useless — a 4-block range against a 5-block floor; the  |
-|                                       | page now refuses that before a bond is posted                               |
-| `claim(11)`, `claim(12)`, `line(3)`   | The second underwriting of the same key, on later history — line 3 Settled — the whole loop, twice, from the page (claim 13 is its repayment) |
-| `peerCount()`                         | 0 — this lender takes nobody else's books, which is the safe default        |
+| Read                                | Answer                                                                                                                                        |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `claim(1)`                          | Finalized, 3 members, aggregate 0.003 ETH of proven volume                                                                                    |
+| `keyAt(1, 0..2)`                    | Sepolia blocks 11575883, 11575885, 11575886                                                                                                   |
+| `claim(2)`                          | Finalized, 0 members — the clean claim, and there is nothing to show                                                                          |
+| `claim(3)`                          | Refuted, `enforceableLoss` collapsed to 0                                                                                                     |
+| `claim(4)`                          | Finalized, repayment of 0.000525 ETH                                                                                                          |
+| `claim(5)`                          | Refuted — planted short by one, and broken from a browser                                                                                     |
+| `burned()`                          | 2 CTC, two refuted claimants' halves that nobody collected                                                                                    |
+| `line(1)`                           | Settled, limit 10 CTC, drawn 10 CTC, `repayRequired` 525000000000000                                                                          |
+| `underwrittenThrough(borrower)`     | 11575891 — one past the range that opened the line                                                                                            |
+| `settledThrough(borrower)`          | 11575986 — one past the range that discharged it                                                                                              |
+| `defaultsOf(borrower)`              | 0                                                                                                                                             |
+| `activeLineOf(borrower)`            | 0 — the line settled, so the slot is back                                                                                                     |
+| `claim(6)`, `claim(7)`              | Finalized — 3 members and 0, built **from the browser** by a second borrower                                                                  |
+| `line(2)`                           | **Settled** — opened, drawn, repaid and settled entirely from the console                                                                     |
+| `claim(8)`                          | Finalized, 1 member — the repayment; opened by one run, resumed by the next                                                                   |
+| `claim(9)`, `claim(10)`             | Finalized, unspent, useless — a 4-block range against a 5-block floor; the                                                                    |
+|                                     | page now refuses that before a bond is posted                                                                                                 |
+| `claim(11)`, `claim(12)`, `line(3)` | The second underwriting of the same key, on later history — line 3 Settled — the whole loop, twice, from the page (claim 13 is its repayment) |
+| `peerCount()`                       | 0 — this lender takes nobody else's books, which is the safe default                                                                          |
 
 The borrower's sweep read `publicnode=3  tenderly=3`: two independent endpoints agreeing, and the
 claim built on the union rather than on whichever answered first.
@@ -508,8 +510,8 @@ It shows four things: what Creditcoin says it can attest, read straight off `0x0
 in the registry with its bond, its enforceable loss and its remaining window; the lender's policy
 and every line; and a watcher.
 
-The watcher is the part that had to exist. Every guarantee here rests on one sentence — *anyone may
-refute a claim by proving one in-scope event it left out* — and until something is actually
+The watcher is the part that had to exist. Every guarantee here rests on one sentence — _anyone may
+refute a claim by proving one in-scope event it left out_ — and until something is actually
 watching, that sentence describes a possibility rather than a fact. `npm run watch` is that
 sentence made real for whoever runs a daemon with a funded key, which is a small number of people.
 The console makes it true for whoever opens a page:
@@ -586,7 +588,7 @@ it and returns the bond, because the alternative is a borrower who does not know
 there.
 
 Two more things the live test taught the page. The precompile saying a block is attested and the
-hosted builder having *indexed* it are different moments, and a proof request in the gap comes back
+hosted builder having _indexed_ it are different moments, and a proof request in the gap comes back
 422 — measured on a payment the precompile had attested a minute earlier, and answered 200 by the
 same builder a minute later. The page now waits on both, the way the SDK does, and treats a 422 as
 "ask again" rather than as a failed build. And a build that dies after `open` — that 422 did it
@@ -596,7 +598,7 @@ last key the registry recorded. Claim 8 on the published registry is the receipt
 run, appended and sealed by the next, one bond.
 
 The lender has controls too, shown only to the lender: fund, withdraw undrawn. And an overdue line
-carries a *mark default* button for anyone, because recording a default is permissionless, unpaid,
+carries a _mark default_ button for anyone, because recording a default is permissionless, unpaid,
 and — since an overdue line blocks the next one by itself — no longer something the guards depend
 on. It is still the record peers read, so whoever notices may write it.
 
@@ -624,9 +626,9 @@ is off unless asked for — `UTUH_LIVE_UI=1 npm run web:test -- borrow.live`.
 `web/tests/angles.spec.ts` is the console from the angles nobody demos, and two of them found
 things. In dark mode, with contrast checked: clean. At 375px: nothing sideways, everything
 reachable. From the keyboard alone: Tab to the sweep, Enter, and it sweeps. With a wallet whose
-owner presses *Reject* on every signature — a real EIP-1193 provider answering 4001 — every write
+owner presses _Reject_ on every signature — a real EIP-1193 provider answering 4001 — every write
 path reports the refusal and stays usable. And with `rpc.cc3-testnet.creditcoin.network`
-unreachable from the browser, the page used to sit on *loading* for as long as anyone cared to
+unreachable from the browser, the page used to sit on _loading_ for as long as anyone cared to
 wait, because a provider pointed at a dead endpoint retries rather than failing; it now says
 Creditcoin is not answering, inside twenty seconds, and shows no number it did not just read.
 
@@ -1061,7 +1063,7 @@ chain: `npm run probe` proves real Ethereum mainnet transactions through `0x0FD2
 CI runs it daily, and no local test can substitute for it.
 
 For a long time that argument was also doing a second job it could not carry. Because `open` asks
-`0x0FD3` whether a range is attested before anything else happens, *every* path past that line was
+`0x0FD3` whether a range is attested before anything else happens, _every_ path past that line was
 untested locally — appending, ordering, sealing, refuting, finalizing, underwriting, drawing,
 settling. A hundred tests passed without one of them opening a line, and the registry read **32%**
 covered.
@@ -1101,13 +1103,13 @@ tree that has this line in it.
 
 `forge coverage` now reads:
 
-| File                      | Lines             | Functions       |
-| ------------------------- | ----------------- | --------------- |
-| `src/UtuhCredit.sol`      | 97.48% (232/238)  | 100.00% (35/35) |
-| `src/UtuhRegistry.sol`    | 97.45% (153/157)  | 100.00% (21/21) |
-| `src/lib/EventScope.sol`  | 100.00% (25/25)   | 100.00% (6/6)   |
-| `src/source/SettlementLedger.sol` | 100.00% (8/8) | 100.00% (2/2) |
-| **Total**                 | **97.69%**        | **100.00%**     |
+| File                              | Lines            | Functions       |
+| --------------------------------- | ---------------- | --------------- |
+| `src/UtuhCredit.sol`              | 97.48% (232/238) | 100.00% (35/35) |
+| `src/UtuhRegistry.sol`            | 97.45% (153/157) | 100.00% (21/21) |
+| `src/lib/EventScope.sol`          | 100.00% (25/25)  | 100.00% (6/6)   |
+| `src/source/SettlementLedger.sol` | 100.00% (8/8)    | 100.00% (2/2)   |
+| **Total**                         | **97.69%**       | **100.00%**     |
 
 It read 9.6%, then 47%, then 96%, and the sentence that followed the first of those — that everything
 reachable without a precompile was covered — was not true when it was written. Branch coverage is
@@ -1330,7 +1332,17 @@ they happen, recorded by the network rather than by us.
   | 60,000           | **0**      | 22       |
 
   An archive cutoff served as an empty result rather than an error, and intermittently — the same
-  endpoint agreed at that depth twenty minutes later. Underwriting sweeps two hundred thousand
+  endpoint agreed at that depth twenty minutes later. Later still the intermittence resolved into a
+  shape: the same 300-block query at the same depth, four times in a row, answered `0 8 8 0` —
+  publicnode is a pool, and some of the nodes behind it are pruned. Which one you get is luck. So
+  the Sepolia table now has four sources rather than two: every free Sepolia endpoint that could be
+  found was asked the same question four times and then a 2,000-block window 300,000 blocks deep,
+  and two more passed — `0xrpc.io` and the Ethereum Foundation's `ethpandaops` — while onfinality
+  rate-limited after one call, thirdweb refused the deep window, 1rpc caps `eth_getLogs`, and the
+  rest refused, timed out, or wanted a key. `0xrpc.io` had one more lesson in it: its front door
+  answers any request without a `User-Agent` with a bare nginx 404, and ethers sends none, so the
+  daemon saw it dead while a browser and curl saw it fine. Every request now says who is asking.
+  Underwriting sweeps two hundred thousand
   blocks, so an endpoint like this reports an empty history for most of the range and a claimant
   trusting it alone seals an empty claim and loses the bond. This is why the union exists, why
   sealing needs two sources, and why `npm run doctor` reports a pass as "this time" rather than as

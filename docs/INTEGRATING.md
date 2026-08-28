@@ -10,7 +10,7 @@ contract on Creditcoin, about any class of source-chain event.
 
 The Attestcoin Protocol already proves that a transaction happened. What it cannot prove is that a
 set is complete, because whoever submits proofs chooses which proofs to submit. If your contract
-needs a sentence of the form *"this address has never …"*, no number of inclusion proofs will get
+needs a sentence of the form _"this address has never …"_, no number of inclusion proofs will get
 you there, and this registry is one way to get the rest of the way.
 
 You do not need to understand Merkle proofs, continuity proofs, or the precompiles to consume it.
@@ -51,7 +51,7 @@ bytes32 want = EventScope.id(myExpectedScope(subject));
 if (EventScope.id(c.scope) != want) revert ScopeMismatch(want, EventScope.id(c.scope));
 ```
 
-Otherwise a claimant can hand you a perfectly valid, perfectly finalized claim about a *different*
+Otherwise a claimant can hand you a perfectly valid, perfectly finalized claim about a _different_
 contract's events, or a different address, and every check below it will pass.
 
 ### 2. Decide what the set means
@@ -70,8 +70,8 @@ event sat in the set.
 
 This is the step consumers get wrong.
 
-`enforceableLoss(claimId)` is what a false claim costs its author *no matter what they do about
-it*. It is not the bond. A claimant who sees a refutation coming can send their own from a second
+`enforceableLoss(claimId)` is what a false claim costs its author _no matter what they do about
+it_. It is not the bond. A claimant who sees a refutation coming can send their own from a second
 address and take the refuter's share back; the part they cannot recover is the part that is burned.
 
 `isUsable(claimId, exposure)` is `Finalized && enforceableLoss >= exposure`. Only you know what you
@@ -99,7 +99,7 @@ almost nothing. `claim.toBlock - claim.fromBlock` is the span.
 
 **Whether one claim can be spent twice.** Claims are the registry's; nothing stops the same
 finalized claim being presented to you and to somebody else. If that matters, record what you have
-consumed — `UtuhCredit` keeps `claimSpent`, and a watermark per subject so that a *range* of
+consumed — `UtuhCredit` keeps `claimSpent`, and a watermark per subject so that a _range_ of
 history, not just a claim id, is consumed by the thing that rested on it.
 
 **Who is allowed to present it.** Reading a public history is not the same as owning it. If the
@@ -142,9 +142,9 @@ Nothing, for the consumer. Every call above is a `view` against a contract on Cr
 
 The cost sits with the claimant, who pays gas to append each proven event and posts a bond — and
 with whoever refutes, who spends gas on one proof and takes half the bond. Measured on CC3 Testnet,
-an append is about `314,503 + 2.33 × calldata gas + 20,526 per member`; the dominant term is the
-size of the transactions being proven, not the number of events. `npm run gas` refits that from the
-registry's own receipts.
+an append is about `290,899 + 1.5 × calldata gas + 81,427 per member` over the 56 appends measured
+so far; the dominant term is the size of the transactions being proven, and the per-member term is
+the one the data pins down least. `npm run gas` refits it from the registry's own receipts.
 
 ---
 

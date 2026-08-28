@@ -46,7 +46,7 @@ export const SOURCE_RPC: Record<ChainKey, string> = {
 export const cc3 = () => new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
 export const source = (chainKey: number) => {
   const key = requireChainKey(chainKey);
-  return new JsonRpcProvider(SOURCE_RPC[key], SOURCE_CHAIN_ID[key], { staticNetwork: true });
+  return new JsonRpcProvider(rpcRequest(SOURCE_RPC[key]), SOURCE_CHAIN_ID[key], { staticNetwork: true });
 };
 
 const list = (v?: string) =>
@@ -94,11 +94,21 @@ export const SOURCE_RPCS: Record<ChainKey, string[]> = {
 /// not the whole sweep.
 export const SOURCE_TIMEOUT_MS = Number(process.env.SOURCE_TIMEOUT_MS ?? 25_000);
 
+/// A request that says who is asking. ethers sends none, and 0xrpc.io's front door answers a
+/// request with no User-Agent with an nginx 404 — for every method, before reading the body —
+/// which looks exactly like a dead endpoint and is not. Browsers always send one; this is for the
+/// daemon and the scripts, so they and the page see the same set of endpoints alive.
+export function rpcRequest(url: string): FetchRequest {
+  const request = new FetchRequest(url);
+  request.setHeader('user-agent', 'utuh (+https://github.com/pugarhuda/utuh)');
+  request.timeout = SOURCE_TIMEOUT_MS;
+  return request;
+}
+
 export const sources = (chainKey: number) => {
   const key = requireChainKey(chainKey);
   return [...new Set(SOURCE_RPCS[key])].map((url) => {
-    const request = new FetchRequest(url);
-    request.timeout = SOURCE_TIMEOUT_MS;
+    const request = rpcRequest(url);
     return {
       url,
       provider: new JsonRpcProvider(request, SOURCE_CHAIN_ID[key], { staticNetwork: true }),

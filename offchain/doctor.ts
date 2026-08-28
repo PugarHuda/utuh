@@ -15,6 +15,7 @@ import {
 import { signer, readDeployments, creditAt } from './lib/contracts';
 import { chainInfoAt, supportedChains, verifyChainKeys } from './lib/chain';
 import { Prover } from './lib/proofs';
+import { chunkFor } from './lib/networks';
 import { runScript } from './lib/cli';
 
 /// Check that the things this depends on are actually there.
@@ -139,10 +140,14 @@ async function main() {
 
     for (const { url, provider } of endpoints) {
       let narrow: number | null = null;
+      // The probe range, cut to what this endpoint will answer in one call — the sweep does the
+      // same, so a capped endpoint is judged on what it says, not on a question it refuses.
+      const cap = chunkFor(url, key, to - from + 1);
+      const to1 = cap < to - from + 1 ? from + cap - 1 : to;
       try {
         const logs = await withDeadline(
           SOURCE_TIMEOUT_MS,
-          provider.getLogs({ address: probe.address, topics: probe.topics, fromBlock: from, toBlock: to }),
+          provider.getLogs({ address: probe.address, topics: probe.topics, fromBlock: from, toBlock: to1 }),
         );
         narrow = logs.length;
         // Borrow a real indexed topic from whatever came back, so the second question is the shape
@@ -166,7 +171,10 @@ async function main() {
                 address: probe.address,
                 topics: [...probe.topics, subjectTopic],
                 fromBlock: from,
-                toBlock: to,
+                toBlock:
+                  chunkFor(row.url, key, to - from + 1) < to - from + 1
+                    ? from + chunkFor(row.url, key, to - from + 1) - 1
+                    : to,
               }),
             )
           ).length;
