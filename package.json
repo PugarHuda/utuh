@@ -50,7 +50,7 @@
     "symbolic:deep": "halmos --contract CreditRoundingSymbolic --solver-timeout-assertion 600000"
   },
   "dependencies": {
-    "@gluwa/usc-contracts": "^0.1.2",
+    "@gluwa/usc-contracts": "^0.2.0",
     "@gluwa/usc-sdk": "^0.18.0",
     "dotenv": "^17.4.2",
     "ethers": "^6.17.0"
