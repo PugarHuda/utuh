@@ -67,7 +67,9 @@ jobs:
       - name: coverage floor
         run: |
           forge coverage --no-match-test "invariant" --no-match-coverage "test|script" --report summary | tee coverage.txt
-          pct=$(grep -E '^\| Total' coverage.txt | sed -E 's/.*\| *([0-9.]+)% .*/\1/' | head -1)
+          # The first percentage on the Total row is lines; a greedy match took the last, which is
+          # functions, and reported 100% on a tree whose lines stood at 97.69%.
+          pct=$(grep -E '^\| Total' coverage.txt | sed -E 's/^\| Total *\| *([0-9.]+)%.*/\1/' | head -1)
           echo "line coverage: $pct%"
           awk -v p="$pct" 'BEGIN { if (p+0 < 90) { print "::error::line coverage fell below 90%"; exit 1 } }'
 
