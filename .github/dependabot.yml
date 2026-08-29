@@ -9,6 +9,14 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # 0.2.0 (2026-08-17) moved EvmV1Decoder to contracts/write-ability/common and made its
+      # functions internal. The deployed contracts link the 0.1.2 library at the address in the
+      # deployment records, and Sourcify's full match is against that source: bumping this is a
+      # redeploy of every contract and a re-verification, not a merge. It gets revisited by hand,
+      # with `npm run full`, and the gas fit redone — internal decoding drops the DELEGATECALL
+      # from every append, which is the reason to do it and the reason not to do it by accident.
+      - dependency-name: '@gluwa/usc-contracts'
     groups:
       dev-tooling:
         patterns: ['prettier', 'knip', 'typescript', 'tsx', 'esbuild', '@playwright/*', '@axe-core/*', '@types/*']

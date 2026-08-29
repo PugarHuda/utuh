@@ -44,7 +44,7 @@ function chains(privateKey: string): Record<string, { rpc: string; wallet: Walle
 export async function injectWallet(
   page: Page,
   privateKey: string,
-  opts: { rejectSends?: boolean } = {},
+  opts: { rejectSends?: boolean; announce?: string; noLegacy?: boolean } = {},
 ): Promise<string> {
   const known = chains(privateKey);
   const address = await new Wallet(privateKey).getAddress();
@@ -85,7 +85,7 @@ export async function injectWallet(
     };
     const listeners = {};
     const emit = (event, ...args) => (listeners[event] || []).forEach((l) => l(...args));
-    window.ethereum = {
+    const provider = {
       isUtuhTestWallet: true,
       request: async ({ method, params = [] }) => {
         switch (method) {
@@ -118,6 +118,23 @@ export async function injectWallet(
         listeners[event] = (listeners[event] || []).filter((h) => h !== handler);
       },
     };
+    if (!${JSON.stringify(opts.noLegacy === true)}) window.ethereum = provider;
+    // EIP-6963: announce on request and once unprompted, the way MetaMask and Rabby do.
+    const name = ${JSON.stringify(opts.announce ?? null)};
+    if (name) {
+      const detail = Object.freeze({
+        info: {
+          uuid: crypto.randomUUID(),
+          name,
+          icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>',
+          rdns: 'test.utuh.' + name.replace(/\W/g, ''),
+        },
+        provider,
+      });
+      const announce = () => window.dispatchEvent(new CustomEvent('eip6963:announceProvider', { detail }));
+      window.addEventListener('eip6963:requestProvider', announce);
+      announce();
+    }
   })();`;
   await page.addInitScript({ content: init });
 

@@ -7,9 +7,11 @@ name: watch
 # thing that does it without being paid. Every hour it sweeps both published registries the way the
 # daemon and the console do, and if a sealed claim is short of an event the run goes red.
 #
-# It holds no key. A dry run reads and never signs, so a public repository can run it with nothing
-# in its secrets, and a red run is the alert: somebody sealed a lie and nobody has taken the bond
-# yet. Anyone reading that alert, with a key and a few minutes, is paid half the bond to act on it.
+# It holds no key unless it is given one. A dry run reads and never signs, so a public repository
+# can run it with nothing in its secrets, and a red run is the alert: somebody sealed a lie and
+# nobody has taken the bond yet. Anyone reading that alert, with a key and a few minutes, is paid
+# half the bond to act on it — and a fork that sets WATCH_PRIVATE_KEY (a key with a little CTC for
+# gas) does not wait for anyone to read it: the same hourly run refutes, and is paid.
 on:
   schedule:
     - cron: '23 * * * *'
@@ -53,7 +55,11 @@ jobs:
         env:
           REGISTRY: ${{ matrix.registry.address }}
           WATCH_STATE: .watch-${{ matrix.registry.name }}.json
-        run: npm run watch -- --once --dry
+          PRIVATE_KEY: ${{ secrets.WATCH_PRIVATE_KEY }}
+        # With a key: a real watcher, refuting what it finds and collecting the refuter's share.
+        # Without: the dry run, whose only voice is the exit code.
+        run: |
+          if [ -n "$PRIVATE_KEY" ]; then npm run watch -- --once; else npm run watch -- --once --dry; fi
 
   published:
     # The console people actually open, checked hourly the way a person would: it loads, it says

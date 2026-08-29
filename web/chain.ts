@@ -148,8 +148,42 @@ declare global {
   }
 }
 
+/// A wallet that announced itself (EIP-6963), by the name it gave.
+export interface Announced {
+  name: string;
+  provider: Eip1193Provider;
+}
+
+/// `window.ethereum` is one slot, and two installed wallets fight over it — whichever loaded last
+/// wins, and that is not necessarily the one the person meant to use. EIP-6963 is the fix the
+/// wallets agreed on: each announces itself with a name, the page lists them, the person picks.
+/// The request is dispatched once here, at load; wallets answer synchronously, and any that
+/// install later announce on their own. `window.ethereum` stays the fallback for a wallet that
+/// only does the old thing.
+const announced: Announced[] = [];
+if (typeof window !== 'undefined') {
+  window.addEventListener('eip6963:announceProvider', (e) => {
+    const detail = (e as CustomEvent<{ info?: { name?: string }; provider?: Eip1193Provider }>).detail;
+    if (!detail?.provider || announced.some((a) => a.provider === detail.provider)) return;
+    announced.push({ name: detail.info?.name?.trim() || 'wallet', provider: detail.provider });
+  });
+  window.dispatchEvent(new Event('eip6963:requestProvider'));
+}
+
+export function wallets(): Announced[] {
+  if (announced.length) return announced;
+  return typeof window !== 'undefined' && window.ethereum ? [{ name: 'wallet', provider: window.ethereum }] : [];
+}
+
 export function hasWallet(): boolean {
-  return typeof window !== 'undefined' && window.ethereum !== undefined;
+  return wallets().length > 0;
+}
+
+/// The wallet `connect` was last called with — what every later signature and chain switch on
+/// this page goes through, so that picking a wallet by name picks it for the whole session.
+let chosen: Eip1193Provider | undefined;
+export function walletProvider(): Eip1193Provider | undefined {
+  return chosen ?? wallets()[0]?.provider;
 }
 
 /// CC3 Testnet as a wallet would need it added.
@@ -162,9 +196,11 @@ const CC3_PARAMS = {
 };
 
 /// Connect a wallet and make sure it is pointed at CC3, adding the network if it has never seen it.
-export async function connect(): Promise<{ signer: Signer; address: string }> {
-  if (!window.ethereum) throw new Error('no wallet in this browser');
-  const provider = new BrowserProvider(window.ethereum, 'any');
+export async function connect(which?: Eip1193Provider): Promise<{ signer: Signer; address: string }> {
+  const eth = which ?? wallets()[0]?.provider;
+  if (!eth) throw new Error('no wallet in this browser');
+  chosen = eth;
+  const provider = new BrowserProvider(eth, 'any');
   await provider.send('eth_requestAccounts', []);
 
   const net = await provider.getNetwork();

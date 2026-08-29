@@ -1,7 +1,7 @@
 import { BrowserProvider, formatEther, parseEther, type Signer } from 'ethers';
 import { CHAIN_NAME, SOURCE_CHAIN_ID, SOURCE_RPC_DEFAULT, requireChainKey } from '../offchain/lib/networks';
 import { claimStatus } from '../offchain/lib/status';
-import { cc3, type Wired } from './chain';
+import { cc3, type Wired, walletProvider } from './chain';
 import {
   bindingFor,
   buildClaim,
@@ -662,10 +662,11 @@ async function sendOnSourceChain(
     then: 'wait for Creditcoin to attest that block, then press "prove it".',
   },
 ): Promise<string> {
-  if (!window.ethereum) throw new Error('no wallet');
+  const eth = walletProvider();
+  if (!eth) throw new Error('no wallet');
   const key = requireChainKey(chainKey);
   const wanted = '0x' + SOURCE_CHAIN_ID[key].toString(16);
-  const provider = new BrowserProvider(window.ethereum, 'any');
+  const provider = new BrowserProvider(eth, 'any');
 
   const from = (await provider.send('eth_accounts', []))[0] as string;
   if (from.toLowerCase() !== subject.toLowerCase()) {

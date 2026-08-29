@@ -38,6 +38,12 @@ export function explainRevert(e: unknown, interfaces: Interface[]): string {
     return `reverted with ${data.slice(0, 10)}…`;
   }
 
+  // A wallet's own refusal — "the decoy is locked", "request already pending" — arrives from
+  // ethers as UNKNOWN_ERROR with the wallet's message nested inside and a shortMessage that
+  // begins "could not coalesce error", which is ethers describing its own confusion. The person
+  // wants the wallet's words.
+  const inner = err.error?.message ?? err.info?.error?.message;
+  if (inner && (err.shortMessage ?? '').startsWith('could not coalesce error')) return inner;
   return err.shortMessage ?? err.message ?? String(e);
 }
 

@@ -542,6 +542,13 @@ size both default endpoints serve; Sepolia's are swept in five-hundred-block pie
 publicnode stops answering past that. The daemon uses the same table, so the page and the daemon
 cannot reach different verdicts by asking in different pieces.
 
+A claim has an address. `?claim=N` opens claim N on arrival — what a post, a document or a
+refuter's message points at — reaching past the first page if it has to, and the address bar
+follows the picker, so the URL always says what is on screen. And a visitor with two wallets
+installed is asked which: the page listens for EIP-6963 announcements and names every wallet that
+answers, instead of taking whichever one grabbed `window.ethereum` last. A wallet that only does
+the old thing still connects.
+
 Selecting a claim opens it: every member decoded from the ordering key the registry stores — source
 block, transaction index, log index — with the block linked into the source chain's explorer and a
 pointer to Creditcoin's own oracle dashboard, where the verification the precompile emitted for it
@@ -566,7 +573,9 @@ nothing else in CI noticing; this notices.
 It holds no key. `npm run watch -- --dry` reads and never signs, so it no longer asks for one, and a
 public repository can run it with nothing in its secrets. The red run is the alert: somebody sealed
 a lie and nobody has taken the bond yet, and whoever reads that with a key and a few minutes is
-paid half the bond to act on it.
+paid half the bond to act on it. Or give it the key: a fork that sets a `WATCH_PRIVATE_KEY` secret
+(any account with a little CTC for gas) runs the same hourly sweep without `--dry`, refutes what it
+finds, and is paid the refuter's share — a watcher that costs a repository and nothing else.
 
 ### Borrowing from the page
 
@@ -742,7 +751,9 @@ web/
   tests/angles.spec.ts      dark mode, a phone, the keyboard, a wallet that refuses, a dead RPC
   tests/deployments.spec.ts the mainnet-sourced deployment: switch, page, open a claim to its
                             members, sweep one from the browser against Ethereum mainnet
-  tests/wallet.ts           what stands in for MetaMask: a real key, real chains, chain switching
+  tests/wallet.ts           what stands in for MetaMask: a real key, real chains, chain switching, EIP-6963
+  tests/wallets.spec.ts     two wallets announce themselves; the page names both and connects with the pick
+  tests/deeplink.spec.ts    ?claim=N opens a claim on arrival; the address bar follows the picker
   tests/refute.live.spec.ts refuting through the page with a real wallet — off unless asked
   tests/borrow.live.spec.ts the whole underwriting through the page, a stranger's key, real money
 playwright.config.ts        one worker, generous timeouts, because the sweeps are real

@@ -1,7 +1,8 @@
 import { Contract, formatEther, parseEther, toUtf8String, type Signer } from 'ethers';
 import { claimStatus, lineStatus } from '../offchain/lib/status';
 import { CHAIN_NAME, ORACLE_DASHBOARD, SOURCE_EXPLORER, requireChainKey } from '../offchain/lib/networks';
-import { cc3, connect, EXPLORER, hasWallet, shortAddress, wire, within, type Wired } from './chain';
+import type { Eip1193Provider } from 'ethers';
+import { cc3, connect, EXPLORER, hasWallet, shortAddress, wallets, wire, within, type Wired } from './chain';
 import { refute, sweepClaim, type Sweep } from './watch';
 import { renderBorrow } from './borrowPane';
 import { abandonClaim } from './borrow';
@@ -157,6 +158,8 @@ const CLAIM_BATCH = 12;
 /// and the ones anyone is looking at are the recent ones — a challenge window is a day at most.
 const CLAIM_PAGE = 25;
 
+let linkedApplied = false;
+let linkedBumped = false;
 let claimLimit = CLAIM_PAGE;
 
 async function readOneClaim(i: number): Promise<ClaimView> {
@@ -273,8 +276,27 @@ async function renderRegistry(): Promise<void> {
       box.appendChild(more);
     }
 
+    // `?claim=N` opens a claim on arrival — how a post or a document points at one. A claim older
+    // than the first page is reached by showing enough older ones, once; the list is newest-first
+    // and the ids are dense, so "enough" is arithmetic rather than a search.
+    const linked = new URLSearchParams(location.search).get('claim');
+    const linkedId = linked && /^\d+$/.test(linked) ? Number(linked) : undefined;
+    if (
+      linkedId !== undefined &&
+      !linkedBumped &&
+      linkedId >= 1 &&
+      linkedId <= page.total &&
+      !claims.some((c) => Number(c.id) === linkedId)
+    ) {
+      linkedBumped = true;
+      claimLimit = Math.ceil((page.total - linkedId + 1) / CLAIM_PAGE) * CLAIM_PAGE;
+      void renderRegistry();
+      return;
+    }
+
     const select = $('claim-select') as HTMLSelectElement;
-    const chosen = select.value;
+    const chosen = select.value || (linkedId !== undefined && !linkedApplied ? String(linkedId) : '');
+    linkedApplied = true;
     select.replaceChildren(
       ...claims.map((c) => {
         const o = document.createElement('option');
@@ -706,23 +728,40 @@ function renderBorrowPane(): Promise<void> {
 
 async function main(): Promise<void> {
   const connectButton = $('connect') as HTMLButtonElement;
+  const choice = $('wallet-choice');
+  const connectWith = async (which?: Eip1193Provider) => {
+    choice.replaceChildren();
+    try {
+      const c = await connect(which);
+      signer = c.signer;
+      account = c.address;
+      connectButton.textContent = shortAddress(account);
+      connectButton.disabled = true;
+      await refresh();
+      renderRefuteButton();
+    } catch (e) {
+      say(`connect failed: ${explainRevert(e, [])}`);
+    }
+  };
   if (!hasWallet()) {
     connectButton.disabled = true;
     connectButton.textContent = 'no wallet — reading only';
     connectButton.title = 'Install a wallet to finalize, withdraw or refute. Everything else is read-only anyway.';
   } else {
-    connectButton.onclick = async () => {
-      try {
-        const c = await connect();
-        signer = c.signer;
-        account = c.address;
-        connectButton.textContent = shortAddress(account);
-        connectButton.disabled = true;
-        await refresh();
-        renderRefuteButton();
-      } catch (e) {
-        say(`connect failed: ${(e as Error).message}`);
-      }
+    connectButton.onclick = () => {
+      const list = wallets();
+      if (list.length === 1) return void connectWith(list[0]!.provider);
+      // More than one wallet announced itself. Name them and let the person say which — the
+      // alternative is whichever one grabbed `window.ethereum` last, which nobody chose.
+      choice.replaceChildren(
+        ...list.map((w) => {
+          const b = el('button', 'act', w.name) as HTMLButtonElement;
+          b.dataset.wallet = w.name;
+          b.onclick = () => void connectWith(w.provider);
+          return b;
+        }),
+      );
+      (choice.firstElementChild as HTMLButtonElement | null)?.focus();
     };
   }
 
@@ -740,7 +779,14 @@ async function main(): Promise<void> {
       target.scrollIntoView({ block: 'center' });
     };
   }
-  ($('claim-select') as HTMLSelectElement).onchange = () => void renderClaimDetail();
+  ($('claim-select') as HTMLSelectElement).onchange = () => {
+    // The address bar follows the pick, so what is on screen is what the URL says — copy it and
+    // the next person lands on the same claim.
+    const url = new URL(location.href);
+    url.searchParams.set('claim', ($('claim-select') as HTMLSelectElement).value);
+    history.replaceState(null, '', url.toString());
+    void renderClaimDetail();
+  };
 
   // Switching deployments is a navigation, not a re-render: everything on the page is derived
   // from one record, and a reload is the honest way to derive it again.
@@ -750,6 +796,8 @@ async function main(): Promise<void> {
     const url = new URL(location.href);
     if (picker.value === 'mainnet') url.searchParams.set('deployment', 'mainnet');
     else url.searchParams.delete('deployment');
+    // A claim id means nothing on the other registry.
+    url.searchParams.delete('claim');
     location.assign(url.toString());
   };
 
