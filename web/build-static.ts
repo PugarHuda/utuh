@@ -61,6 +61,8 @@ function main(): Promise<void> {
   });
 
   copyFileSync(join(WEB, 'style.css'), join(DEST, 'style.css'));
+  // The link-preview image. Not something the page ever requests — crawlers fetch it.
+  copyFileSync(join(WEB, 'og.png'), join(DEST, 'og.png'));
 
   // Both published deployments, so the page can switch between them without a server.
   const records: Record<string, unknown> = {};
