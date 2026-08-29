@@ -744,7 +744,8 @@ web/
   borrowPane.ts             the steps, each one reading back what the chain says rather than
                             what the page thinks
   serve.ts                  a static server, and nothing else — no key, no indexer, no cache
-  build-static.ts           the published build: three files, no server, ABIs baked in
+  og.png                    the page, photographed by tests/shots.ts — what a link preview shows
+  build-static.ts           the published build: three files and a picture, no server, ABIs baked in
   tests/console.spec.ts     Playwright, against the live chain: no fixtures, no stubs
   tests/static.spec.ts      the published build asks its host for nothing but its own files
   tests/a11y.spec.ts        axe over the rendered page; WCAG A/AA, zero violations
