@@ -200,10 +200,26 @@ jobs:
 
       - run: npm ci
 
+      # Both steps go through npm rather than calling halmos here, because the build they need is
+      # not the default one and the reason is worth keeping next to the command that encodes it.
+      #
+      # forge 1.8.0 turns `dynamic_test_linking` on by default: instead of embedding a contract's
+      # creation code in the test that deploys it, it extracts the code and rewrites
+      # `new UtuhRegistry(25)` into a call to the `deployCode(string,bytes)` cheatcode. Test
+      # bytecode gets much smaller — the probe that found this went from 14 kilobytes to 753
+      # bytes — and halmos does not implement that cheatcode. It knows the selector well enough to
+      # print its name and no further, so `setUp()` failed on its first deployment and every proof
+      # underneath was reported failed without being attempted.
+      #
+      # That is why this job was red on every nightly from the day it was written while the
+      # ordering key stayed green on pushes: that one proves a pure library function and deploys
+      # nothing, so nothing was rewritten. `npm run symbolic:build` compiles with
+      # --no-dynamic-test-linking into its own artifact directory, which keeps the deploy path's
+      # artifacts and the gas snapshot exactly as they were.
       - name: prove the ordering key
         run: |
           pip install halmos
-          halmos --contract EventScopeKeySymbolic
+          npm run symbolic
 
       # The rounding proofs divide, and 256-bit division is what the solver finds hard — minutes
       # rather than seconds, and narrowing the input does not help because the division happens at
@@ -211,7 +227,7 @@ jobs:
       # than on every push.
       - name: prove the roundings
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        run: halmos --contract CreditRoundingSymbolic --solver-timeout-assertion 600000
+        run: npm run symbolic:deep
 
   live:
     # A daily check that the chain still behaves the way this is built on. It proves real Ethereum

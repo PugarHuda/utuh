@@ -47,8 +47,9 @@
     "format": "prettier --write \"offchain/**/*.ts\"",
     "format:check": "prettier --check \"offchain/**/*.ts\"",
     "deadcode": "knip",
-    "symbolic": "halmos --contract EventScopeKeySymbolic",
-    "symbolic:deep": "halmos --contract CreditRoundingSymbolic --solver-timeout-assertion 600000"
+    "symbolic": "npm run symbolic:build && halmos --forge-build-out out-halmos --contract EventScopeKeySymbolic",
+    "symbolic:deep": "npm run symbolic:build && halmos --forge-build-out out-halmos --contract CreditRoundingSymbolic --solver-timeout-assertion 600000",
+    "symbolic:build": "forge build --no-dynamic-test-linking --ast --out out-halmos"
   },
   "dependencies": {
     "@gluwa/usc-contracts": "^0.1.2",

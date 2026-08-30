@@ -16,7 +16,7 @@ import {EventScope} from "../src/lib/EventScope.sol";
 ///      checked exhaustively: halmos explores the whole input space symbolically and either
 ///      returns a counterexample or proves there is none. Run with:
 ///
-///        halmos --contract EventScopeKeySymbolic
+///        npm run symbolic
 ///
 ///      It is deliberately a separate file. halmos is a Python tool and not part of `npm run
 ///      check`, so nothing here is allowed to affect `forge test`, which is why every function is

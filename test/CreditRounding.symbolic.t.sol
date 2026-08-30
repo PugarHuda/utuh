@@ -17,7 +17,7 @@ import {CreditFixture} from "./support/CreditFixture.sol";
 ///      `forge test` fuzzes these. halmos proves them, which is the difference between no
 ///      counterexample found and no counterexample existing:
 ///
-///        halmos --contract CreditRoundingSymbolic
+///        npm run symbolic:deep
 contract CreditRoundingSymbolic is Test, CreditFixture {
     UtuhCredit internal credit;
 
