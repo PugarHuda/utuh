@@ -5,7 +5,13 @@ import { expect, test } from '@playwright/test';
 /// `npm run web` has a server behind it, and a server is a thing that can quietly become load
 /// bearing — serving an ABI, answering for a deployment, caching a claim. The published build has
 /// no server at all, so these tests assert the absence: the page boots, reads the live chain, and
-/// never asks its host for anything but the three files it was given.
+/// never asks its host for anything but the files it was given.
+///
+/// The list below is exact on purpose. It is not a count to be bumped whenever the page grows an
+/// asset: every entry is a file a static host hands over unchanged, and anything that appears here
+/// which a host would have to *compute* — an ABI, a deployment record, a claim — is the regression
+/// this test exists to catch. The webfont joined it when the console got its own typeface, and it
+/// is self-hosted for the same reason the rest of this is: no third party is on the critical path.
 
 test('boots with no server behind it', async ({ page }) => {
   const asked: string[] = [];
@@ -25,8 +31,8 @@ test('boots with no server behind it', async ({ page }) => {
   expect(Number(await page.locator('#cc3-block').innerText())).toBeGreaterThan(1_000_000);
   await expect(page.locator('[data-testid=attestcoin-table]')).toContainText('Ethereum');
 
-  // And nothing was asked of the host beyond the three files a static host serves.
-  expect(asked.sort()).toEqual(['/static/', '/static/main.js', '/static/style.css']);
+  // And nothing was asked of the host beyond the files a static host serves.
+  expect(asked.sort()).toEqual(['/static/', '/static/fonts/archivo.woff2', '/static/main.js', '/static/style.css']);
   expect(errors, `console errors: ${errors.join(' | ')}`).toHaveLength(0);
 });
 

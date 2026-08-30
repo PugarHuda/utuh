@@ -42,8 +42,8 @@ function link(address: string): HTMLElement {
   return a;
 }
 
-function row(cells: (string | HTMLElement)[], head = false): HTMLElement {
-  const tr = el('tr');
+function row(cells: (string | HTMLElement)[], head = false, className?: string): HTMLElement {
+  const tr = el('tr', className);
   for (const c of cells) {
     const td = el(head ? 'th' : 'td');
     if (typeof c === 'string') td.textContent = c;
@@ -55,14 +55,22 @@ function row(cells: (string | HTMLElement)[], head = false): HTMLElement {
   return tr;
 }
 
-function table(head: string[], rows: (string | HTMLElement)[][], testid: string): HTMLElement {
+/// `rowClass` names the state of a row for the stylesheet. A refuted claim is drawn as a struck
+/// frame — still on the sheet, visibly crossed out — and nothing in a row of formatted strings
+/// tells CSS which one that is, so the caller that knows the status says so here.
+function table(
+  head: string[],
+  rows: (string | HTMLElement)[][],
+  testid: string,
+  rowClass?: (index: number) => string | undefined,
+): HTMLElement {
   const t = el('table');
   t.dataset.testid = testid;
   const thead = el('thead');
   thead.appendChild(row(head, true));
   t.appendChild(thead);
   const tbody = el('tbody');
-  for (const r of rows) tbody.appendChild(row(r));
+  rows.forEach((r, i) => tbody.appendChild(row(r, false, rowClass?.(i))));
   t.appendChild(tbody);
   return t;
 }
@@ -253,6 +261,8 @@ async function renderRegistry(): Promise<void> {
         ],
         rows,
         'claims-table',
+        // Status 4 is Refuted — the claim somebody broke. See offchain/lib/status.ts.
+        (i) => (claims[i]?.status === 4 ? 'struck' : undefined),
       ),
       el(
         'p',

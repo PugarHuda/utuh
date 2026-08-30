@@ -28,6 +28,7 @@ const TYPES: Record<string, string> = {
   '.map': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.woff2': 'font/woff2',
 };
 
 /// Which artifacts the page may read, by name. An allowlist rather than a path join, because the
@@ -75,6 +76,9 @@ async function main(): Promise<void> {
         if (path === '/' || path === '/index.html') return await serveFile(join(WEB, 'index.html'), res);
         if (path === '/style.css') return await serveFile(join(WEB, 'style.css'), res);
         if (path === '/og.png') return await serveFile(join(WEB, 'og.png'), res);
+        // The one webfont. Named rather than path-joined, for the same reason the ABIs are: an
+        // allowlist serves what it was told to and a join serves whatever the caller can spell.
+        if (path === '/fonts/archivo.woff2') return await serveFile(join(WEB, 'fonts', 'archivo.woff2'), res);
         if (path === '/dist/main.js' || path === '/dist/main.js.map') {
           return await serveFile(join(WEB, 'dist', path.slice('/dist/'.length)), res);
         }
@@ -87,6 +91,9 @@ async function main(): Promise<void> {
         }
         if (path === '/static/main.js' || path === '/static/style.css') {
           return await serveFile(join(STATIC, path.slice('/static/'.length)), res);
+        }
+        if (path === '/static/fonts/archivo.woff2') {
+          return await serveFile(join(STATIC, 'fonts', 'archivo.woff2'), res);
         }
 
         if (path.startsWith('/abi/')) {

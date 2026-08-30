@@ -1,25 +1,84 @@
-:root {
-  --ink: #10161d;
-  --dim: #5c6773;
-  --line: #dfe4ea;
-  --bg: #fbfcfd;
-  --panel: #ffffff;
-  --accent: #1d4ed8;
-  --bad: #b42318;
-  --good: #067647;
-  color-scheme: light dark;
+/* Utuh console — the contact sheet.
+ *
+ * A proof sheet prints every frame the roll holds, in order, each one numbered along the film's
+ * edge. You read it to find what is *not* there: the frame that was never printed leaves a numbered
+ * gap, and the gap is the finding. That is this product's whole mechanism made visual, so the page
+ * is built as a strip — a perforated film edge running down the side, each pane a frame carrying
+ * its own rebate number, and the one accent on the sheet is the chinagraph pencil an editor marks
+ * frames with.
+ *
+ * Operate mode: one family, a fixed rem scale, restrained colour, density where the data wants it.
+ * The world lives in the strip, the numbering, the edge printing and the mark — never in ornament
+ * over the data.
+ */
+
+/* Archivo, variable on both axes. Self-hosted rather than linked, because a page whose argument is
+ * that it needs no server should not open a connection to a font CDN to render its own name. The
+ * width axis is what earns the file: 68% is the condensed voice of film-edge printing, 100% is the
+ * workhorse the interface is set in, and both come out of one 88 KB download. */
+@font-face {
+  font-family: 'Archivo';
+  src: url('./fonts/archivo.woff2') format('woff2-variations');
+  font-weight: 400 700;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
 }
 
-@media (prefers-color-scheme: dark) {
+:root {
+  /* The scene is a darkroom, not a category. Contact sheets are read under a loupe on a lit
+     surface with the room down, and this page's own reader is a watcher scanning block ranges at
+     night. So the ground is a warm gelatin black and the frames are the lit part. */
+  --ground: #100e0c;
+  --sheet: #17140f;
+  --frame: #201c17;
+  --raise: #272219;
+  --rebate: #342d24;
+  --ink: #efe8dc;
+  --dim: #a2968a;
+  --accent: #ff6a2c;
+  --accent-quiet: #b8471a;
+  --good: #8fbf6f;
+  --bad: #ff5f52;
+  /* What sits ON the accent. In the dark scene the ground itself is the right ink for it; in the
+     light one the paper is only 3.8:1 against the chinagraph, so text there goes near-white. */
+  --on-accent: var(--ground);
+
+  --face: 'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --data: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  /* Fixed rem steps at ~1.16, per Operate. Nothing here is fluid: the page is read at a desk. */
+  --t-edge: 0.688rem;
+  --t-small: 0.813rem;
+  --t-data: 0.844rem;
+  --t-body: 0.938rem;
+  --t-lead: 1.063rem;
+  --t-frame: 1.188rem;
+  --t-title: 2rem;
+
+  --rail: 2.75rem;
+  --gap: 1.5rem;
+  --radius: 3px;
+
+  color-scheme: dark light;
+}
+
+@media (prefers-color-scheme: light) {
   :root {
-    --ink: #e6edf3;
-    --dim: #93a1b0;
-    --line: #232b35;
-    --bg: #0c1116;
-    --panel: #121820;
-    --accent: #7aa2f7;
-    --bad: #f87171;
-    --good: #4ade80;
+    /* The same sheet on a light box rather than in the dark: paper warms, ink stays photographic,
+       and the chinagraph darkens enough to hold 4.5:1 on the frame it marks. */
+    --ground: #ddd7cc;
+    --sheet: #ebe6db;
+    --frame: #f7f4ed;
+    --raise: #fffdf8;
+    --rebate: #cdc4b4;
+    --ink: #17130f;
+    --dim: #635a4e;
+    --accent: #bc3f08;
+    --accent-quiet: #98330a;
+    --good: #3f6b28;
+    --bad: #b3271b;
+    --on-accent: #fffdf8;
   }
 }
 
@@ -27,52 +86,138 @@
   box-sizing: border-box;
 }
 
+html {
+  background: var(--ground);
+}
+
 body {
   margin: 0;
-  padding: 0 1.25rem 4rem;
-  background: var(--bg);
+  padding: 0 1.5rem 5rem;
+  background: var(--ground);
   color: var(--ink);
-  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--face);
+  font-size: var(--t-body);
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The surfaces nobody draws still belong to the design. A page that leaves the caret, the
+   selection and the scrollbar at their browser defaults was assembled rather than built. */
+::selection {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+:root {
+  scrollbar-color: var(--rebate) transparent;
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--rebate);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-quiet);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+input,
+select,
+textarea {
+  caret-color: var(--accent);
+}
+
+/* Edge printing: the manufacturer's mark down the side of a film strip. Condensed, uppercase,
+   widely tracked, small. Every label on this page that is a marking rather than a sentence. */
+.edge,
+th,
+.chip,
+legend {
+  font-stretch: 68%;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  font-size: var(--t-edge);
+  font-weight: 600;
 }
 
 .skip a {
   position: absolute;
   left: -200vw;
   top: 0.5rem;
-  padding: 0.4rem 0.8rem;
-  background: var(--panel);
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 7px;
-  z-index: 10;
+  padding: 0.45rem 0.9rem;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: var(--radius);
+  font-weight: 600;
+  z-index: 20;
+  text-decoration: none;
 }
 
 .skip a:focus {
-  left: 1rem;
+  left: 1.5rem;
 }
 
+/* ---------------------------------------------------------------- the sheet's head */
+
 header {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 2.5rem 0 1.25rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
-  align-items: flex-start;
+  gap: 1.5rem;
+  align-items: flex-end;
   justify-content: space-between;
-  padding: 1.75rem 0 1.25rem;
-  border-bottom: 1px solid var(--line);
-  max-width: 1100px;
-  margin: 0 auto;
+  border-bottom: 1px solid var(--rebate);
 }
 
 h1 {
   margin: 0;
-  font-size: 1.9rem;
-  letter-spacing: -0.02em;
+  font-size: var(--t-title);
+  font-weight: 700;
+  font-stretch: 84%;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+/* The roll's own edge marking, set beside the name the way a film brand sits beside its frame
+   count. It says what the word means, which is the one piece of poetry the product was given. */
+h1::after {
+  content: '· whole, intact, nothing missing';
+  display: block;
+  margin-top: 0.5rem;
+  font-size: var(--t-edge);
+  font-stretch: 68%;
+  font-weight: 500;
+  letter-spacing: 0.13em;
+  color: var(--dim);
 }
 
 .sub {
-  margin: 0.35rem 0 0;
-  max-width: 60ch;
+  margin: 0.75rem 0 0;
+  max-width: 62ch;
   color: var(--dim);
+  font-size: var(--t-lead);
+  line-height: 1.5;
+  text-wrap: pretty;
 }
 
 .chip-row {
@@ -83,48 +228,124 @@ h1 {
 }
 
 .chip {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0.25rem 0.7rem;
-  font-size: 0.82rem;
+  border: 1px solid var(--rebate);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.6rem;
   color: var(--dim);
-  background: var(--panel);
+  background: var(--sheet);
 }
 
 .chip b {
   color: var(--ink);
-  font-variant-numeric: tabular-nums;
+  font-stretch: 100%;
+  letter-spacing: 0;
+  font-size: var(--t-data);
+  font-family: var(--data);
+  margin-left: 0.4rem;
 }
 
+/* ---------------------------------------------------------------- the strip */
+
 main {
-  max-width: 1100px;
+  max-width: 1180px;
   margin: 0 auto;
+  padding-top: var(--gap);
   display: grid;
-  gap: 1.25rem;
-  padding-top: 1.25rem;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+  gap: var(--gap);
+  position: relative;
+}
+
+/* The perforated film edge. Holes are punched out of the rebate strip in the ground's own colour,
+   so the rail reads as material with something taken out of it rather than as a dotted border.
+   Positioned rather than placed in the grid: `grid-row: 1 / -1` counts lines of the *explicit*
+   grid, and these rows are implicit, so a grid-placed rail collapses to the height of one frame. */
+main::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: var(--gap);
+  bottom: 0;
+  width: var(--rail);
+  border-radius: var(--radius);
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 9px, var(--ground) 9px 25px, transparent 25px 34px) no-repeat,
+    var(--rebate);
+  background-size:
+    14px 100%,
+    100% 100%;
+  background-position:
+    center top,
+    0 0;
 }
 
 section {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 1.1rem 1.25rem 1.25rem;
-  /* A grid item is `min-width: auto` by default, so a table wider than the column makes the
-     column wider — and the page, and the window. The tables scroll inside `.body`; this is what
-     lets them. */
+  grid-column: 2;
+  position: relative;
+  background: var(--frame);
+  border: 1px solid var(--rebate);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.4rem 1.4rem;
   min-width: 0;
+  transition:
+    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The rebate number for this frame, printed on the film edge beside it. On a contact sheet this
+   is how you know which frame is missing — the numbering is the mechanism, not decoration. */
+section::before {
+  content: attr(data-frame);
+  position: absolute;
+  top: 1.3rem;
+  /* Back out both the rail and the grid gap, so the number prints on the film edge itself rather
+     than bulging off its inner side. */
+  left: calc(-1 * (var(--rail) + var(--gap)));
+  width: var(--rail);
+  text-align: center;
+  font-stretch: 68%;
+  font-size: var(--t-edge);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  background: var(--ground);
+  padding: 0.35rem 0;
+  transition: color 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The authored moment, and the only one: putting a frame in play marks its number in chinagraph,
+   the way an editor rings the frame they are going to print. */
+section:hover,
+section:focus-within {
+  border-color: var(--accent-quiet);
+  background: var(--raise);
+}
+
+section:hover::before,
+section:focus-within::before {
+  color: var(--accent);
 }
 
 h2 {
-  margin: 0 0 0.6rem;
-  font-size: 1.05rem;
-  letter-spacing: -0.01em;
+  margin: 0 0 0.5rem;
+  font-size: var(--t-frame);
+  font-weight: 700;
+  font-stretch: 88%;
+  letter-spacing: 0.005em;
+  text-wrap: balance;
 }
 
 .note {
   color: var(--dim);
-  margin: 0.4rem 0 0.8rem;
-  max-width: 78ch;
+  margin: 0.35rem 0 1rem;
+  max-width: 74ch;
+  text-wrap: pretty;
+}
+
+.note em {
+  color: var(--ink);
+  font-style: normal;
+  font-weight: 600;
 }
 
 .body {
@@ -132,64 +353,136 @@ h2 {
   min-width: 0;
 }
 
+/* ---------------------------------------------------------------- data */
+
 table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 0.88rem;
+  font-size: var(--t-data);
 }
 
 th,
 td {
   text-align: left;
-  padding: 0.45rem 0.7rem 0.45rem 0;
-  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.9rem 0.5rem 0;
+  border-bottom: 1px solid var(--rebate);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
 th {
   color: var(--dim);
-  font-weight: 500;
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  border-bottom-color: var(--dim);
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr {
+  transition: background-color 140ms ease-out;
+}
+
+tbody tr:hover {
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+
+/* A refuted claim is the struck frame: the one the editor crossed out because it did not hold.
+   The rule is drawn through the row rather than the row being merely tinted, because the point of
+   a contact sheet is that a rejected frame stays on the sheet, visibly rejected. */
+tbody tr.struck td {
+  color: var(--dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--bad);
+  text-decoration-thickness: 1.5px;
+}
+
+tbody tr.struck td:first-child {
+  color: var(--bad);
+  text-decoration: none;
+  font-weight: 700;
 }
 
 a.addr {
   color: var(--accent);
   text-decoration: none;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-family: var(--data);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
 }
 
 a.addr:hover {
   text-decoration: underline;
 }
 
+code {
+  font-family: var(--data);
+  font-size: 0.92em;
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------- controls */
+
 .controls {
   display: flex;
   gap: 0.6rem;
   flex-wrap: wrap;
-  margin-bottom: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+select,
+input,
+button.act {
+  font-family: var(--face);
+  font-size: var(--t-small);
+  border: 1px solid var(--rebate);
+  background: var(--sheet);
+  color: var(--ink);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.85rem;
+  transition:
+    border-color 150ms ease-out,
+    color 150ms ease-out,
+    background-color 150ms ease-out;
 }
 
 select,
 button.act {
-  font: inherit;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--ink);
-  border-radius: 7px;
-  padding: 0.4rem 0.8rem;
   cursor: pointer;
 }
 
-button.act:hover:not(:disabled) {
+input {
+  min-width: 12rem;
+  flex: 1 1 12rem;
+  font-family: var(--data);
+}
+
+button.act {
+  font-stretch: 78%;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-weight: 700;
+}
+
+button.act:hover:not(:disabled),
+select:hover,
+input:hover {
   border-color: var(--accent);
+}
+
+button.act:hover:not(:disabled) {
   color: var(--accent);
+  background: var(--raise);
+}
+
+button.act:active:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
 }
 
 button.act:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -198,74 +491,88 @@ button.danger:hover:not(:disabled) {
   color: var(--bad);
 }
 
+button.danger:active:not(:disabled) {
+  background: var(--bad);
+  color: var(--on-accent);
+  border-color: var(--bad);
+}
+
 .actions {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
-  margin-top: 0.8rem;
+  margin-top: 1rem;
 }
+
+/* ---------------------------------------------------------------- log */
 
 .log {
-  margin-top: 0.8rem;
+  margin-top: 1rem;
   max-height: 22rem;
   overflow-y: auto;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 0.6rem 0.8rem;
-  font: 12.5px/1.5 ui-monospace, "SFMono-Regular", Menlo, monospace;
+  background: var(--ground);
+  border: 1px solid var(--rebate);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+  font-family: var(--data);
+  font-size: var(--t-data);
+  line-height: 1.5;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-.log:empty::before {
-  content: "nothing swept yet";
+.log:empty::before,
+#borrow-log:empty::before {
   color: var(--dim);
 }
 
+.log:empty::before {
+  content: 'nothing swept yet';
+}
+
 #borrow-log:empty::before {
-  content: "nothing built yet";
+  content: 'nothing built yet';
 }
 
 .line {
   padding: 0.05rem 0;
 }
 
+/* ---------------------------------------------------------------- borrow steps */
+
 .step {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.7rem 0.9rem;
-  margin-bottom: 0.7rem;
+  border: 1px solid var(--rebate);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+  background: var(--sheet);
 }
 
 .step.done {
-  opacity: 0.72;
+  opacity: 0.6;
 }
 
 .step-title {
-  margin: 0 0 0.35rem;
-  font-size: 0.95rem;
+  margin: 0 0 0.4rem;
+  font-size: var(--t-body);
+  font-weight: 700;
+  font-stretch: 88%;
 }
 
 .calldata {
-  margin: 0.4rem 0;
-  padding: 0.5rem 0.7rem;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  font: 12.5px/1.5 ui-monospace, "SFMono-Regular", Menlo, monospace;
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.8rem;
+  background: var(--ground);
+  border: 1px solid var(--rebate);
+  border-radius: var(--radius);
+  font-family: var(--data);
+  font-size: var(--t-data);
+  line-height: 1.5;
   overflow-x: auto;
+  overflow-wrap: anywhere;
 }
 
-input {
-  font: inherit;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--ink);
-  border-radius: 7px;
-  padding: 0.4rem 0.6rem;
-  min-width: 12rem;
-  flex: 1 1 12rem;
-}
+/* ---------------------------------------------------------------- state */
 
 .good {
   color: var(--good);
@@ -279,13 +586,75 @@ input {
   display: none;
 }
 
-footer {
-  max-width: 1100px;
-  margin: 1.5rem auto 0;
-  color: var(--dim);
-  font-size: 0.85rem;
+#boot-error {
+  max-width: 1180px;
+  margin: 1rem auto 0;
 }
 
-code {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+#boot-error:not(:empty) {
+  border: 1px solid var(--bad);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  background: color-mix(in oklab, var(--bad) 12%, var(--frame));
+  color: var(--ink);
+}
+
+footer {
+  max-width: 1180px;
+  margin: 2.5rem auto 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rebate);
+  color: var(--dim);
+  font-size: var(--t-small);
+  max-inline-size: 78ch;
+}
+
+/* ---------------------------------------------------------------- narrow */
+
+@media (max-width: 720px) {
+  body {
+    padding: 0 1rem 4rem;
+  }
+
+  main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* No room for a rail beside the strip, so the perforation runs along the top of each frame and
+     the rebate number sits in the frame's own corner. Still edge printing; a different edge. */
+  main::before {
+    display: none;
+  }
+
+  section {
+    /* The frames sit in the only column there is. Without this they keep the two-column layout's
+       `grid-column: 2`, which conjures an implicit second column, indents every frame by a rail
+       that is no longer drawn, and pushes the strip off the right edge of the phone. */
+    grid-column: 1;
+    padding-top: 1.6rem;
+  }
+
+  section::before {
+    top: 0;
+    left: auto;
+    right: 0;
+    width: auto;
+    padding: 0.2rem 0.7rem;
+    background: var(--rebate);
+    color: var(--ink);
+    border-radius: 0 var(--radius) 0 var(--radius);
+  }
+
+  header {
+    padding-top: 1.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

@@ -26,14 +26,32 @@
     />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://pugarhuda.github.io/utuh/og.png" />
-    <meta name="theme-color" content="#1d4ed8" />
+    <meta name="theme-color" content="#100e0c" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ddd7cc" media="(prefers-color-scheme: light)" />
+    <!-- The one face the page loads, self-hosted. Preloaded because it sets every label on the
+         sheet and a swap after first paint would reflow the whole strip. -->
+    <link rel="preload" href="./fonts/archivo.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/style.css" />
     <link
       rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='14'>⛓</text></svg>"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23100e0c'/><rect x='2.5' y='2' width='11' height='12' rx='1' fill='none' stroke='%23ff6a2c' stroke-width='1.4'/><rect x='4.6' y='4.4' width='6.8' height='3.1' fill='%23ff6a2c'/><rect x='4.6' y='8.9' width='6.8' height='3.1' fill='none' stroke='%23ff6a2c' stroke-width='1.1' stroke-dasharray='2 1.6'/></svg>"
     />
   </head>
   <body data-state="loading">
+    <!--
+      THESIS: a claim is only worth what someone can break, so the page is the contact sheet a
+      watcher scans for the frame that is missing. It refuses the crypto-console default of
+      near-black plus a neon glow, and the editorial-fintech default that is its opposite.
+      OWN-WORLD: warm gelatin black, photographic paper neutrals, one chinagraph orange; a
+      perforated film-edge rail down the strip, frames carrying rebate numbers, condensed
+      uppercase edge printing, tabular data, a struck rule through a refuted row.
+      STORY: this is live, it is adversarial, and a stranger can break it from here.
+      FIRST VIEWPORT: name and roll marking upper-left, chain and wallet chips upper-right, then
+      the strip: attested chains, deployment, claims, with the sweep control the primary action.
+      FORM: contact sheet, index 7 of the ordered list, seed key e58d01d5.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review,
+      the verdict, DESIGN.md, and every shipping raster carrying its provenance.
+    -->
     <!-- Seventy-odd links sit between the top of the page and the one button that matters to a
          keyboard user. These are invisible until focused, and the first Tab lands on them. -->
     <nav class="skip" aria-label="skip links">
@@ -63,17 +81,17 @@
     <p id="boot-error" class="bad"></p>
 
     <main>
-      <section>
+      <section data-frame="12">
         <h2>What Creditcoin can read</h2>
         <div id="attestcoin-body" class="body">reading the ChainInfo precompile…</div>
       </section>
 
-      <section>
+      <section data-frame="12A">
         <h2>Deployment</h2>
         <div id="addresses" class="body">…</div>
       </section>
 
-      <section>
+      <section data-frame="13">
         <h2>Claims</h2>
         <p class="note">
           A claim asserts that a set of source-chain events is <em>complete</em>. Every member was verified by the
@@ -84,7 +102,7 @@
         <div id="actions" class="actions"></div>
       </section>
 
-      <section>
+      <section data-frame="13A">
         <h2>Watch</h2>
         <p class="note">
           This is the part that has to be real. The sweep below runs in your browser, against independent public
@@ -100,7 +118,7 @@
         <div id="log" class="log" data-testid="log"></div>
       </section>
 
-      <section>
+      <section data-frame="14">
         <h2>Borrow</h2>
         <p class="note">
           The whole underwriting, from this page: bind your Ethereum address, build the two claims, wait out their
@@ -110,7 +128,7 @@
         <div id="borrow-log" class="log" data-testid="borrow-log"></div>
       </section>
 
-      <section>
+      <section data-frame="14A">
         <h2>Credit</h2>
         <p class="note">
           Nothing bridges. The history stays on Ethereum, the credit is issued in CTC on Creditcoin, repayment happens

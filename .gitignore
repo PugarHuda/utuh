@@ -11,3 +11,11 @@ playwright-report/
 test-results/
 web/static/
 out-halmos/
+
+# The Impeccable design tooling, vendored by `npx impeccable install` into the harness directory it
+# detected. It is 3.5 MB of somebody else's tool, reinstallable in one command, and no part of the
+# build or CI reads it. What it *produced* — PRODUCT.md, DESIGN.md and .impeccable/ — is committed,
+# because that is this project's own design record.
+.github/skills/
+.github/agents/
+.github/hooks/
