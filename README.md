@@ -115,6 +115,10 @@ registries have seen, against the call's own calldata gas and its member count:
     1.51 x the call's own calldata gas   (1.00 would be exact)
    81,427 gas per member on top of its bytes
   worst residual 294,878 gas, 32% of the mean append
+
+each append carried median 94, 2..394 continuity hashes and median 16, 8..78 Merkle siblings
+  charging the bytes at their own EVM price, 62 gas per continuity hash:
+  5,866 gas at the median, 0.6% of the mean append
 ```
 
 The calldata term is the solid one, and it is the interesting one: **a proven transaction costs
@@ -132,6 +136,20 @@ and bytes are correlated in this data (more members generally means more bytes),
 two needs appends this repo has not made: many members with small transactions, and few with large
 ones. What the data does support is the shape — fixed cost, a dominant per-byte cost, and some
 per-member cost on top — not a precise value for the last of those.
+
+The obvious missing term is the continuity proof, and it is instructive that it stays out. The
+protocol prices verification almost entirely by it: the published figure is `2.3e-5 + 2.9e-7 ×
+hashes` CTC, so at the median proof here the hashes are more than half of what the precompile
+charges. A fourth regressor for them fits better — worst residual 32% of a mean append down to
+16% — and reports **minus 860 gas a hash**. A hashing operation cannot pay you. Every hash is 32
+bytes of the same calldata the second term already charges for, so given nothing of its own to
+explain it trades against that term instead, dragging it to 2.21×; reparameterised until both
+coefficients are positive it prices a root byte at 0.53×, under the floor a byte can cost. So the
+hashes are measured rather than fitted: hold every byte at its own EVM price, fit only what is
+left, and the hashing comes out at **62 gas each** — three specifications agree to within a gas,
+and a keccak of two words is 42, so the number is the operation rather than an artifact. The
+median append carries 94 of them and spends 5,866 gas on them, **0.6% of itself**. The term that
+dominates what the precompile charges is not the term that prices the claim.
 
 The practical ceiling is therefore set by bytes:
 
@@ -1250,7 +1268,7 @@ they happen, recorded by the network rather than by us.
 - Claim members are held as a storage array so refutation is a binary search the chain runs
   itself, with no witness a claimant could withhold. What caps a claim is not that array, though —
   measured, the cost follows the _bytes of the transactions being proven_ at about twice their
-  calldata gas, and a ten-thousand-event claim is thirty blocks' worth. Beyond the point where
+  calldata gas, and a ten-thousand-event claim is forty blocks' worth. Beyond the point where
   that is affordable, the array becomes an incremental Merkle root and the refuter supplies an
   adjacency proof of the two members bracketing the gap.
 - Writability is still in third-party audit and not on testnet, so Utuh is read-side only. A
