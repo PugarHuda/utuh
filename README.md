@@ -1425,4 +1425,4 @@ the same question` — as a third verdict beside ok and FAIL: useful to the unio
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE); every Solidity file carries the matching SPDX header.
