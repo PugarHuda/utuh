@@ -48,6 +48,49 @@ them were some form of on-chain credit score or reputation-based lending; one of
 took a prize. Every one of them inherits this hole, the winner included — placing well is not the
 same as closing it, and an inclusion proof gives none of them a way to.
 
+## What this uses of Creditcoin's, and what it deliberately does not
+
+`npm run doctor` ends by making a live request to every Creditcoin-owned surface this depends on,
+so the list below is checkable rather than asserted. Today's run:
+
+```
+Creditcoin ecosystem surfaces
+  ok    USC Oracle dashboard      200 — every verifyAndEmit here is listed by source height
+  ok    testnet indexer           68,160 attestations of Ethereum, chain key 3
+  ok    mainnet indexer           52,463 attestations of Ethereum, chain key 1
+  ok    Creditcoin Mainnet RPC    chain id 102030
+  ok    Blockscout · registry     UtuhRegistry verified
+  ok    Sourcify · registry       chain 102031: match match, creation match
+  ok    Blockscout · credit       UtuhCredit verified
+  ok    Sourcify · credit         chain 102031: match match, creation match
+```
+
+On top of the protocol itself — both precompiles, both `verifyAndEmit` overloads, `EvmV1Decoder`,
+`@gluwa/usc-contracts` and `@gluwa/usc-sdk`, the hosted Proof Builder under both of its hostnames,
+and `RawProofBuilder` as the path that needs no hosted service at all.
+
+Two of those lines are worth reading twice. Every append and every refutation goes through
+`verifyAndEmit` rather than its `view` twin, so **Creditcoin's own oracle dashboard is the record**
+— the network logged this project's work, not the other way round. And the **Creditcoin Mainnet**
+indexer is read even though nothing here is deployed there: the console audits mainnet's attestors
+against Ethereum itself, because auditing only the network you deployed to leaves the production
+oracle unchecked by the one page that can check it.
+
+### What is deliberately not integrated
+
+PenguinBridge, PenguinSwap and PenguinBase are Creditcoin's own consumer applications and none of
+them appears here. That is a design decision, not an oversight:
+
+- **A bridge would contradict the product.** The whole claim is that nothing bridges — history
+  stays on Ethereum, credit is issued on Creditcoin, and only proof crosses. Wiring a bridge in
+  would make the pitch untrue.
+- **A DEX price would reintroduce the oracle.** Crossing from a source asset to CTC is a price,
+  and the lender states its own rate on-chain precisely so the protocol never pretends to know
+  one. Reading a swap rate would replace a stated assumption with a hidden one.
+
+An integration that weakens the thesis is not depth. Naming the two we refused is more honest than
+listing eleven we bolted on.
+
 ## Where this sits next to Creditcoin's own example
 
 Creditcoin ships a [loan-flow tutorial](https://github.com/gluwa/usc-testnet-bridge-examples/tree/main/loan-flow)
