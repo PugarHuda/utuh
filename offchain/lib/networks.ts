@@ -151,7 +151,39 @@ export const ORACLE_DASHBOARD = 'https://dashboard.cc3-testnet.creditcoin.networ
 /// hash it attested for Ethereum block N, ask an independent Ethereum endpoint what the hash of
 /// block N actually is, and compare. That is this project's own argument turned one level down:
 /// a claim is only worth what someone can check, including the oracle's.
-export const ATTESTATIONS_GRAPHQL = 'https://attestations-graphql.cc3-testnet.creditcoin.network/graphql';
+/// Both Creditcoin networks publish one, and both are audited here.
+///
+/// The contracts live on CC3 Testnet, but Creditcoin *Mainnet* attests Ethereum mainnet too — the
+/// same chain, by a different set of attestors, under a different chain key. Auditing only the
+/// network this deployment sits on would leave the production oracle unchecked by the one page
+/// that can check it, and would miss the strongest evidence either network is real: two
+/// independent attestor sets signing the same Ethereum headers, checked from a browser against
+/// Ethereum itself.
+///
+/// The chain keys differ between them and that is the whole reason `chainKey` is never assumed.
+/// On CC3 Testnet, Ethereum mainnet is key 3 and Sepolia is key 1. On CC3 Mainnet, Ethereum
+/// mainnet is key 1 — the same number that means Sepolia on testnet. Both read live from
+/// `get_supported_chains()` and stated in the Attestcoin docs' environment pages.
+export interface AttestationIndexer {
+  /// What to call the Creditcoin network in the interface.
+  label: string;
+  graphql: string;
+  /// The chain key Ethereum mainnet has *on that network*.
+  ethereumKey: number;
+}
+
+export const ATTESTATION_INDEXERS: { testnet: AttestationIndexer; mainnet: AttestationIndexer } = {
+  testnet: {
+    label: 'Creditcoin CC3 Testnet',
+    graphql: 'https://attestations-graphql.cc3-testnet.creditcoin.network/graphql',
+    ethereumKey: 3,
+  },
+  mainnet: {
+    label: 'Creditcoin Mainnet',
+    graphql: 'https://attestations-graphql.cc3-mainnet-usc.creditcoin.network/graphql',
+    ethereumKey: 1,
+  },
+};
 
 /// Well-known mainnet fixtures used by the demo flows.
 export const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';

@@ -1,4 +1,4 @@
-import { ATTESTATIONS_GRAPHQL } from './networks';
+import type { AttestationIndexer } from './networks';
 
 /// What Creditcoin's attestors signed, read from the public attestation indexer.
 ///
@@ -27,6 +27,7 @@ interface GqlResponse {
 
 /// The most recent attestations for a source chain, newest first.
 export async function recentAttestations(
+  indexer: AttestationIndexer,
   chainKey: number,
   first = 6,
   timeoutMs = 15_000,
@@ -41,7 +42,7 @@ export async function recentAttestations(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(ATTESTATIONS_GRAPHQL, {
+    const res = await fetch(indexer.graphql, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ query }),
@@ -66,11 +67,11 @@ export async function recentAttestations(
 }
 
 /// How many attestors the network has registered. The quorum is a subset of this.
-export async function attestorCount(timeoutMs = 15_000): Promise<number> {
+export async function attestorCount(indexer: AttestationIndexer, timeoutMs = 15_000): Promise<number> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(ATTESTATIONS_GRAPHQL, {
+    const res = await fetch(indexer.graphql, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ query: '{ attestors { totalCount } }' }),

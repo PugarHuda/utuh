@@ -1,6 +1,13 @@
 import { Contract, formatEther, parseEther, toUtf8String, type Signer } from 'ethers';
 import { claimStatus, lineStatus } from '../offchain/lib/status';
-import { CHAIN_NAME, ORACLE_DASHBOARD, SOURCE_EXPLORER, requireChainKey } from '../offchain/lib/networks';
+import {
+  ATTESTATION_INDEXERS,
+  CHAIN_NAME,
+  ORACLE_DASHBOARD,
+  SOURCE_EXPLORER,
+  requireChainKey,
+  type AttestationIndexer,
+} from '../offchain/lib/networks';
 import type { Eip1193Provider } from 'ethers';
 import {
   cc3,
@@ -91,10 +98,13 @@ function table(
   return t;
 }
 
+/// ethers puts the useful half in `shortMessage`; everything else has to be dug out of `message`.
+function reason(e: unknown): string {
+  return (e as { shortMessage?: string; message?: string })?.shortMessage ?? (e as Error)?.message ?? String(e);
+}
+
 function fail(where: HTMLElement, e: unknown): void {
-  const message =
-    (e as { shortMessage?: string; message?: string })?.shortMessage ?? (e as Error)?.message ?? String(e);
-  where.replaceChildren(el('p', 'bad', message));
+  where.replaceChildren(el('p', 'bad', reason(e)));
 }
 
 // ------------------------------------------------------------------
@@ -444,66 +454,96 @@ function say(line: string): void {
 /// is the only place a visitor could find that out without running anything.
 async function renderAttestors(): Promise<void> {
   const box = $('attestors-body');
-  const chainKey = CHAIN_KEY[wired.which];
   try {
-    const [{ total, nodes }, attestors] = await Promise.all([
-      recentAttestations(chainKey, 6),
-      attestorCount().catch(() => 0),
-    ]);
-
-    const endpoints = sourceEndpoints(chainKey);
-    const rows = await Promise.all(
-      nodes.map(async (a) => {
-        // Ask every endpoint the watcher would sweep, not one. A single node agreeing proves less
-        // than the union does, for the same reason a one-endpoint sweep settles nothing.
-        const answers = await Promise.all(
-          endpoints.map(async (e) => {
-            try {
-              const block = await within(12_000, `block ${a.headerNumber}`, e.provider.getBlock(a.headerNumber));
-              return block?.hash?.toLowerCase() ?? null;
-            } catch {
-              return null;
-            }
-          }),
-        );
-        const seen = answers.filter((h): h is string => h !== null);
-        const agree = seen.filter((h) => h === a.headerHash.toLowerCase()).length;
-        const verdict =
-          seen.length === 0
-            ? 'no endpoint answered'
-            : agree === seen.length
-              ? `matches ${agree}/${seen.length}`
-              : `MISMATCH — ${agree}/${seen.length} agree`;
-        return {
-          cells: [
-            String(a.headerNumber),
-            `${a.headerHash.slice(0, 10)}…${a.headerHash.slice(-6)}`,
-            new Date(a.timestampMs).toISOString().replace('T', ' ').slice(0, 19),
-            verdict,
-          ],
-          bad: seen.length > 0 && agree !== seen.length,
-        };
-      }),
-    );
-
-    box.replaceChildren(
-      table(
-        ['source block', 'header hash Creditcoin signed', 'attested at (UTC)', 'independent check'],
-        rows.map((r) => r.cells),
-        'attestors-table',
-        (i) => (rows[i]?.bad ? 'struck' : undefined),
-      ),
-      el(
-        'p',
-        'note',
-        `${total.toLocaleString()} attestations indexed for this source chain, from ${attestors} registered ` +
-          `attestor(s). Each row above was checked against ${endpoints.length} independent endpoint(s) from ` +
-          'this browser — no server was asked, and nothing here is cached.',
-      ),
-    );
+    // Two Creditcoin networks, one Ethereum. The deployment's own network is audited on the source
+    // chain it underwrites; Creditcoin Mainnet is audited on Ethereum mainnet, which is the only
+    // chain it attests. When this build is reading its mainnet-sourced deployment both tables are
+    // about the same Ethereum blocks, signed by two independent attestor sets — and they are
+    // checked against Ethereum rather than against each other.
+    const audits = [
+      { indexer: ATTESTATION_INDEXERS.testnet, chainKey: CHAIN_KEY[wired.which] },
+      { indexer: ATTESTATION_INDEXERS.mainnet, chainKey: ATTESTATION_INDEXERS.mainnet.ethereumKey },
+    ];
+    const sections = await Promise.all(audits.map((a) => auditIndexer(a.indexer, a.chainKey)));
+    box.replaceChildren(...sections.flat());
   } catch (e) {
     fail(box, e);
   }
+}
+
+/// One network's attestations, each row checked against the source chain itself.
+async function auditIndexer(indexer: AttestationIndexer, chainKey: number): Promise<Node[]> {
+  // The chain key is the network's own; the endpoints to check against are chosen by which real
+  // chain that key denotes here. Creditcoin Mainnet's key 1 is Ethereum mainnet, and CC3 Testnet's
+  // key 1 is Sepolia — reading either through the other's table is exactly the confusion that
+  // would produce a table of MISMATCH rows about a perfectly honest oracle.
+  const sourceKey = indexer === ATTESTATION_INDEXERS.mainnet ? CHAIN_KEY.mainnet : chainKey;
+  const heading = el('h3', 'sub', `${indexer.label} — attesting ${CHAIN_NAME[requireChainKey(sourceKey)]}`);
+
+  let total: number;
+  let nodes: Awaited<ReturnType<typeof recentAttestations>>['nodes'];
+  let attestors: number;
+  try {
+    [{ total, nodes }, attestors] = await Promise.all([
+      recentAttestations(indexer, chainKey, 6),
+      attestorCount(indexer).catch(() => 0),
+    ]);
+  } catch (e) {
+    return [heading, el('p', 'bad', `${indexer.label}: the indexer could not be read — ${reason(e)}`)];
+  }
+
+  const endpoints = sourceEndpoints(requireChainKey(sourceKey));
+  const rows = await Promise.all(
+    nodes.map(async (a) => {
+      // Ask every endpoint the watcher would sweep, not one. A single node agreeing proves less
+      // than the union does, for the same reason a one-endpoint sweep settles nothing.
+      const answers = await Promise.all(
+        endpoints.map(async (e) => {
+          try {
+            const block = await within(12_000, `block ${a.headerNumber}`, e.provider.getBlock(a.headerNumber));
+            return block?.hash?.toLowerCase() ?? null;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      const seen = answers.filter((h): h is string => h !== null);
+      const agree = seen.filter((h) => h === a.headerHash.toLowerCase()).length;
+      const verdict =
+        seen.length === 0
+          ? 'no endpoint answered'
+          : agree === seen.length
+            ? `matches ${agree}/${seen.length}`
+            : `MISMATCH — ${agree}/${seen.length} agree`;
+      return {
+        cells: [
+          String(a.headerNumber),
+          `${a.headerHash.slice(0, 10)}…${a.headerHash.slice(-6)}`,
+          new Date(a.timestampMs).toISOString().replace('T', ' ').slice(0, 19),
+          verdict,
+        ],
+        bad: seen.length > 0 && agree !== seen.length,
+      };
+    }),
+  );
+
+  return [
+    heading,
+    table(
+      ['source block', 'header hash Creditcoin signed', 'attested at (UTC)', 'independent check'],
+      rows.map((r) => r.cells),
+      `attestors-table-${indexer.ethereumKey}`,
+      (i) => (rows[i]?.bad ? 'struck' : undefined),
+    ),
+    el(
+      'p',
+      'note',
+      `${total.toLocaleString()} attestations indexed for this source chain, from ${attestors} registered ` +
+        `attestor(s), under chain key ${chainKey} on this network. Each row above was checked against ` +
+        `${endpoints.length} independent endpoint(s) from this browser — no server was asked, and nothing ` +
+        'here is cached.',
+    ),
+  ];
 }
 
 async function renderCredit(): Promise<void> {
