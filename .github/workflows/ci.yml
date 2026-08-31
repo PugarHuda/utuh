@@ -102,7 +102,9 @@ jobs:
         run: forge build
 
       - name: formatting
-        run: npx prettier --check "offchain/**/*.ts"
+        # web/ is ~2,400 lines of TypeScript and was outside this glob until now: `forge fmt`
+        # covers Solidity, and nothing covered the console.
+        run: npx prettier --check "offchain/**/*.ts" "web/**/*.ts"
 
       - name: typecheck
         run: npx tsc --noEmit -p tsconfig.json

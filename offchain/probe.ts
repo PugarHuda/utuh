@@ -6,6 +6,8 @@ import { scopeFor, scanScope, Metric, type ScopedEvent } from './lib/scope';
 import { isPayloadTooLarge } from './lib/gasLimit';
 import { Prover, planBatches } from './lib/proofs';
 import { runScript } from './lib/cli';
+import { proofProvider } from '@gluwa/usc-sdk';
+import { hashInner, hashLeaf, merkleRootOf } from './lib/merkle';
 
 const BLOCK_PROVER = '0x0000000000000000000000000000000000000FD2';
 
@@ -82,6 +84,7 @@ async function main() {
   /// which is what the appending path would need if this read-only one ever wrote.
   async function verify(batch: ScopedEvent[], label: string): Promise<void> {
     const { proofs, continuity } = await prover.proveBatch(batch);
+    if (checked === 0 && proofs[0]) checkLocalHashingMatchesTheSdk(proofs[0]);
     const heights = proofs.map((p) => p.blockHeight);
     const merkleProofs = proofs.map((p) => ({ root: p.merkleRoot, siblings: p.siblings }));
     const blocks = new Set(heights).size;
@@ -123,6 +126,44 @@ async function main() {
 
   console.log(`\n${checked} Ethereum mainnet events verified by the precompile at ${BLOCK_PROVER}.`);
   console.log('No CTC spent — every call above was an eth_call against the live CC3 testnet.');
+}
+
+/// The console cannot import the SDK's hashing, so this proves the copy that replaced it.
+///
+/// `offchain/lib/merkle.ts` re-states `hashLeaf` and `hashInner` against the ESM ethers the browser
+/// bundle already carries. Importing them from `@gluwa/usc-sdk` instead — CommonJS only, no
+/// `module` field — pulls a second copy of ethers in beside the first and took the console from
+/// 312 KB to 827 KB, half a megabyte for two keccaks on a page whose whole argument is that a
+/// stranger can open it and refute a claim.
+///
+/// A re-stated rule that nothing checks is a rule that drifts. This runs the SDK's own functions
+/// beside the local ones over a proof this script has just fetched from the live builder, so the
+/// SDK stays the definition and a divergence is a red daily job rather than a silent wrong hash.
+/// It costs no extra network call: the proof is one the probe already had in hand.
+function checkLocalHashingMatchesTheSdk(proof: {
+  encodedTransaction: string;
+  merkleRoot: string;
+  siblings: { hash: string; isLeft: boolean }[];
+}): void {
+  const sdk = proofProvider.merkle;
+
+  if (sdk.hashLeaf(proof.encodedTransaction) !== hashLeaf(proof.encodedTransaction)) {
+    throw new Error('hashLeaf no longer agrees with the SDK — see offchain/lib/merkle.ts');
+  }
+  for (const s of proof.siblings) {
+    if (sdk.hashInner(s.hash, proof.merkleRoot) !== hashInner(s.hash, proof.merkleRoot)) {
+      throw new Error('hashInner no longer agrees with the SDK — see offchain/lib/merkle.ts');
+    }
+  }
+
+  const folded = merkleRootOf(proof.encodedTransaction, proof.siblings);
+  if (folded.toLowerCase() !== proof.merkleRoot.toLowerCase()) {
+    throw new Error(`a proof fetched just now does not fold to its own root: ${folded} vs ${proof.merkleRoot}`);
+  }
+  console.log(
+    `Local Merkle hashing agrees with @gluwa/usc-sdk over ${proof.siblings.length} sibling(s), ` +
+      'and the proof folds to the root the builder shipped.',
+  );
 }
 
 runScript(main);

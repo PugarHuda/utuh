@@ -100,6 +100,25 @@ function main(): Promise<void> {
   // problem entirely.
   writeFileSync(join(DEST, '.nojekyll'), '');
 
+  // RFC 9116. SECURITY.md tells a person where to report; this tells a scanner, and a researcher
+  // who finds the deployed page rather than the repository. `Expires` is required by the RFC and is
+  // set a year out from the build, so a stale file says so rather than looking maintained.
+  const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  mkdirSync(join(DEST, '.well-known'), { recursive: true });
+  writeFileSync(
+    join(DEST, '.well-known', 'security.txt'),
+    [
+      '# Utuh — a completeness layer for the Attestcoin Protocol.',
+      '# Testnet software. The contracts hold testnet CTC and no mainnet funds.',
+      'Contact: https://github.com/PugarHuda/utuh/security/advisories/new',
+      `Expires: ${expires}`,
+      'Preferred-Languages: en',
+      'Canonical: https://utuh.vercel.app/.well-known/security.txt',
+      'Policy: https://github.com/PugarHuda/utuh/blob/master/SECURITY.md',
+      '',
+    ].join(String.fromCharCode(10)),
+  );
+
   console.log(`static console in ${DEST}`);
   console.log(`  registry ${String(deployments.registry)}`);
   console.log(`  credit   ${String(deployments.credit)}`);

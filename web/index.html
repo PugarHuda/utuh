@@ -119,7 +119,7 @@
         </div>
         <div id="claim-detail" class="body" data-testid="claim-detail"></div>
         <div id="refute-box" class="actions"></div>
-        <div id="log" class="log" data-testid="log"></div>
+        <div id="log" class="log" data-testid="log" role="log" aria-live="polite" aria-atomic="false"></div>
       </section>
 
       <section data-frame="14">
@@ -129,10 +129,29 @@
           challenge window, open the line. Same contracts the scripts use, your wallet, real bonds.
         </p>
         <div id="borrow-body" class="body">connect a wallet to borrow.</div>
-        <div id="borrow-log" class="log" data-testid="borrow-log"></div>
+        <div
+          id="borrow-log"
+          class="log"
+          data-testid="borrow-log"
+          role="log"
+          aria-live="polite"
+          aria-atomic="false"
+        ></div>
       </section>
 
       <section data-frame="14A">
+        <h2>Audit the attestors</h2>
+        <p class="note">
+          Everything above trusts one thing this page has not checked: that the header Creditcoin attested is the
+          header Ethereum actually has. The precompile will not say — it answers how far a chain is attested, not with
+          what hash. The indexer publishes the hash, so this asks Creditcoin what it signed and asks independent
+          source-chain endpoints what is really there, and compares. A mismatch here would mean the attestors signed a
+          block that does not exist.
+        </p>
+        <div id="attestors-body" class="body">reading the attestation indexer…</div>
+      </section>
+
+      <section data-frame="15">
         <h2>Credit</h2>
         <p class="note">
           Nothing bridges. The history stays on Ethereum, the credit is issued in CTC on Creditcoin, repayment happens

@@ -3,6 +3,7 @@ import { proofProvider, chainInfo } from '@gluwa/usc-sdk';
 import { PROVER_URL, cc3, sources } from '../config';
 import { PROVER_URL_ALTERNATE } from './networks';
 import type { ScopedEvent } from './scope';
+import { assertFoldsToItsRoot } from './merkle';
 
 /// Mirrors UtuhRegistry.EventProof.
 export interface EventProofStruct {
@@ -243,18 +244,20 @@ export class Prover {
 
     if (txHashes.length === 1) {
       const d = await this.ask(txHashes, false);
+      const proofs = events.map((e) => ({
+        blockHeight: d.headerNumber,
+        encodedTransaction: d.txBytes,
+        merkleRoot: d.merkleProof.root,
+        siblings: d.merkleProof.siblings.map((s: any) => ({ hash: s.hash, isLeft: s.isLeft })),
+        logIndex: e.logIndexInTx,
+      }));
+      for (const [i, proof] of proofs.entries()) assertFoldsToItsRoot(events[i]!.txHash, proof);
       return {
         continuity: {
           lowerEndpointDigest: d.continuityProof.lowerEndpointDigest,
           roots: d.continuityProof.roots,
         },
-        proofs: events.map((e) => ({
-          blockHeight: d.headerNumber,
-          encodedTransaction: d.txBytes,
-          merkleRoot: d.merkleProof.root,
-          siblings: d.merkleProof.siblings.map((s: any) => ({ hash: s.hash, isLeft: s.isLeft })),
-          logIndex: e.logIndexInTx,
-        })),
+        proofs,
       };
     }
 
@@ -272,22 +275,24 @@ export class Prover {
       }
     }
 
+    const proofs = events.map((e) => {
+      const p = byTx.get(e.txHash.toLowerCase());
+      if (!p) throw new Error(`batch proof missing tx ${e.txHash}`);
+      return {
+        blockHeight: p.blockHeight,
+        encodedTransaction: p.txBytes,
+        merkleRoot: p.root,
+        siblings: p.siblings.map((s: any) => ({ hash: s.hash, isLeft: s.isLeft })),
+        logIndex: e.logIndexInTx,
+      };
+    });
+    for (const [i, proof] of proofs.entries()) assertFoldsToItsRoot(events[i]!.txHash, proof);
     return {
       continuity: {
         lowerEndpointDigest: d.continuityProof.lowerEndpointDigest,
         roots: d.continuityProof.roots,
       },
-      proofs: events.map((e) => {
-        const p = byTx.get(e.txHash.toLowerCase());
-        if (!p) throw new Error(`batch proof missing tx ${e.txHash}`);
-        return {
-          blockHeight: p.blockHeight,
-          encodedTransaction: p.txBytes,
-          merkleRoot: p.root,
-          siblings: p.siblings.map((s: any) => ({ hash: s.hash, isLeft: s.isLeft })),
-          logIndex: e.logIndexInTx,
-        };
-      }),
+      proofs,
     };
   }
 
@@ -296,6 +301,8 @@ export class Prover {
     const batch = await this.proveBatch([event]);
     return { proof: batch.proofs[0], continuity: batch.continuity };
   }
+
+  /// Every proof this returns has been folded back to its own root first. See ./merkle.ts.
 
   /// Try to prove one event, and say *why* if it fails.
   ///

@@ -140,6 +140,19 @@ export type DeploymentName = keyof typeof DEPLOYMENT_RECORDS;
 /// Creditcoin's own record of every verification the precompile emitted, per source chain.
 export const ORACLE_DASHBOARD = 'https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications';
 
+/// The attestation indexer, which publishes what the attestors actually signed.
+///
+/// Everything else this repository reads about attestation comes from the ChainInfo precompile,
+/// and the precompile answers two questions: how far has this chain been attested, and is this
+/// height attested. It does not hand back the attested header hash, so nothing here could ever
+/// check the attestation layer's own claim against the chain it claims to be attesting.
+///
+/// This endpoint does, it is CORS-open, and it needs no key — so a browser can ask Creditcoin what
+/// hash it attested for Ethereum block N, ask an independent Ethereum endpoint what the hash of
+/// block N actually is, and compare. That is this project's own argument turned one level down:
+/// a claim is only worth what someone can check, including the oracle's.
+export const ATTESTATIONS_GRAPHQL = 'https://attestations-graphql.cc3-testnet.creditcoin.network/graphql';
+
 /// Well-known mainnet fixtures used by the demo flows.
 export const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 export const AAVE_V3_POOL = '0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2';

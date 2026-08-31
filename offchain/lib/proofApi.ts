@@ -1,4 +1,5 @@
 import { PROVER_URL_ALTERNATE, PROVER_URL_DEFAULT } from './networks';
+import { assertFoldsToItsRoot } from './merkle';
 
 /// One proof, from the hosted Proof Builder, over plain HTTP.
 ///
@@ -92,6 +93,21 @@ export async function fetchSingleProof(chainKey: number, txHash: string, timeout
       const proof = body.txBytes ? body : body.data;
       if (!proof?.txBytes || !proof.merkleProof || !proof.continuityProof) {
         failures.push(`${hostOf(host)} → the response carried no proof`);
+        continue;
+      }
+      // Fold the proof back to its own root before handing it to anything that will sign it. A
+      // host that answers with something inconsistent is treated like a host that did not answer:
+      // the next one is tried, because the builder is published under two names and one of them
+      // being wrong is not a reason to give up on the transaction. See ./merkle.ts for why this
+      // matters most on the refutation path.
+      try {
+        assertFoldsToItsRoot(txHash, {
+          encodedTransaction: proof.txBytes,
+          merkleRoot: proof.merkleProof.root,
+          siblings: proof.merkleProof.siblings,
+        });
+      } catch (e) {
+        failures.push(`${hostOf(host)} → ${(e as Error).message}`);
         continue;
       }
       return proof;

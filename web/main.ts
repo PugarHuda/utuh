@@ -2,11 +2,24 @@ import { Contract, formatEther, parseEther, toUtf8String, type Signer } from 'et
 import { claimStatus, lineStatus } from '../offchain/lib/status';
 import { CHAIN_NAME, ORACLE_DASHBOARD, SOURCE_EXPLORER, requireChainKey } from '../offchain/lib/networks';
 import type { Eip1193Provider } from 'ethers';
-import { cc3, connect, EXPLORER, hasWallet, shortAddress, wallets, wire, within, type Wired } from './chain';
+import {
+  cc3,
+  connect,
+  EXPLORER,
+  hasWallet,
+  shortAddress,
+  sourceEndpoints,
+  wallets,
+  wire,
+  within,
+  type Wired,
+} from './chain';
 import { refute, sweepClaim, type Sweep } from './watch';
 import { renderBorrow } from './borrowPane';
 import { abandonClaim } from './borrow';
 import { explainRevert } from '../offchain/lib/revert';
+import { attestorCount, recentAttestations } from '../offchain/lib/attestations';
+import { CHAIN_KEY } from '../offchain/lib/networks';
 
 /// The Utuh console.
 ///
@@ -46,6 +59,9 @@ function row(cells: (string | HTMLElement)[], head = false, className?: string):
   const tr = el('tr', className);
   for (const c of cells) {
     const td = el(head ? 'th' : 'td');
+    // A `th` with no scope is a cell a screen reader cannot attach to its column, which on a
+    // ten-column claims table turns every row into unlabelled numbers read in order.
+    if (head) td.setAttribute('scope', 'col');
     if (typeof c === 'string') td.textContent = c;
     else td.appendChild(c);
     // A header with no text is a column of controls; a screen reader still needs a name for it.
@@ -411,6 +427,83 @@ function say(line: string): void {
   const log = $('log');
   log.appendChild(el('div', 'line', line));
   log.scrollTop = log.scrollHeight;
+}
+
+/// Check the attestation layer against the chain it claims to attest.
+///
+/// This is the one pane that does not take Creditcoin's word for anything. The ChainInfo
+/// precompile reports how far a source chain has been attested; it does not return the header hash
+/// the attestors signed, so on the precompile alone their claim cannot be contradicted from
+/// outside. The indexer publishes the hash. So: ask Creditcoin what it attested for source block N,
+/// ask the same independent endpoints the watcher sweeps what the hash of block N actually is, and
+/// put the two side by side.
+///
+/// Every row here is expected to agree, and saying so is the point — an oracle nobody audits is an
+/// oracle you are trusting. A row that disagreed would mean the attestors signed a header the
+/// source chain does not have, which is a far larger failure than any claim on this page, and this
+/// is the only place a visitor could find that out without running anything.
+async function renderAttestors(): Promise<void> {
+  const box = $('attestors-body');
+  const chainKey = CHAIN_KEY[wired.which];
+  try {
+    const [{ total, nodes }, attestors] = await Promise.all([
+      recentAttestations(chainKey, 6),
+      attestorCount().catch(() => 0),
+    ]);
+
+    const endpoints = sourceEndpoints(chainKey);
+    const rows = await Promise.all(
+      nodes.map(async (a) => {
+        // Ask every endpoint the watcher would sweep, not one. A single node agreeing proves less
+        // than the union does, for the same reason a one-endpoint sweep settles nothing.
+        const answers = await Promise.all(
+          endpoints.map(async (e) => {
+            try {
+              const block = await within(12_000, `block ${a.headerNumber}`, e.provider.getBlock(a.headerNumber));
+              return block?.hash?.toLowerCase() ?? null;
+            } catch {
+              return null;
+            }
+          }),
+        );
+        const seen = answers.filter((h): h is string => h !== null);
+        const agree = seen.filter((h) => h === a.headerHash.toLowerCase()).length;
+        const verdict =
+          seen.length === 0
+            ? 'no endpoint answered'
+            : agree === seen.length
+              ? `matches ${agree}/${seen.length}`
+              : `MISMATCH — ${agree}/${seen.length} agree`;
+        return {
+          cells: [
+            String(a.headerNumber),
+            `${a.headerHash.slice(0, 10)}…${a.headerHash.slice(-6)}`,
+            new Date(a.timestampMs).toISOString().replace('T', ' ').slice(0, 19),
+            verdict,
+          ],
+          bad: seen.length > 0 && agree !== seen.length,
+        };
+      }),
+    );
+
+    box.replaceChildren(
+      table(
+        ['source block', 'header hash Creditcoin signed', 'attested at (UTC)', 'independent check'],
+        rows.map((r) => r.cells),
+        'attestors-table',
+        (i) => (rows[i]?.bad ? 'struck' : undefined),
+      ),
+      el(
+        'p',
+        'note',
+        `${total.toLocaleString()} attestations indexed for this source chain, from ${attestors} registered ` +
+          `attestor(s). Each row above was checked against ${endpoints.length} independent endpoint(s) from ` +
+          'this browser — no server was asked, and nothing here is cached.',
+      ),
+    );
+  } catch (e) {
+    fail(box, e);
+  }
 }
 
 async function renderCredit(): Promise<void> {
@@ -837,7 +930,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  await Promise.all([renderAttestcoin(), renderRegistry(), renderCredit(), renderBorrowPane()]);
+  await Promise.all([renderAttestcoin(), renderRegistry(), renderCredit(), renderBorrowPane(), renderAttestors()]);
   document.body.dataset.state = 'ready';
 }
 
