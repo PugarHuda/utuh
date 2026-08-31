@@ -658,3 +658,51 @@ footer {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* The four numbers, above the fold, before anyone reads a word.
+   The contact sheet reads left to right in exposure order, so these do too: what was proven, what
+   was published, what was crossed out, what it cost. The struck one carries the chinagraph, because
+   on a contact sheet the crossed-out frame is the one the eye goes to — and here it is the number
+   no other project on this protocol can report at all. */
+.tally {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1px;
+  background: var(--rebate);
+  border: 1px solid var(--rebate);
+  border-radius: var(--radius);
+  margin: 0 auto var(--gap);
+  max-width: 1180px;
+  overflow: hidden;
+}
+
+.tally .t {
+  background: var(--sheet);
+  padding: 0.75rem 0.9rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.tally .t b {
+  font-family: var(--data);
+  font-size: 1.7rem;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.tally .t span {
+  font-size: var(--t-small);
+  color: var(--dim);
+  line-height: 1.35;
+}
+
+.tally .struck-num b {
+  color: var(--accent);
+}
+
+/* Until the chain has answered, the numbers are placeholders and should not read as data. */
+.tally[data-ready='false'] .t b {
+  color: var(--dim);
+}

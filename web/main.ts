@@ -3,10 +3,12 @@ import { claimStatus, lineStatus } from '../offchain/lib/status';
 import {
   ATTESTATION_INDEXERS,
   CHAIN_NAME,
+  DEPLOYMENT_RECORDS,
   ORACLE_DASHBOARD,
   SOURCE_EXPLORER,
   requireChainKey,
   type AttestationIndexer,
+  type DeploymentName,
 } from '../offchain/lib/networks';
 import type { Eip1193Provider } from 'ethers';
 import {
@@ -14,6 +16,7 @@ import {
   connect,
   EXPLORER,
   hasWallet,
+  loadDeployments,
   shortAddress,
   sourceEndpoints,
   wallets,
@@ -238,6 +241,73 @@ async function readClaims(): Promise<ClaimPage> {
   // watching a challenge window is looking for.
   claims.reverse();
   return { claims, total };
+}
+
+/// The four numbers at the top, summed across both deployments.
+///
+/// The page has always been able to show a claim. What it could not show is what this registry has
+/// *done*, and one of these numbers is the only one of its kind on this protocol: nothing else
+/// deployed against Attestcoin has a refutation to count, because nothing else has the call.
+///
+/// Both deployments are read rather than the selected one. A visitor switching the dropdown is
+/// asking which set of claims to browse, not asking the totals to shrink — and the mainnet-sourced
+/// registry is where most of the work is, so showing one at a time would understate the whole by
+/// four fifths.
+///
+/// Deliberately not awaited by boot: this walks every claim on two registries, and the panes below
+/// should not wait on arithmetic. The strip reports its own readiness instead.
+async function renderTally(): Promise<void> {
+  const strip = $('tally');
+  try {
+    const registries = await Promise.all(
+      (Object.keys(DEPLOYMENT_RECORDS) as DeploymentName[]).map(async (which) => {
+        const d = await within(20_000, `${which} deployment record`, loadDeployments(which));
+        if (!d.registry) return null;
+        return new Contract(d.registry, wired.abis.registry as never, cc3);
+      }),
+    );
+
+    let proven = 0n;
+    let sealed = 0;
+    let refuted = 0;
+    let burned = 0n;
+
+    for (const registry of registries) {
+      if (!registry) continue;
+      // ethers does not fail fast on an unreachable endpoint — it retries in the background and
+      // this strip would sit on its placeholders indefinitely. A tally stuck at "…" is survivable;
+      // one that resolved to a plausible zero would not be, because "0 refuted" is exactly the
+      // wrong conclusion to hand a reader.
+      const total = Number(await within(20_000, 'nextClaimId', registry.nextClaimId() as Promise<bigint>)) - 1;
+      burned += await within(20_000, 'burned', registry.burned() as Promise<bigint>);
+      sealed += total;
+
+      const ids = Array.from({ length: total }, (_, i) => i + 1);
+      for (let at = 0; at < ids.length; at += CLAIM_BATCH) {
+        const slice = await Promise.all(
+          ids.slice(at, at + CLAIM_BATCH).map(async (i) => ({
+            status: Number((await within(20_000, `claim ${i}`, registry.claim(i))).status),
+            members: await within(20_000, `memberCount ${i}`, registry.memberCount(i) as Promise<bigint>),
+          })),
+        );
+        for (const c of slice) {
+          proven += c.members;
+          if (claimStatus(c.status) === 'Refuted') refuted += 1;
+        }
+      }
+    }
+
+    $('t-proven').textContent = proven.toLocaleString();
+    $('t-claims').textContent = sealed.toLocaleString();
+    $('t-refuted').textContent = refuted.toLocaleString();
+    $('t-burned').textContent = `${formatEther(burned)} CTC`;
+    strip.dataset.ready = 'true';
+  } catch (e) {
+    // A tally that cannot be read says so rather than showing a plausible zero.
+    for (const id of ['t-proven', 't-claims', 't-refuted', 't-burned']) $(id).textContent = '—';
+    strip.dataset.ready = 'failed';
+    strip.title = reason(e);
+  }
 }
 
 async function renderRegistry(): Promise<void> {
@@ -970,6 +1040,7 @@ async function main(): Promise<void> {
     return;
   }
 
+  void renderTally();
   await Promise.all([renderAttestcoin(), renderRegistry(), renderCredit(), renderBorrowPane(), renderAttestors()]);
   document.body.dataset.state = 'ready';
 }

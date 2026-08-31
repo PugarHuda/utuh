@@ -84,6 +84,24 @@
 
     <p id="boot-error" class="bad"></p>
 
+    <!-- What this page is, in four numbers, before anyone reads a word of it. Both deployments
+         summed, read from the registries themselves — the refutation count is the one number here
+         that no other project on this protocol can report, because nothing else has the call. -->
+    <section id="tally" class="tally" data-testid="tally" data-ready="false" aria-label="what this registry has done">
+      <div class="t">
+        <b id="t-proven">…</b><span>events proven into claims</span>
+      </div>
+      <div class="t">
+        <b id="t-claims">…</b><span>claims sealed and challengeable</span>
+      </div>
+      <div class="t struck-num">
+        <b id="t-refuted">…</b><span>broken by someone who found the gap</span>
+      </div>
+      <div class="t">
+        <b id="t-burned">…</b><span>bond slashed from claimants who were short</span>
+      </div>
+    </section>
+
     <main>
       <section data-frame="12">
         <h2>What Creditcoin can read</h2>
