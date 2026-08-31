@@ -1,4 +1,5 @@
 import { buildSync } from 'esbuild';
+import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runScript } from '../offchain/lib/cli';
@@ -63,6 +64,22 @@ function main(): Promise<void> {
   copyFileSync(join(WEB, 'style.css'), join(DEST, 'style.css'));
   // The link-preview image. Not something the page ever requests — crawlers fetch it.
   copyFileSync(join(WEB, 'og.png'), join(DEST, 'og.png'));
+
+  // The whitepaper, as the submission form asks for it. Rendered by `npm run web:pdf` from
+  // `web/whitepaper.html` and committed, because a browser is the only thing that can make it and
+  // this workflow has no browser. Nothing on the page links to it: it is here so the document has
+  // an address that is not a private artifact, and so the PDF a reader downloads was built from a
+  // file in this repository rather than from something nobody can check.
+  // Recomputed here rather than imported from build-pdf.ts, which calls runScript at module
+  // scope: importing it would run it. The two lines cannot drift silently, because a disagreement
+  // about how to hash shows up as the mismatch this throws on.
+  const source = createHash('sha256')
+    .update(readFileSync(join(WEB, 'whitepaper.html')))
+    .digest('hex');
+  if (readFileSync(join(WEB, 'whitepaper.sha256'), 'utf8').trim() !== source) {
+    throw new Error('web/whitepaper.html has changed since the PDF was rendered — npm run web:pdf');
+  }
+  copyFileSync(join(WEB, 'whitepaper.pdf'), join(DEST, 'whitepaper.pdf'));
 
   // The one webfont, self-hosted. A page whose argument is that it needs no server should not open
   // a connection to a font CDN to render its own name, so the file ships with the page. The

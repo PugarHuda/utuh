@@ -60,6 +60,16 @@ test('the link preview is a real photograph of the page, and it is served', asyn
   await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
 });
 
+test('the whitepaper is served as a PDF, and it is the document', async ({ page }) => {
+  // The submission form asks for a deck or whitepaper. This is the address given for it, so a
+  // published build that forgot the file is a broken deliverable rather than a cosmetic miss.
+  const res = await page.request.get(new URL('whitepaper.pdf', PUBLISHED!).toString());
+  expect(res.status()).toBe(200);
+  const body = await res.body();
+  expect(body.subarray(0, 5).toString()).toBe('%PDF-');
+  expect(body.length).toBeGreaterThan(40_000);
+});
+
 test('asks its host for nothing but its own four files', async ({ page }) => {
   const host = new URL(PUBLISHED!).host;
   const asked: string[] = [];

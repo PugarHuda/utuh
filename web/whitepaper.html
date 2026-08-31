@@ -1,0 +1,1192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Utuh Protocol</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #F1F3F6;
+    --surface: #FFFFFF;
+    --sunken: #E7EAEF;
+    --ink: #141922;
+    --ink-soft: #4C5563;
+    --ink-faint: #616A78;
+    --rule: #D4D9E1;
+    --accent: #945800;
+    --accent-soft: #F0E2CE;
+    --proof: #1D5566;
+    --proof-soft: #D9E6EA;
+
+    --measure: 34rem;
+    --wide: 52rem;
+
+    --step--1: clamp(0.78rem, 0.76rem + 0.1vw, 0.84rem);
+    --step-0: clamp(1rem, 0.97rem + 0.15vw, 1.08rem);
+    --step-1: clamp(1.2rem, 1.1rem + 0.4vw, 1.4rem);
+    --step-2: clamp(1.5rem, 1.3rem + 0.9vw, 2rem);
+    --step-3: clamp(2rem, 1.5rem + 2.2vw, 3.4rem);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0E1218;
+      --surface: #151A22;
+      --sunken: #1B212B;
+      --ink: #E4E8EE;
+      --ink-soft: #A3ACBA;
+      --ink-faint: #7F8896;
+      --rule: #262E39;
+      --accent: #DE9A45;
+      --accent-soft: #3A2C17;
+      --proof: #63A8BC;
+      --proof-soft: #1A2B31;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0E1218;
+    --surface: #151A22;
+    --sunken: #1B212B;
+    --ink: #E4E8EE;
+    --ink-soft: #A3ACBA;
+    --ink-faint: #7F8896;
+    --rule: #262E39;
+    --accent: #DE9A45;
+    --accent-soft: #3A2C17;
+    --proof: #63A8BC;
+    --proof-soft: #1A2B31;
+  }
+
+  * { box-sizing: border-box; }
+
+  /* The scrollable blocks are keyboard-reachable, so the focus has to be visible. */
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  a { color: var(--accent); text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+  a:hover { text-decoration-thickness: 2px; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: var(--wide);
+    margin: 0 auto;
+    padding: clamp(2rem, 6vw, 5rem) clamp(1.1rem, 5vw, 3rem) 6rem;
+  }
+
+  .col { max-width: var(--measure); }
+
+  h1, h2, h3 {
+    font-family: Newsreader, Georgia, "Times New Roman", serif;
+    font-weight: 500;
+    text-wrap: balance;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  h1 { font-size: var(--step-3); line-height: 1.02; letter-spacing: -0.025em; }
+  h2 { font-size: var(--step-2); line-height: 1.12; }
+  h3 { font-size: var(--step-1); line-height: 1.25; }
+
+  p { margin: 0; }
+  strong { font-weight: 600; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .stack { display: flex; flex-direction: column; gap: 1.15rem; }
+  .stack-tight { display: flex; flex-direction: column; gap: 0.6rem; }
+
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+    padding-top: clamp(3rem, 7vw, 5rem);
+  }
+
+  /* ---- masthead ---- */
+
+  .masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 1.6rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .wordmark {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .wordmark .gloss {
+    font-family: Newsreader, Georgia, serif;
+    font-style: italic;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  .lede {
+    font-family: Newsreader, Georgia, serif;
+    font-size: var(--step-1);
+    line-height: 1.42;
+    color: var(--ink-soft);
+    max-width: 30rem;
+  }
+
+  .lede em { color: var(--ink); font-style: italic; }
+
+  /* ---- figure ---- */
+
+  figure {
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    padding: clamp(1.1rem, 3vw, 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  figure svg { width: 100%; height: auto; display: block; color: var(--ink-soft); }
+
+  figcaption {
+    font-size: var(--step--1);
+    color: var(--ink-soft);
+    line-height: 1.55;
+    max-width: 40rem;
+  }
+
+  /* ---- evidence blocks ---- */
+
+  .evidence {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--proof);
+    overflow-x: auto;
+  }
+
+  .evidence pre {
+    margin: 0;
+    padding: 1.1rem 1.3rem;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    line-height: 1.72;
+    color: var(--ink-soft);
+    white-space: pre;
+  }
+
+  .evidence pre b { color: var(--ink); font-weight: 500; }
+  .evidence pre .mark { color: var(--accent); font-weight: 500; }
+  .evidence pre .ok { color: var(--proof); font-weight: 500; }
+
+  .evidence-label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 0.7rem 1.3rem 0;
+  }
+
+  /* ---- tables ---- */
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: var(--step--1);
+    min-width: 30rem;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+
+  thead th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 400;
+    font-size: 0.75rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    background: var(--sunken);
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.92em; color: var(--ink); }
+
+  /* ---- the two-halves panel ---- */
+
+  .halves { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  @media (min-width: 44rem) { .halves { grid-template-columns: 1fr 1fr; } }
+
+  .half { background: var(--surface); padding: 1.3rem; display: flex; flex-direction: column; gap: 0.6rem; }
+  .half h3 { font-size: var(--step-0); font-family: "IBM Plex Sans", sans-serif; font-weight: 600; }
+  .half p { font-size: var(--step--1); color: var(--ink-soft); }
+  .half .tag {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.5rem;
+    align-self: flex-start;
+  }
+  .tag-proof { background: var(--proof-soft); color: var(--proof); }
+  .tag-bond { background: var(--accent-soft); color: var(--accent); }
+
+  /* ---- lifecycle: a real sequence, so it is numbered ---- */
+
+  ol.lifecycle { margin: 0; padding: 0; list-style: none; counter-reset: step; display: flex; flex-direction: column; }
+
+  ol.lifecycle li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 2.6rem 1fr;
+    gap: 0.9rem;
+    padding: 0.85rem 0;
+    border-top: 1px solid var(--rule);
+    font-size: var(--step--1);
+    color: var(--ink-soft);
+  }
+
+  ol.lifecycle li::before {
+    content: counter(step, decimal-leading-zero);
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--ink-faint);
+    font-size: 0.78rem;
+    padding-top: 0.15rem;
+  }
+
+  ol.lifecycle li b { color: var(--ink); font-weight: 600; font-family: "IBM Plex Mono", monospace; font-size: 0.92em; }
+
+  /* ---- formula ---- */
+
+  .formula {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--step--1);
+    background: var(--sunken);
+    border: 1px solid var(--rule);
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.7;
+  }
+
+  /* ---- pull quote ---- */
+
+  .pull {
+    font-family: Newsreader, Georgia, serif;
+    font-size: var(--step-2);
+    line-height: 1.25;
+    color: var(--ink);
+    border-left: 3px solid var(--accent);
+    padding-left: 1.3rem;
+    max-width: 30rem;
+    font-style: italic;
+  }
+
+  ul.plain { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.7rem; color: var(--ink-soft); font-size: var(--step--1); }
+  ul.plain li::marker { color: var(--ink-faint); }
+  ul.plain b { color: var(--ink); font-weight: 600; }
+
+  .footer {
+    margin-top: clamp(3rem, 7vw, 5rem);
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 2rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.75rem;
+    color: var(--ink-faint);
+    letter-spacing: 0.04em;
+  }
+
+  /* SVG presentation attributes cannot parse var(), so the figure is themed from here. */
+  .dg-present { fill: var(--proof); }
+  .dg-gap { fill: none; stroke: var(--accent); }
+  .dg-accent-stroke { stroke: var(--accent); }
+  .dg-accent-fill { fill: var(--accent); }
+  .dg-rule { stroke: currentColor; opacity: 0.25; }
+  .dg-quiet { fill: currentColor; opacity: 0.72; }
+  .dg-arrow { stroke: currentColor; opacity: 0.45; }
+
+  a { color: var(--accent); text-underline-offset: 3px; }
+
+  /* ---- paper ----
+     The submission asks for a PDF, and until now printing used the screen styles: a page that
+     scrolls sideways simply loses whatever sits past the edge, and two of the formula blocks are
+     wider than their column. On paper there is nowhere to scroll, so they wrap instead. The
+     palette is pinned to light as well — a reader on a dark system would otherwise print an
+     entirely black document. */
+  @media print {
+    :root, :root[data-theme="dark"], :root:not([data-theme="light"]) {
+      --ground: #FFFFFF;
+      --surface: #FFFFFF;
+      --sunken: #F4F5F7;
+      --ink: #101318;
+      --ink-soft: #3C444F;
+      --ink-faint: #6B7482;
+      --rule: #C9CED6;
+      --accent: #8A5008;
+      --accent-soft: #F2E7D6;
+      --proof: #17444F;
+      --proof-soft: #E4EDF0;
+    }
+
+    body { font-size: 10.5pt; line-height: 1.5; }
+    .page { max-width: none; padding: 0; }
+    section { padding-top: 1.6rem; gap: 0.9rem; }
+
+    /* Nothing scrolls on paper, so anything that would have scrolled has to wrap. */
+    .evidence, .table-wrap, .formula { overflow-x: visible; }
+    .evidence pre, .formula {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    table { min-width: 0; }
+
+    /* Keep an argument and its evidence on the same sheet where possible. */
+    figure, .evidence, .table-wrap, .halves, .formula { break-inside: avoid; }
+    h1, h2, h3 { break-after: avoid; }
+    section { break-inside: auto; }
+
+    /* Backgrounds carry meaning here — the evidence rule, the tags — so keep them. */
+    .evidence, .halves, .half, thead th, .formula, .tag {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    a { text-decoration: none; }
+  }
+  a:focus-visible, :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+</style>
+  </head>
+  <body>
+<main class="page">
+
+  <header class="masthead">
+    <div class="wordmark">
+      <h1>Utuh</h1>
+      <span class="gloss">Indonesian: whole, intact, nothing missing</span>
+    </div>
+    <p class="lede">
+      Attestcoin proves a transaction <em>happened</em>. It cannot prove a set of them is
+      complete. Utuh closes that gap, and builds undercollateralized credit on top of it.
+    </p>
+    <p class="eyebrow">BUIDL CTC 2026 Fall &nbsp;·&nbsp; Creditcoin CC3 Testnet &nbsp;·&nbsp; Ethereum mainnet</p>
+  </header>
+
+  <section>
+    <figure>
+      <svg viewBox="0 0 760 290" role="img" aria-label="An independent sweep of Ethereum mainnet finds seven in-scope events; the sealed claim contains only six, and the empty slot is refuted by a single inclusion proof.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,1 9,5 0,9" fill="currentColor"></polygon>
+          </marker>
+          <marker id="ar-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,1 9,5 0,9" class="dg-accent-fill"></polygon>
+          </marker>
+        </defs>
+
+        <text x="0" y="26" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" letter-spacing="1.4">SORTED BY (BLOCK, TX INDEX, LOG INDEX)</text>
+        <line x1="0" y1="38" x2="760" y2="38" class="dg-rule" stroke-width="1"></line>
+
+        <text x="0" y="76" font-family="IBM Plex Sans, sans-serif" font-size="12.5" fill="currentColor" font-weight="500">Ethereum mainnet</text>
+        <text x="0" y="93" font-family="IBM Plex Sans, sans-serif" font-size="11.5" class="dg-quiet">what actually happened</text>
+
+        <rect x="200" y="60" width="30" height="30" class="dg-present" rx="2"></rect>
+        <rect x="278" y="60" width="30" height="30" class="dg-present" rx="2"></rect>
+        <rect x="356" y="60" width="30" height="30" class="dg-present" rx="2"></rect>
+        <rect x="434" y="60" width="30" height="30" class="dg-present" rx="2"></rect>
+        <rect x="512" y="60" width="30" height="30" class="dg-present" rx="2"></rect>
+        <rect x="590" y="60" width="30" height="30" class="dg-present" rx="2"></rect>
+        <rect x="668" y="60" width="30" height="30" class="dg-present" rx="2"></rect>
+
+        <text x="0" y="176" font-family="IBM Plex Sans, sans-serif" font-size="12.5" fill="currentColor" font-weight="500">The sealed claim</text>
+        <text x="0" y="193" font-family="IBM Plex Sans, sans-serif" font-size="11.5" class="dg-quiet">what the claimant submitted</text>
+
+        <rect x="200" y="160" width="30" height="30" class="dg-present" rx="2"></rect>
+        <rect x="278" y="160" width="30" height="30" class="dg-present" rx="2"></rect>
+        <rect x="356" y="160" width="30" height="30" class="dg-present" rx="2"></rect>
+        <rect x="434" y="160" width="30" height="30" class="dg-gap" stroke-width="1.5" stroke-dasharray="4 3" rx="2"></rect>
+        <rect x="512" y="160" width="30" height="30" class="dg-present" rx="2"></rect>
+        <rect x="590" y="160" width="30" height="30" class="dg-present" rx="2"></rect>
+        <rect x="668" y="160" width="30" height="30" class="dg-present" rx="2"></rect>
+
+        <line x1="449" y1="96" x2="449" y2="154" class="dg-accent-stroke" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#ar-accent)"></line>
+        <text x="463" y="130" font-family="IBM Plex Mono, monospace" font-size="11" class="dg-accent-fill">omitted</text>
+
+        <line x1="200" y1="238" x2="424" y2="238" class="dg-arrow" stroke-width="1" marker-end="url(#ar)"></line>
+        <text x="200" y="228" font-family="IBM Plex Mono, monospace" font-size="11" class="dg-quiet">anyone sweeps the same range</text>
+
+        <line x1="640" y1="238" x2="470" y2="238" class="dg-accent-stroke" stroke-width="1.5" marker-end="url(#ar-accent)"></line>
+        <text x="470" y="228" font-family="IBM Plex Mono, monospace" font-size="11" class="dg-accent-fill">refute() &mdash; one proof, bond slashed</text>
+
+        <line x1="0" y1="266" x2="760" y2="266" class="dg-rule" stroke-width="1"></line>
+        <text x="0" y="284" font-family="IBM Plex Mono, monospace" font-size="11" class="dg-quiet">presence: cryptographic &nbsp;&nbsp;·&nbsp;&nbsp; absence: economic</text>
+      </svg>
+      <figcaption>
+        Every member of a claim is verified by the Block Prover on the way in, so the set can never
+        be padded. What it can be is short. Because members are stored in strict key order, a gap is
+        a thing the chain can check by itself &mdash; and one inclusion proof for the missing event
+        settles the whole claim.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <p class="eyebrow">The gap</p>
+    <div class="col stack">
+      <h2>An inclusion proof cannot speak about events that do not exist</h2>
+      <p>
+        A Merkle proof places a transaction in a block. A continuity proof anchors that block to an
+        attestation on Creditcoin. The precompile at <code>0x0FD2</code> checks both natively, inside
+        a single block. None of that notices what was left out &mdash; and whoever submits the proofs
+        chooses which proofs to submit.
+      </p>
+      <p>For credit, the sentence that matters is the one nobody can prove:</p>
+    </div>
+    <p class="pull">This borrower has never been liquidated.</p>
+    <div class="col stack">
+      <p>
+        A borrower assembles their own history, submits the flattering half, and every proof checks
+        out. This is not hypothetical. Season&nbsp;1 of this hackathon drew 76 submissions; more than
+        twenty were on-chain credit scores or reputation lending, and one of those, CreditX, took a
+        prize. Every one of them inherits the hole, the winner included &mdash; placing well is not
+        the same as closing it, and an inclusion proof gives none of them a way to.
+      </p>
+      <p>
+        Creditcoin's own <a href="https://github.com/gluwa/usc-testnet-bridge-examples/tree/main/loan-flow"><code>loan-flow</code> tutorial</a> shows the shape cleanly, and it is the
+        reference most builders will start from. <code>_markLoanAsFunded</code> and
+        <code>_noteLoanRepayment</code> each take one proven transaction;
+        <code>USCBase.execute</code> verifies it through <code>0x0FD2</code> and records the query
+        so it cannot be replayed. Every present fact is cryptographic, and that half is sound.
+        Nothing asks whether the set is complete &mdash; which is correct for a loan already
+        registered on chain, and insufficient the moment the question is about a stranger. And
+        <code>markLoanAsExpired</code> is <code>onlyOwner</code>: default is declared by somebody
+        trusted, not proven. For a tutorial that is an honest simplification. For underwriting it
+        is the problem moved one layer up.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">The mechanism</p>
+    <h2 class="col">Two halves, each sound on its own</h2>
+    <div class="halves">
+      <div class="half">
+        <span class="tag tag-proof">nothing invented</span>
+        <h3>Members are proven on entry</h3>
+        <p>
+          Every event enters through <code>appendBatch</code>, which runs the Block Prover on it
+          before it is recorded, checks the receipt status, and takes the transaction index from the
+          proof rather than the caller. An aggregate cannot be inflated.
+        </p>
+      </div>
+      <div class="half">
+        <span class="tag tag-bond">nothing omitted</span>
+        <h3>Completeness is bonded</h3>
+        <p>
+          The claimant stakes the assertion that the set is complete. Anyone may break it by proving
+          one in-scope event the set does not contain. Absence is never proven &mdash; a claim of
+          absence is refuted by presence, which Attestcoin does prove.
+        </p>
+      </div>
+    </div>
+    <div class="col stack">
+      <h3>What scales, and what does not</h3>
+      <p>
+        <em>Settling</em> a claim is constant work: the registry never verifies a whole set, so one
+        spanning ten thousand events is broken by a single proof or by none at all.
+        <em>Building</em> one is not. <code>npm run gas</code> finds every transaction the registry
+        has ever seen from the registry's own logs, reads the receipts and fits a cost model — no
+        explorer involved. Across the four registries deployed so far, 139 transactions:
+      </p>
+    </div>
+    <div class="table-wrap" tabindex="0" role="group" aria-label="Measured gas per operation, scrollable">
+      <table>
+        <thead><tr><th>Call</th><th>Gas, mean</th><th>Of a 75M block</th></tr></thead>
+        <tbody>
+          <tr><td><code>open</code></td><td class="num">252,750</td><td class="num">0.33%</td></tr>
+          <tr><td><code>seal</code></td><td class="num">206,010</td><td class="num">0.27%</td></tr>
+          <tr><td><code>appendBatch</code>, 1 event</td><td class="num">552,956</td><td class="num">0.73%</td></tr>
+          <tr><td><code>appendBatch</code>, 10 events</td><td class="num">2,662,045</td><td class="num">3.54%</td></tr>
+          <tr><td><code>refute</code></td><td class="num">611,556</td><td class="num">0.81%</td></tr>
+          <tr><td><code>finalize</code></td><td class="num">209,258</td><td class="num">0.27%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="col stack">
+      <p>
+        Member count does not explain those numbers. One append of <em>three</em> events cost
+        541,464 gas; one of <em>two</em> cost 878,903. Fitting all thirty-six appends against the
+        call's own calldata gas as well as its member count says why, and drops the worst residual
+        from 79% of the mean to 20%:
+      </p>
+    </div>
+    <div class="formula col" tabindex="0" role="group" aria-label="Fitted cost model, scrollable">273,022 gas fixed
+  1.97 x the call's own calldata gas   (1.00 would be exact)
+ 61,265 gas per member on top of its bytes</div>
+    <div class="col stack">
+      <p>
+        The calldata term is the solid one, and the interesting one: <b>a proven transaction costs
+        about twice its own calldata gas</b>, because those bytes are not merely paid for at the
+        door — they are copied, RLP-decoded and hashed. Proving one in-scope log inside a fat
+        mainnet transaction means carrying all thirty kilobytes of it, and that is not a choice the
+        claimant has.
+      </p>
+      <p>
+        The per-member term is <em>not</em> well determined, which is worth saying rather than
+        quoting. An earlier fit over 25 appends put it at 20,526 gas — almost exactly a cold
+        <code>SSTORE</code>, a satisfying number and the reason to distrust it. Eleven more appends
+        moved it to 61,265. Members and bytes are correlated here, and separating them needs
+        appends this repo has not made.
+      </p>
+      <p>
+        So the ceiling is bytes, not events. A thousand-event claim is a hundred batches and about
+        thirty blocks' worth of gas. Challenging it is still one proof and a binary search.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Claim lifecycle</p>
+    <ol class="lifecycle col">
+      <li><span><b>open</b> &mdash; scope, block range, bond. The range must already be attested; see below.</span></li>
+      <li><span><b>appendBatch</b> &mdash; up to ten queries against one shared continuity proof, in strictly ascending key order.</span></li>
+      <li><span><b>seal</b> &mdash; the set is published and the challenge window starts. An empty set is a legitimate claim, and the most refutable one there is.</span></li>
+      <li><span><b>refute</b> &mdash; one proof of an omitted in-scope event. Half the bond to the refuter, half burned.</span></li>
+      <li><span><b>finalize</b> &mdash; the window elapsed unbroken. The bond returns; the recorded stake stays for consumers to weigh.</span></li>
+    </ol>
+  </section>
+
+  <section>
+    <p class="eyebrow">The part that is easy to get wrong</p>
+    <div class="col stack">
+      <h2>A window nobody could have acted inside is not a window</h2>
+      <p>
+        A claim may not open until its <em>entire</em> range is already attested on Creditcoin,
+        checked against the ChainInfo precompile at <code>0x0FD3</code>.
+      </p>
+    </div>
+    <div class="formula col" tabindex="0" role="group" aria-label="Formula, scrollable">if (!CHAIN_INFO.is_height_attested(scope.chainKey, toBlock))
+    revert RangeNotAttested(scope.chainKey, toBlock);</div>
+    <div class="col stack">
+      <p>
+        Without that gate a claimant could cover a range whose tail is not yet attested, and the
+        window would expire on a claim nobody was <em>able</em> to break. Attestation heights only
+        advance, so once <code>toBlock</code> is attested the range stays provable for the claim's
+        life.
+      </p>
+      <p>
+        A second detail, equally load-bearing: the refuter takes half the slashed bond, not all of
+        it. If they took all of it, a claimant caught lying could refute their own claim and walk
+        away whole &mdash; making a false claim free to attempt. The burned half is what puts a
+        price on being wrong.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Source chain</p>
+    <h2 class="col">Underwritten on Ethereum mainnet, not Sepolia</h2>
+    <div class="col stack">
+      <p>
+        CC3 Testnet attests Ethereum <em>mainnet</em> as chain key 3, from genesis height 0, tracking
+        within about seventy blocks of the real head. Contracts on a free testnet can therefore be
+        underwritten on real Aave positions and real USDC flows, with no capital at risk and nothing
+        simulated.
+      </p>
+    </div>
+    <div class="evidence" tabindex="0" role="group" aria-label="Terminal transcript, scrollable">
+      <div class="evidence-label">npm run balance</div>
+      <pre>attested   sepolia  chainKey 1  height <b>11530890</b>
+attested   mainnet  chainKey 3  height <b>25798250</b></pre>
+    </div>
+    <div class="col stack">
+      <p>
+        Proofs for blocks 210,000 back still resolve in about seven seconds, with only a dozen
+        continuity roots. Most entrants will reach for Sepolia by reflex.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Before the application</p>
+    <h2 class="col">What this does not give you</h2>
+    <div class="col stack">
+      <p>
+        Utuh makes the inputs to a credit decision trustworthy. It does not make the loan safe.
+        Those are different problems and only the first is solved here.
+      </p>
+    </div>
+    <div class="table-wrap" tabindex="0" role="group" aria-label="Table, scrollable">
+      <table>
+        <thead><tr><th>Risk</th><th>Deterred by</th><th>Bounded</th></tr></thead>
+        <tbody>
+          <tr><td>The clean claim is false &mdash; the borrower was liquidated</td><td>the bond, refutable by anyone</td><td>yes, at <code>enforceableLoss</code></td></tr>
+          <tr><td>The clean claim is true and the borrower defaults anyway</td><td>nothing</td><td>no</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="col stack">
+      <p>
+        And the bond is not collateral. A claim must be finalized to be usable, and finalizing
+        refunds the bond &mdash; so by construction <strong>no bond is locked while a line is
+        open</strong>. What it bought was confidence in the history, spent before the money moved.
+      </p>
+      <p>
+        Two things the runs make visible. The cap has bound in every one of them, never the volume
+        term, so the limit came from what someone staked rather than from the history &mdash;
+        "underwritten on proven history" describes where the inputs came from, not where the number
+        did. And the twenty percent in the formula has nothing behind it: an invented constant is
+        exactly what twenty Season 1 projects shipped, and this is another one. The only difference
+        is that its inputs cannot be faked.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">The application</p>
+    <h2 class="col">UtuhCredit &mdash; nothing bridges, only proof crosses</h2>
+    <div class="col stack">
+      <p>
+        History stays on Ethereum. Credit is issued in CTC on Creditcoin. Repayment happens back on
+        Ethereum. Underwriting rests on two claims that are adversarial in <strong>opposite</strong>
+        directions, which is what makes the pair sound.
+      </p>
+    </div>
+    <div class="table-wrap" tabindex="0" role="group" aria-label="Table, scrollable">
+      <table>
+        <thead>
+          <tr><th>Claim</th><th>Assertion</th><th>A lie pays by</th><th>What stops it</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Volume</strong></td>
+            <td>proven Aave USDC repayments</td>
+            <td>inflating it</td>
+            <td>every member verified by <code>0x0FD2</code> on append</td>
+          </tr>
+          <tr>
+            <td><strong>Clean</strong></td>
+            <td>complete set of liquidations, normally empty</td>
+            <td>omitting one</td>
+            <td>bond, refutable by one liquidation proof</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="formula col" tabindex="0" role="group" aria-label="Formula, scrollable">limit = min( 20% of proven volume x the lender's stated rate,
+             10 x the bond behind the clean claim )</div>
+    <div class="col stack">
+      <p>
+        The second term is the consumer half of the mechanism. The registry cannot size a bond
+        because it does not know what a claim will be used for; only the party about to lend knows
+        its own exposure. A line never risks more than a liar stood to lose.
+      </p>
+      <h3>Reading a history is not the same as owning it</h3>
+      <p>
+        Underwriting reads a public chain, and nothing about reading it proves the reader holds
+        the key that wrote it. Before a line opens, the borrower binds their Ethereum address to
+        their Creditcoin account with one ordinary transaction:
+      </p>
+    </div>
+    <div class="formula col" tabindex="0" role="group" aria-label="Formula, scrollable">calldata = bytes12("utuh:control") || &lt;creditcoin account&gt;</div>
+    <div class="col stack">
+      <p>
+        <code>proveControl</code> verifies it through the Block Prover and reads the sender out of
+        the decoded transaction. No signature scheme of our own, no relayer to trust. The tag stops
+        ordinary calldata from ever reading as a commitment, and naming the account inside it stops
+        anyone replaying someone else's. Any supported source chain will do &mdash; an EOA address
+        derives from its public key and is the same on all of them, so Sepolia gas proves exactly
+        as much as mainnet gas.
+      </p>
+      <h3>Default without proving a negative</h3>
+      <p>
+        A drawn line is settled by the borrower proving repayment landed at the lender's Ethereum
+        address. If no finalized claim arrives before the deadline, the line defaults. The contract
+        never establishes that a payment was missed &mdash; the burden sits with the only party who
+        could have discharged it. Silence is the default condition, not an inference.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Evidence</p>
+    <h2 class="col">Both outcomes, on the live chain</h2>
+    <div class="col stack">
+      <p>
+        A real address that was genuinely liquidated on Ethereum files a claim saying it never was.
+        A watcher sweeps the same range and takes the bond.
+      </p>
+    </div>
+    <div class="evidence" tabindex="0" role="group" aria-label="Terminal transcript, scrollable">
+      <div class="evidence-label">npm run credit</div>
+      <pre>216001 blocks of Ethereum mainnet, ~30 days
+  <b>6130</b> USDC Repay events, <b>124</b> LiquidationCall events
+  borrower and liquidated address are picked out of that window at runtime
+
+volume: 4 proven Aave USDC repayments &mdash; aggregate <b>46871.138101</b> USDC
+clean:  0 liquidations &mdash; the claim asserts this set is empty
+
+<span class="mark">0x58039c0c... was liquidated 1 time(s) in this window</span>
+<span class="mark">filing a clean claim anyway &mdash; asserting the set is empty</span>
+  refuted with one real liquidation proof
+  status <span class="mark">Refuted</span>   reward 1.0 CTC
+
+volume claim 14: <span class="ok">Finalized</span>  aggregate 46871.138101 USDC
+clean  claim 15: <span class="ok">Finalized</span>  aggregate 0
+
+proven volume 46871.138101 USDC at 15000000000000 wei/unit
+20% of that = 140613.414303 CTC
+bond cap    = <b>10.0 CTC</b>   (10x enforceableLoss 1.0, not the 2.0 CTC bond)
+
+<span class="mark">openLine reverted: SubjectNotControlled</span>
+  subject 0x476551e292547C70bB27307d87Df54bAeb0f644b
+  caller  0x50577827700c0cF60240ABd07f041F09C95d4748</pre>
+    </div>
+    <div class="col stack">
+      <p>
+        Two things bind here. The proven volume would justify a line of a hundred and forty
+        thousand CTC; the clean claim it rests on carries a two CTC bond, and only half of that is
+        enforceable &mdash; a claimant can front-run their own refutation from a second address
+        and take the refuter's share back, so the burn is what is guaranteed. One CTC of
+        enforceable loss, ten times that, ten CTC. A small bond is not allowed to underwrite a
+        large loan, and it is the deterrent that sizes it, not the deposit.
+      </p>
+      <p>
+        And then the line does not open at all. Every number above was read off a public chain by
+        someone who does not hold the key that produced it, and the contract says so. The refusal
+        is the demonstration.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">The whole loop</p>
+    <h2 class="col">Drawn on Creditcoin, repaid on Ethereum, settled</h2>
+    <div class="col stack">
+      <p>
+        The mainnet run ends in a refusal, and that is the honest end of it. To show the other half
+        of the product, the borrower has to be someone who can act &mdash; so the same contracts run
+        again against Sepolia, with two parties transacting for themselves.
+      </p>
+      <p>
+        The source-chain contract there stands in for Aave, not for anything under test. The
+        payments are real transfers, the events are real logs in real blocks, and Creditcoin attests
+        them exactly as it attests Aave's. A scope is a scope; the registry cannot tell the
+        difference and does not need to.
+      </p>
+    </div>
+    <div class="evidence" tabindex="0" role="group" aria-label="Terminal transcript, scrollable">
+      <div class="evidence-label">npm run full</div>
+      <pre>borrower sweeps for their own claim
+  <b>publicnode=3  tenderly=3</b>   two independent endpoints agree; the union is what gets claimed
+
+borrower pays the lender 3 x 0.001 ETH        Sepolia blocks 11568493, 495, 496
+adverse event recorded against the defaulter  Sepolia block 11568498
+
+borrower binds their address
+  calldata <b>0x757475683a636f6e74726f6c</b>01a802c650cccef077208a93c1cf43025239003f
+  controllerOf(0x01a802C6...) = 0x01a802C6...
+
+claim 1  volume            <span class="ok">Finalized</span>   0.003 ETH, 3 members
+claim 2  clean (borrower)  <span class="ok">Finalized</span>   0 members
+claim 3  clean (defaulter) <span class="mark">Refuted</span>     one proof, half the bond burned
+claim 4  repayment         <span class="ok">Finalized</span>   0.000525 ETH, 1 member
+
+volume would justify 12.0 CTC; the clean bond guarantees 1.0 CTC of loss
+limit <b>10.0 CTC</b>                       (10x the enforceable loss, not the bond)
+drawing 10.0 CTC obliges <b>0.000525 ETH</b> back, at the lender's terms
+borrower drew 10.0 CTC   (61.9868252125 -&gt; 71.9867101675)
+paid 0.000525 ETH back on Sepolia, block 11568588
+borrower withdrew <b>4.0 CTC</b> of returned bonds   (credited, then pulled)
+
+line 1: <b>Settled</b>
+settledThrough(borrower) = 11568619 &mdash; that payment cannot settle another line</pre>
+    </div>
+    <div class="col stack">
+      <p>
+        Credit issued on Creditcoin against history proven from Sepolia, repaid on Sepolia, settled
+        on Creditcoin. Nothing was wrapped, locked, or bridged &mdash; the only thing that crossed
+        in either direction was proof.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">The watcher</p>
+    <h2 class="col">A bond nobody tries to take is a deposit</h2>
+    <div class="col stack">
+      <p>
+        Every guarantee here rests on one sentence &mdash; anyone may refute a claim by proving one
+        event it left out. For a long time nothing in the repo was watching, which made that a
+        possibility rather than a fact.
+      </p>
+      <p>
+        So: plant an incomplete claim, tell no one, and start a watcher that has never heard of it.
+      </p>
+    </div>
+    <div class="evidence" tabindex="0" role="group" aria-label="Terminal transcript, scrollable">
+      <div class="evidence-label">npm run bait &nbsp;·&nbsp; npm run watch</div>
+      <pre>claim 9 is sealed and short by one.
+nobody has been told.
+
+claim 9: sealed with 3 member(s), bond 2.0 CTC
+  range 11553920..11554493 on chain key 1
+  window closes at CC3 block 5363733 (now 5363713, 20 to go)
+  swept independently: <span class="mark">127.0.0.1:1=err  127.0.0.1:2=err</span>
+  <span class="mark">no endpoint answered — cannot say anything about this claim, will retry</span>
+
+    ... claim 6 is still Sealed, still queued ...
+
+  swept independently: publicnode=4  <span class="mark">drpc=err</span>  <span class="mark">1rpc=err</span>
+  union: 4 in-scope event(s)
+  <span class="mark">INCOMPLETE: 1 event(s) missing</span>
+  first gap at block 11554739 tx#126 log#0
+  refuted with one proof. reward 1.0 CTC</pre>
+    </div>
+    <div class="col stack">
+      <p>
+        The first pass had every endpoint unreachable and said so, leaving the claim queued rather
+        than deciding it was fine on the strength of never having managed to look. The second pass
+        caught it. Two of three endpoints still failed there and it did not matter, because a
+        refutation verifies itself:
+        the union is the right input and the Block Prover decides what is real. Had there been no
+        gap, the same run would have said <em>inconclusive, 1 answered</em> rather than clean
+        &mdash; the negative case is exactly as strong as the endpoints that looked, and saying so
+        is the only honest option.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Composition</p>
+    <h2 class="col">A spotless Aave record says nothing about Compound</h2>
+    <div class="col stack">
+      <p>
+        A clean claim only ever speaks about the contract its scope names. A borrower liquidated on
+        Compound and untouched on Aave is not clean, and a lender that asked about Aave alone would
+        never find out &mdash; the claim it read was true.
+      </p>
+      <p>
+        So the lender lists the adverse-event classes it cares about, and a line requires one
+        finalized, empty claim for each. Exposure is capped at the <em>weakest</em> of them, since
+        breaking any single one is enough to have made the underwriting wrong.
+      </p>
+    </div>
+    <div class="formula col" tabindex="0" role="group" aria-label="Formula, scrollable">limit = min( 20% of proven volume x the lender's rate,
+             10 x the smallest enforceable loss among the clean claims )</div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Found by attacking it</p>
+    <h2 class="col">Eighteen holes, closed</h2>
+    <div class="col stack">
+      <p>
+        Each of these was found after the flow already worked, which is exactly when a design stops
+        being examined. The first one is the one this whole project is about: a check that reads
+        convincingly and binds nothing.
+      </p>
+    </div>
+    <div class="formula col" tabindex="0" role="group" aria-label="Formula, scrollable">/// @param repayRequired ... Set by the lender at draw time;
+function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repayWindow) external {
+    if (l.borrower != msg.sender) revert NotBorrower();   // the borrower calls this
+    ...
+    l.repayRequired += repayRequired;                      // with a number they chose</div>
+    <div class="col stack">
+      <p>
+        The comment says the lender sets the terms. The function is callable only by the borrower,
+        and takes the terms as arguments. Draw the whole limit, pass one wei, and the loan is free.
+        The live run happened to be honest.
+      </p>
+      <p>
+        <code>draw</code> now takes an amount and nothing else. What must come back and by when are
+        computed from lender policy, converting CTC through the same rate that produced the limit,
+        rounding up so no draw is ever small enough to owe nothing.
+      </p>
+      <ul class="plain">
+        <li>
+          <b>Anyone could borrow against a stranger's record.</b> <code>openLine</code> read a
+          subject's history and never checked who was asking. Closed by the control commitment
+          above.
+        </li>
+        <li>
+          <b>One underwriting could fund unlimited lines.</b> The bond cap bounded each line while
+          bounding nothing in aggregate. A finalized claim is now spent when it opens a line.
+        </li>
+        <li>
+          <b>A borrower could buy an unlimited extension for one wei.</b> Every draw reset the
+          deadline. It is now fixed by the first draw and never moves.
+        </li>
+        <li>
+          <b>A bond said nothing about how long it was exposed.</b> A lender now states the
+          shortest challenge window it will accept, because a stake is only a deterrent for as
+          long as somebody could still take it.
+        </li>
+        <li>
+          <b>"Never liquidated" was checked by summing, not counting.</b> A clean claim's aggregate
+          is zero when the set is empty — and also when it holds a liquidation whose amount happens
+          to be zero. It now counts members, which is true whatever metric the scope carries.
+        </li>
+        <li>
+          <b>A refutation could name an event the claimant was unable to include.</b> Appending
+          runs the scope's metric and rejects a log whose data is too short for it; refuting did
+          not. An honest claimant could have been slashed for an omission they had no way to avoid.
+          Both paths now run the same check.
+        </li>
+        <li>
+          <b>The bond overstated the deterrent by half.</b> A claimant knows what they omitted from
+          the moment they seal, so they can front-run an incoming refutation from a second address
+          and take the refuter's share back. An earlier note here said commit-reveal would close
+          that; it would not — the claimant holds the private knowledge and simply commits first.
+          What survives is the burn. The registry now reports <code>enforceableLoss</code>, and a
+          line sized against the whole bond carried twice the exposure the deterrent covered.
+        </li>
+        <li>
+          <b>The watcher forgot claims it had failed to check.</b> It marked each one seen
+          <em>before</em> inspecting it, so an endpoint outage during the minute a claim sealed made
+          that claim invisible for good &mdash; and an unguarded await meant a single lost race
+          killed the process. It now retires a claim only on a verdict that cannot change, retries
+          everything else, survives its own failures, and works soonest-deadline-first.
+        </li>
+        <li>
+          <b>The endpoint list could only grow.</b> Widening a trust set has to come with narrowing
+          it: an operator who knows a bundled endpoint is rate-limited &mdash; or is the
+          claimant's &mdash; needs to drop it, and an append-only setting cannot.
+        </li>
+        <li>
+          <b>A claimant who could not receive ether could brick their own claim.</b>
+          <code>finalize</code> is permissionless and pays the claimant, so a contract that rejects
+          the refund would have left its claim stuck in <em>Sealed</em> forever &mdash; and with it
+          anything waiting on it. Refunds are credited and pulled now.
+        </li>
+        <li>
+          <b>Honest claimants were betting the bond on one RPC.</b> Sweeping with a single endpoint
+          means a node's omission produces an incomplete claim, which is indistinguishable from a
+          lie and punished the same. Claim building now unions every endpoint, the same way the
+          watcher does.
+        </li>
+        <li>
+          <b>One payment could settle two lines.</b> Marking a claim spent stops the claim being
+          reused; it does not stop the payment inside it being reused. Two lines, two claims over
+          overlapping ranges, one transfer in both. Each settlement now consumes the range it rests
+          on, per subject.
+        </li>
+        <li>
+          <b>Refutation depended on one hosted service.</b> Every proof came from Gluwa's hosted
+          Proof Builder, so an outage there meant no claim could be built and, worse, no claim
+          could be <em>refuted</em> &mdash; the entire enforcement mechanism behind a single
+          endpoint, which is the assumption the registry exists to reject. Proofs are now built
+          locally as well, from the source-chain RPCs and the ChainInfo precompile, and both paths
+          produce the same continuity roots: <code>npm run provers</code> proves one transaction
+          each way and compares them. Then the real test &mdash; a planted incomplete claim
+          refuted by a watcher run with <code>PROVER_URL</code> pointed at a dead port. A real
+          bond, taken on chain, with no hosted proof service reachable at all. The local path
+          takes tens of seconds against the hosted one's single second, which is fine for the
+          recommended window and is the reason not to underwrite against the twenty-block floor.
+        </li>
+        <li>
+          <b>A refutation depended on a node's willingness to do arithmetic.</b>
+          <code>pallet-evm</code> does not always propagate revert reasons in estimation mode, so
+          <code>eth_estimateGas</code> can fail on a precompile call that would have succeeded
+          &mdash; Gluwa's own SDK ships a workaround, which is how this is known rather than
+          guessed at. Every registry write went out with no fallback, so a node declining to
+          estimate meant a liar kept the bond. Writes now run <code>eth_call</code> first, which is
+          free and settles whether the call is good, then estimate, then a limit from the measured
+          cost model. <code>FORCE_MODELLED_GAS=1</code> makes every call take the fallback, so it
+          is exercised on real transactions rather than trusted because the arithmetic looks right.
+        </li>
+        <li>
+          <b>A control binding could be replayed, so it was not a binding.</b>
+          <code>proveControl</code> set <code>controllerOf[subject]</code> and kept no record of
+          which commitments it had already applied. The proof stays valid forever and anyone may
+          submit it, so the binding was really <em>whichever proof was replayed most recently</em>.
+          A subject can move their binding by sending a second commitment &mdash; which is how
+          anyone rotates away from a Creditcoin account they no longer control &mdash; and an
+          attacker holding the old account could simply put it back, at will, including in front
+          of the subject's own <code>openLine</code>. Creditcoin's own <code>USCBase</code> records
+          processed queries for exactly this reason; this did not. Each commitment applies once
+          now, keyed by chain and by the encoded transaction, which carries its own signature.
+        </li>
+        <li>
+          <b>A chain key was treated as a global constant.</b> <code>CHAIN_KEY</code> says Sepolia
+          is 1 and Ethereum mainnet is 3, which is true of CC3 Testnet and is not a property of
+          Creditcoin — gluwa's own <code>networks.json</code> has key 3 meaning <em>Sepolia</em> on
+          <code>usc-devnet</code>. Pointed at a different Creditcoin network, this would have
+          underwritten one chain while reporting another, and nothing would have caught it: every
+          proof would still verify, being a perfectly valid proof about the chain it came from.
+          <code>get_supported_chains</code> is read now, and the key, the EVM chain id and the
+          transaction encoding are all checked against what the network attests.
+        </li>
+        <li>
+          <b>Endpoint disagreement was resolved by iteration order.</b> The union sweep wrote each
+          endpoint's answer over the last, so two endpoints describing the same event position
+          differently meant the one that answered last won, silently. The union is an argument
+          about presence, and it does not extend to contents. Conflicts are reported now.
+        </li>
+      </ul>
+      <p>
+        The first of those is why <code>npm run credit</code> ends in a revert rather than a
+        drawdown. Pointed at a stranger's history it stops at <code>SubjectNotControlled</code>,
+        and the refusal is the demonstration.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Found by building</p>
+    <h2 class="col">Two things about Attestcoin that are not in the docs</h2>
+    <div class="col stack">
+      <p>
+        Both surfaced by exercising the precompile through <code>eth_call</code> on the live testnet
+        before spending anything &mdash; the Block Prover exposes a <code>view</code> twin of
+        <code>verifyAndEmit</code>, so an empty wallet is enough to test the entire proving path.
+      </p>
+      <ul class="plain">
+        <li>
+          <b>There is an undocumented batch overload.</b> The Proof Builder returns one continuity
+          proof spanning a batch's block range, and it is the array form of
+          <code>verifyAndEmit</code> that the proof is shaped for. Feeding the same shared proof to
+          the single-query form works only while every query sits in the same block; one block later
+          it reverts with <code>Merkle root mismatch</code>.
+        </li>
+        <li>
+          <b>The cap of ten counts queries, not transactions.</b> A transaction carrying three
+          in-scope logs spends three slots. Batching by transaction count earns
+          <code>heights: Value is too large for length</code>.
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Stated plainly</p>
+    <h2 class="col">What this does not do</h2>
+    <div class="col">
+      <ul class="plain">
+        <li>
+          <b>Completeness here is economic, not cryptographic.</b> A bond makes lying expensive. It
+          does not make it impossible &mdash; and what it costs is the burn, not the bond.
+        </li>
+        <li>
+          <b>A watcher's silence is only as good as its sources.</b> Deciding a claim is complete
+          means trusting some node to have mentioned every log &mdash; this protocol's own problem,
+          one layer down. Voting across endpoints would not fix it; they can be wrong together.
+          What saves it is that a refutation verifies itself: if <em>any</em> endpoint surfaces an
+          omitted event, the Block Prover settles whether it is real, and a fabricated one just
+          fails to prove. So the watcher sweeps every endpoint and takes the union, never a vote.
+          The negative case stays soft and is reported that way &mdash; "no gap across 3 endpoints",
+          or "inconclusive, 1 answered".
+        </li>
+        <li>
+          <b>The mechanism punishes scale, though less than it did.</b> One omission voids the
+          whole claim and there is no amend path, by design. Most of that risk was self-inflicted:
+          claimants used to sweep with one RPC, so a node's omission cost them the bond and looked
+          exactly like lying. They now take the union of every endpoint, and a single-source sweep
+          warns before it seals. What remains is inherent &mdash; settling cheaply and building
+          fragilely are one property from two sides &mdash; and still argues for shorter claims
+          than the guarantee deserves.
+        </li>
+        <li>
+          <b>Honest claims pay watchers nothing, and this layer cannot fix it.</b> A refutation
+          earns only when someone lied; if the deterrent works, almost nobody does. Paying watchers
+          from the burn pool was the obvious patch and it fails: any bonus worth having is also
+          recoverable by a claimant refuting their own claim from a second address, which is the
+          front-running that made <code>enforceableLoss</code> necessary in the first place. A
+          token mechanism pretending otherwise would be worse than the honest gap.
+        </li>
+        <li>
+          <b>Watching pays less than the reward suggests.</b> A refutation only earns when the
+          claimant fails to defend against it. Pricing the guarantee at the burn keeps lenders
+          honest about their exposure; it does not repair the watcher's side of the trade.
+        </li>
+        <li>
+          <b>Large claims are expensive to build.</b> Not because of storage, but because every
+          proven transaction is carried, decoded and hashed at roughly twice its calldata gas. A ten-thousand-event claim is thirty
+          blocks' worth of gas. Keys live in a storage array so refutation stays a binary search the
+          chain runs itself, with no witness a claimant could withhold; past the point where that
+          array is affordable, it becomes an incremental Merkle root and the refuter supplies an
+          adjacency proof of the two members bracketing the gap.
+        </li>
+        <li>
+          <b>Read-side only.</b> Writability is still in third-party audit and not on testnet, so a
+          default is recorded on Creditcoin but consequences cannot yet be enforced back on Ethereum.
+        </li>
+        <li>
+          <b>Binding an address costs the borrower one source-chain transaction.</b> That is a real
+          onboarding step, and there is no way around it that does not reopen the hole it closes.
+          It is also why the mainnet run cannot finish: no one can bind an address they do not hold.
+        </li>
+        <li>
+          <b>There is no oracle, and none is faked.</b> Crossing from USDC units to CTC wei is a
+          price; the lender fixes the rate at deployment where anyone can see and judge it.
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Deployed</p>
+    <div class="table-wrap" tabindex="0" role="group" aria-label="Table, scrollable">
+      <table>
+        <thead>
+          <tr><th>Contract</th><th>CC3 Testnet &mdash; chain id 102031, all verified on Blockscout</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>UtuhRegistry <em>(Sepolia-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac?tab=contract">0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac</a></td></tr>
+          <tr><td>UtuhCredit <em>(Sepolia-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0x1C6d88eb6a40Ef2dBB8cFAF8A1aBe5641eAe9Ea8?tab=contract">0x1C6d88eb6a40Ef2dBB8cFAF8A1aBe5641eAe9Ea8</a></td></tr>
+          <tr><td>SettlementLedger <em>(on Sepolia)</em></td><td class="num"><a href="https://eth-sepolia.blockscout.com/address/0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D?tab=contract">0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D</a></td></tr>
+          <tr><td>UtuhRegistry <em>(mainnet-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac?tab=contract">0x8FA0BD5301D998Be873E31453E53d114929a5Fac</a></td></tr>
+          <tr><td>UtuhCredit <em>(mainnet-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0xaF20895A1a130e4C6C3f6fa0238073Aa42fA080d?tab=contract">0xaF20895A1a130e4C6C3f6fa0238073Aa42fA080d</a></td></tr>
+          <tr><td>EvmV1Decoder <em>(mainnet-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0x5cab00c032D7d4436f312Dd51ef59Dc5b860df3F?tab=contract">0x5cab00c032D7d4436f312Dd51ef59Dc5b860df3F</a></td></tr>
+          <tr><td>EvmV1Decoder <em>(Sepolia-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0xEEF4094b3848eD261478310a949c4A1E42d28571?tab=contract">0xEEF4094b3848eD261478310a949c4A1E42d28571</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="footer">
+    <span>81 forge tests, 9 fuzz</span>
+    <span>91 guards asserted live</span>
+    <span>Slither 0, halmos 5 proofs</span>
+    <span>Source chains: Ethereum mainnet and Sepolia</span>
+    <span>Registry 7.6 KB runtime</span>
+    <span><a href="https://github.com/PugarHuda/utuh">github.com/PugarHuda/utuh</a></span>
+    <span>MIT</span>
+  </div>
+
+</main>
+
+
+
+
+  </body>
+</html>

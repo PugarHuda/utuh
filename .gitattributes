@@ -6,3 +6,11 @@
 *.json text eol=lf
 *.md text eol=lf
 *.yml text eol=lf
+
+# `web:static` refuses to publish whitepaper.pdf if the sha256 of whitepaper.html has moved since
+# it was rendered. Windows checking the source out as CRLF while Linux CI checks it out as LF would
+# make that digest disagree with itself across platforms, on a file neither side edited.
+*.html text eol=lf
+
+# And the render itself is bytes. Nothing should ever decide it looks like text.
+*.pdf binary

@@ -39,8 +39,9 @@ about events which do. A borrower assembles their own history, submits the flatt
 each proof checks out.
 
 This is not hypothetical. Season 1 of this hackathon drew 76 submissions, and more than twenty of
-them were some form of on-chain credit score or reputation-based lending. Every one of them
-inherits this hole. None of them won.
+them were some form of on-chain credit score or reputation-based lending; one of those, CreditX,
+took a prize. Every one of them inherits this hole, the winner included — placing well is not the
+same as closing it, and an inclusion proof gives none of them a way to.
 
 ## Where this sits next to Creditcoin's own example
 
@@ -764,6 +765,8 @@ web/
   serve.ts                  a static server, and nothing else — no key, no indexer, no cache
   og.png                    the page, photographed by tests/shots.ts — what a link preview shows
   build-static.ts           the published build: four files and a picture, no server, ABIs baked in
+  whitepaper.html           the whitepaper, and the source the submitted PDF is rendered from
+  build-pdf.ts              renders it with the Chromium the browser suite already installs
   tests/console.spec.ts     Playwright, against the live chain: no fixtures, no stubs
   tests/static.spec.ts      the published build asks its host for nothing but its own files
   tests/a11y.spec.ts        axe over the rendered page; WCAG A/AA, zero violations
@@ -822,6 +825,7 @@ npm run livetest            # 107 guards asserted against the live chain, refund
 npm run web                 # the console on http://127.0.0.1:5173 — read-only without a wallet
 npm run web:build           # bundle it; the server serves ABIs straight out of out/
 npm run web:static          # the published build: four files, no server
+npm run web:pdf             # web/whitepaper.html -> whitepaper.pdf, the submitted document
 npm run web:test            # Playwright, in a real browser, against the live chain
 
 npm run demo                # e2e then credit, against the deployment already recorded

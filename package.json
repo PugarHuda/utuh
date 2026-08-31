@@ -41,6 +41,7 @@
     "web:build": "esbuild web/main.ts --bundle --format=esm --target=es2022 --minify --outfile=web/dist/main.js",
     "web": "npm run web:build && npm run web:static && tsx web/serve.ts",
     "web:static": "tsx web/build-static.ts",
+    "web:pdf": "tsx web/build-pdf.ts",
     "web:test": "playwright test",
     "web:shots": "tsx web/tests/shots.ts",
     "lint": "forge lint src/",
