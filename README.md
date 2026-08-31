@@ -585,7 +585,7 @@ published registries, the same union across independent endpoints the daemon and
 and a red run if a sealed claim is short of an event. The same hour, the same workflow opens the
 published console in a real browser and asks what a visitor would: it loads, it says which chain it
 is on, the block it shows is this hour's, both deployments read, no pane is broken, and the page
-asked its host for nothing but its own three files. Pages can serve a stale or broken build with
+asked its host for nothing but its own four files. Pages can serve a stale or broken build with
 nothing else in CI noticing; this notices.
 
 It holds no key. `npm run watch -- --dry` reads and never signs, so it no longer asks for one, and a
@@ -635,10 +635,10 @@ on. It is still the record peers read, so whoever notices may write it.
 
 ### Published without a server
 
-`npm run web:static` bakes the ABIs and the deployment record into the page and writes three files.
+`npm run web:static` bakes the ABIs and the deployment record into the page and writes four files.
 There is no server in the published build at all, and the browser tests assert exactly that: the
-page boots, reads the live chain, and asks its host for nothing but `index.html`, `main.js` and
-`style.css`. A GitHub Actions workflow builds it from each commit's own artifacts, so the ABI the
+page boots, reads the live chain, and asks its host for nothing but `index.html`, `main.js`,
+`style.css` and the font they use. A GitHub Actions workflow builds it from each commit's own artifacts, so the ABI the
 page carries is the ABI the contracts were compiled with.
 
 `web/tests/borrow.live.spec.ts` is the test that makes the Borrow pane a claim rather than a hope.
@@ -763,7 +763,7 @@ web/
                             what the page thinks
   serve.ts                  a static server, and nothing else — no key, no indexer, no cache
   og.png                    the page, photographed by tests/shots.ts — what a link preview shows
-  build-static.ts           the published build: three files and a picture, no server, ABIs baked in
+  build-static.ts           the published build: four files and a picture, no server, ABIs baked in
   tests/console.spec.ts     Playwright, against the live chain: no fixtures, no stubs
   tests/static.spec.ts      the published build asks its host for nothing but its own files
   tests/a11y.spec.ts        axe over the rendered page; WCAG A/AA, zero violations
@@ -821,7 +821,7 @@ npm run livetest            # 107 guards asserted against the live chain, refund
 
 npm run web                 # the console on http://127.0.0.1:5173 — read-only without a wallet
 npm run web:build           # bundle it; the server serves ABIs straight out of out/
-npm run web:static          # the published build: three files, no server
+npm run web:static          # the published build: four files, no server
 npm run web:test            # Playwright, in a real browser, against the live chain
 
 npm run demo                # e2e then credit, against the deployment already recorded

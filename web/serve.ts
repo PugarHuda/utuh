@@ -83,7 +83,7 @@ async function main(): Promise<void> {
           return await serveFile(join(WEB, 'dist', path.slice('/dist/'.length)), res);
         }
 
-        // The statically-built console, served the way a static host would serve it: three files
+        // The statically-built console, served the way a static host would serve it: four files
         // and nothing else. Under a prefix rather than on its own port so the browser tests can
         // prove that this build asks for no `/abi` and no `/deployments.json` at all.
         if (path === '/static/' || path === '/static/index.html') {

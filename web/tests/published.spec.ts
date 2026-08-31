@@ -50,7 +50,9 @@ test('the mainnet-sourced deployment reads from the published build too', async 
 test('the link preview is a real photograph of the page, and it is served', async ({ page }) => {
   await page.goto('./');
   const image = await page.locator('meta[property="og:image"]').getAttribute('content');
-  expect(image).toBe(new URL('og.png', PUBLISHED!).toString());
+  // Absolute, and to the canonical host on purpose: a crawler that finds the mirror still has to
+  // resolve one picture, and pointing it at PUBLISHED would make the mirror advertise its own.
+  expect(image).toBe('https://utuh.vercel.app/og.png');
   const res = await page.request.get(image!);
   expect(res.status()).toBe(200);
   expect(res.headers()['content-type']).toContain('image/png');
@@ -58,7 +60,7 @@ test('the link preview is a real photograph of the page, and it is served', asyn
   await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
 });
 
-test('asks its host for nothing but its own three files', async ({ page }) => {
+test('asks its host for nothing but its own four files', async ({ page }) => {
   const host = new URL(PUBLISHED!).host;
   const asked: string[] = [];
   page.on('request', (r) => {
@@ -67,5 +69,5 @@ test('asks its host for nothing but its own three files', async ({ page }) => {
   });
   await page.goto('./');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
-  expect([...new Set(asked)].sort()).toEqual(['index.html', 'main.js', 'style.css']);
+  expect([...new Set(asked)].sort()).toEqual(['archivo.woff2', 'index.html', 'main.js', 'style.css']);
 });
