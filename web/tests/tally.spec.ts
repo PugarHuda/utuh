@@ -54,3 +54,32 @@ test('a tally that cannot be read says so instead of showing zero', async ({ pag
     await expect(page.locator(`#${id}`)).toHaveText('—');
   }
 });
+
+test('the page invites a stranger to break whichever claim is still open', async ({ page }) => {
+  test.setTimeout(200_000);
+  await page.goto('/?deployment=mainnet');
+  await expect(page.locator('[data-testid=tally]')).toHaveAttribute('data-ready', 'true', { timeout: 170_000 });
+
+  const invitation = page.locator('[data-testid=invitation]');
+  await expect(invitation).not.toBeEmpty();
+
+  // Which branch is correct depends on the chain, and both are: claims settle. What must not
+  // happen is an invitation to break something that has already finalized.
+  const link = page.locator('[data-testid=invitation-link]');
+  if ((await link.count()) === 0) {
+    await expect(invitation).toContainText(/no claim is inside its challenge window/i);
+    return;
+  }
+
+  const href = await link.getAttribute('href');
+  expect(href, 'the invitation points at a specific claim').toMatch(/^\?deployment=\w+&claim=\d+$/);
+  await expect(invitation).toContainText(/no wallet is needed to look/i);
+
+  // Following it must actually select that claim, not merely reload the page. The log stays empty
+  // until someone sweeps — the invitation offers the sweep, it does not perform it.
+  const id = href!.match(/claim=(\d+)/)![1]!;
+  await link.click();
+  await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 120_000 });
+  await expect(page.locator('#claim-select')).toHaveValue(id, { timeout: 60_000 });
+  await expect(page.locator('#sweep')).toBeEnabled();
+});

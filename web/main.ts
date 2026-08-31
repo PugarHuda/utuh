@@ -271,9 +271,13 @@ async function renderTally(): Promise<void> {
     let sealed = 0;
     let refuted = 0;
     let burned = 0n;
+    // The newest claim a stranger could still break, and where it lives.
+    let openNow: { which: DeploymentName; id: number; blocksLeft: number } | undefined;
+    const head = await within(20_000, 'block number', cc3.getBlockNumber());
 
-    for (const registry of registries) {
+    for (const [at, registry] of registries.entries()) {
       if (!registry) continue;
+      const which = (Object.keys(DEPLOYMENT_RECORDS) as DeploymentName[])[at]!;
       // ethers does not fail fast on an unreachable endpoint — it retries in the background and
       // this strip would sit on its placeholders indefinitely. A tally stuck at "…" is survivable;
       // one that resolved to a plausible zero would not be, because "0 refuted" is exactly the
@@ -285,14 +289,24 @@ async function renderTally(): Promise<void> {
       const ids = Array.from({ length: total }, (_, i) => i + 1);
       for (let at = 0; at < ids.length; at += CLAIM_BATCH) {
         const slice = await Promise.all(
-          ids.slice(at, at + CLAIM_BATCH).map(async (i) => ({
-            status: Number((await within(20_000, `claim ${i}`, registry.claim(i))).status),
-            members: await within(20_000, `memberCount ${i}`, registry.memberCount(i) as Promise<bigint>),
-          })),
+          ids.slice(at, at + CLAIM_BATCH).map(async (i) => {
+            const c = await within(20_000, `claim ${i}`, registry.claim(i));
+            return {
+              id: i,
+              status: Number(c.status),
+              until: Number(c.sealedAt) + Number(c.challengeWindow),
+              members: await within(20_000, `memberCount ${i}`, registry.memberCount(i) as Promise<bigint>),
+            };
+          }),
         );
         for (const c of slice) {
           proven += c.members;
           if (claimStatus(c.status) === 'Refuted') refuted += 1;
+          // Sealed is the only status a stranger can act on: published, and still inside its window.
+          if (claimStatus(c.status) === 'Sealed' && c.until > head) {
+            const left = c.until - head;
+            if (!openNow || left > openNow.blocksLeft) openNow = { which, id: c.id, blocksLeft: left };
+          }
         }
       }
     }
@@ -301,6 +315,7 @@ async function renderTally(): Promise<void> {
     $('t-claims').textContent = sealed.toLocaleString();
     $('t-refuted').textContent = refuted.toLocaleString();
     $('t-burned').textContent = `${formatEther(burned)} CTC`;
+    renderInvitation(openNow);
     strip.dataset.ready = 'true';
   } catch (e) {
     // A tally that cannot be read says so rather than showing a plausible zero.
@@ -308,6 +323,44 @@ async function renderTally(): Promise<void> {
     strip.dataset.ready = 'failed';
     strip.title = reason(e);
   }
+}
+
+/// The one thing a visitor can do here that they cannot do anywhere else.
+///
+/// Every other pane on this page is something to read. This is something to break: a claim that is
+/// published, still inside its window, and refutable by a stranger with no wallet and no account —
+/// the sweep is keyless, and only sending the refutation needs a key. Saying so is the difference
+/// between a reader who scrolls past and one who tries it.
+///
+/// It names whichever open claim has the most time left rather than a fixed id, so it keeps
+/// pointing at something real after the current one is broken — which is the outcome it is
+/// inviting.
+function renderInvitation(open?: { which: DeploymentName; id: number; blocksLeft: number }): void {
+  const box = $('invitation');
+  if (!open) {
+    box.replaceChildren(
+      el('span', 'note', 'No claim is inside its challenge window right now — every one has settled.'),
+    );
+    return;
+  }
+  // CC3 blocks are 15s, measured over 10,000 twice.
+  const hours = (open.blocksLeft * 15) / 3600;
+  const left = hours >= 48 ? `${Math.floor(hours / 24)} days` : `${Math.max(1, Math.round(hours))} hours`;
+
+  const a = el('a', 'act', `Sweep claim ${open.id} yourself`) as HTMLAnchorElement;
+  a.href = `?deployment=${open.which}&claim=${open.id}`;
+  a.dataset.testid = 'invitation-link';
+
+  box.replaceChildren(
+    a,
+    el(
+      'span',
+      'note',
+      `It is published and has ${left} left on its window. Your browser sweeps the source chain across ` +
+        'independent endpoints and checks every event against the claim on-chain. No wallet is needed to ' +
+        'look — one is only needed to send the refutation, and half the bond goes to whoever does.',
+    ),
+  );
 }
 
 async function renderRegistry(): Promise<void> {

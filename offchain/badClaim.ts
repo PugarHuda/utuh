@@ -63,7 +63,19 @@ async function main() {
   console.log(`hiding block ${hidden.blockNumber} tx#${hidden.txIndex} log#${hidden.logIndexInTx}`);
 
   await prover.waitAttested(toBlock);
-  const window = Number(await registry.MIN_CHALLENGE_WINDOW());
+  // The floor is about six minutes, which is right for a script that seals a bait and immediately
+  // runs the watcher against it. It is wrong for a bait meant to stand: a stranger who arrives
+  // tomorrow finds a claim that finalized overnight and nothing to break. `BAIT_WINDOW` leaves one
+  // open for as long as the registry allows, which is what a public invitation needs.
+  const floor = Number(await registry.MIN_CHALLENGE_WINDOW());
+  const ceiling = Number(await registry.MAX_CHALLENGE_WINDOW());
+  const asked = Number(process.env.BAIT_WINDOW ?? floor);
+  if (asked < floor || asked > ceiling) {
+    throw new Error(`BAIT_WINDOW ${asked} is outside the registry's ${floor}..${ceiling} blocks`);
+  }
+  const window = asked;
+  // CC3 blocks are 15s, measured over 10,000 twice.
+  console.log(`challenge window ${window} blocks (~${((window * 15) / 86_400).toFixed(1)} days)`);
   const built = await buildClaim(registry, prover, scope, fromBlock, toBlock, events, {
     bond,
     challengeWindow: window,
