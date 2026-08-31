@@ -15,6 +15,9 @@
       content="Attestcoin proves a transaction happened. It cannot prove a set is complete. Utuh bonds that assertion and lets anyone break it with one proof — and underwrites credit on it. Live on Creditcoin CC3 Testnet."
     />
     <meta property="og:url" content="https://pugarhuda.github.io/utuh/" />
+    <!-- One address for one page. Vercel serves the same build, so without this the two hosts are
+         two identities to a crawler and a share from either could name the other. -->
+    <link rel="canonical" href="https://pugarhuda.github.io/utuh/" />
     <!-- og.png is this page, photographed by web/tests/shots.ts against the live chain: what a link
          preview shows is what a visitor gets. Regenerate with `npm run web:shots` when the page changes. -->
     <meta property="og:image" content="https://pugarhuda.github.io/utuh/og.png" />

@@ -81,14 +81,12 @@ function main(): Promise<void> {
     deployments: records,
   };
 
-  // Where this build will actually live. The source hardcodes the Pages URL because that is where
-  // the console has always been published, but the same bytes are now served from Vercel too, and a
-  // page telling a crawler its address is somewhere else gets a link preview for the other site.
-  // `SITE_URL` is what each host's build passes; the default keeps Pages exactly as it was.
-  const site = (process.env.SITE_URL ?? 'https://pugarhuda.github.io/utuh/').replace(/\/*$/, '/');
-
+  // The page names one address and every host repeats it. The same bytes are served from Pages and
+  // from Vercel, and letting each build claim its own host split one page into two identities —
+  // two canonical URLs, two link previews, two things for a crawler to rank against each other.
+  // Pages is the address the README and the submission give out, so Pages is the one the page
+  // says, wherever it happens to be served from.
   const html = readFileSync(join(WEB, 'index.html'), 'utf8')
-    .replaceAll('https://pugarhuda.github.io/utuh/', site)
     .replace('href="/style.css"', 'href="./style.css"')
     .replace(
       '<script type="module" src="/dist/main.js"></script>',
