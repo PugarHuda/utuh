@@ -4,6 +4,11 @@
 
 _utuh_ — Indonesian: whole, intact, with nothing missing.
 
+Any registry on this protocol can tell you what it holds. Ask one whether a borrower has ever been
+liquidated and it can only answer with what someone chose to submit — and the borrower will not be
+submitting that. Utuh bonds the claim that a set is all of them, and pays half the bond to anyone
+who proves one event was left out.
+
 Built for BUIDL CTC 2026 Fall on Creditcoin.
 
 **Technical brief:** https://claude.ai/code/artifact/2caca05b-c659-463f-b5ca-28e207f95147

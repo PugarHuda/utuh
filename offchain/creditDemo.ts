@@ -1,4 +1,4 @@
-import { formatEther, formatUnits, parseEther, getAddress, zeroPadValue } from 'ethers';
+import { formatEther, formatUnits, parseEther, getAddress, zeroPadValue, type Log } from 'ethers';
 import 'dotenv/config';
 import {
   CC3_RPC,
@@ -11,6 +11,7 @@ import {
   source,
   requirePrivateKey,
 } from './config';
+import { SWEEP_CHUNK } from './lib/networks';
 import { readDeployments, registryAt, creditAt, signer } from './lib/contracts';
 import { chainInfoAt, waitForBlock } from './lib/chain';
 import { scopeFor, scanScope, Metric, type Scope } from './lib/scope';
@@ -49,21 +50,29 @@ async function main() {
   // Sweep the window once. Both roles read the same chain: the borrower to assemble a claim, the
   // watcher to check one.
   // ------------------------------------------------------------------
+  /// Every matching log over the window, asked for in chunks the endpoints will actually serve.
+  ///
+  /// This used to be one `eth_getLogs` across all 216,001 blocks, and it worked while Aave was
+  /// quieter: the same window now holds roughly seventeen thousand USDC repayments, and both
+  /// default endpoints time out trying to return them in one response. Neither is broken — a
+  /// 10,000-block slice of the same query comes back in about a second, which is why
+  /// `SWEEP_CHUNK` exists and why everything else here already uses it. This survey was the one
+  /// place that reached past it to the provider directly.
+  async function sweep(topics: (string | null)[]): Promise<Log[]> {
+    const span = SWEEP_CHUNK[CHAIN_KEY.mainnet];
+    const out: Log[] = [];
+    for (let start = fromBlock; start <= toBlock; start += span) {
+      const end = Math.min(start + span - 1, toBlock);
+      out.push(...(await eth.getLogs({ address: AAVE_V3_POOL, topics, fromBlock: start, toBlock: end })));
+    }
+    return out;
+  }
+
   console.log('sweeping Aave V3 Pool over the window...');
   // Only the USDC reserve. Repay carries `amount` in the reserve asset's own decimals, so summing
   // across reserves would add WETH's 18 decimals to USDC's 6 and call the result a credit history.
-  const allRepays = await eth.getLogs({
-    address: AAVE_V3_POOL,
-    topics: [AAVE_REPAY_SIG, zeroPadValue(USDC, 32)],
-    fromBlock,
-    toBlock,
-  });
-  const allLiquidations = await eth.getLogs({
-    address: AAVE_V3_POOL,
-    topics: [AAVE_LIQUIDATION_SIG],
-    fromBlock,
-    toBlock,
-  });
+  const allRepays = await sweep([AAVE_REPAY_SIG, zeroPadValue(USDC, 32)]);
+  const allLiquidations = await sweep([AAVE_LIQUIDATION_SIG]);
   console.log(`  ${allRepays.length} USDC Repay events, ${allLiquidations.length} LiquidationCall events`);
 
   // Read an indexed address out of a log, or nothing.
