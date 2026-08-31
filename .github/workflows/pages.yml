@@ -51,6 +51,23 @@ jobs:
       - name: build the console
         run: npm run web:static
 
+      # Vercel serves the canonical copy, so it cannot be the one a human remembers to update. Both
+      # hosts publish the same `web/static` from the same commit, in the same run, or the address
+      # the page gives out drifts behind the address that merely mirrors it.
+      #
+      # The project and org ids are identifiers rather than credentials, so they sit here where they
+      # can be read; only the token is a secret. Without that secret the step is skipped and the run
+      # is still green — a fork should not fail this workflow over a deployment it cannot make —
+      # which does mean a missing token shows up as a stale site rather than as a red build. The
+      # smoke test in watch.yml is what catches that: it reads the published page hourly.
+      - name: publish to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_NdlwQPgRp4Fn2WzyuKh1BLB2
+          VERCEL_PROJECT_ID: prj_ax7c7Tmvo59dozvBUZRo8nxZYFPS
+        if: env.VERCEL_TOKEN != ''
+        run: npx --yes vercel@59 deploy web/static --prod --yes --token "$VERCEL_TOKEN"
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

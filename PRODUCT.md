@@ -81,8 +81,8 @@ make it impossible. That distinction is load-bearing and must never be overstate
 ## Evidence on Hand
 
 - Live contracts on CC3 Testnet, verified on Blockscout and Sourcify (full match).
-- A live console at pugarhuda.github.io/utuh and utuh.vercel.app, built from each commit's own
-  artifacts.
+- A live console at utuh.vercel.app, mirrored at pugarhuda.github.io/utuh, both built from each
+  commit's own artifacts by the same workflow.
 - Real measurements produced by the repo, not asserted: `npm run gas` fits a cost model over 56
   real appends; symbolic proofs of two roundings; 136 forge tests; a nightly job that proves real
   mainnet transactions against the live precompile.

@@ -77,5 +77,5 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: smoke the published console
         env:
-          PUBLISHED_URL: https://pugarhuda.github.io/utuh/
+          PUBLISHED_URL: https://utuh.vercel.app/
         run: npx playwright test published

@@ -9,7 +9,7 @@ Built for BUIDL CTC 2026 Fall on Creditcoin.
 **Technical brief:** https://claude.ai/code/artifact/2caca05b-c659-463f-b5ca-28e207f95147
 
 Deployed and verified on Creditcoin CC3 Testnet. **[The console is live at
-pugarhuda.github.io/utuh](https://pugarhuda.github.io/utuh/)** — it reads the chain from your own
+utuh.vercel.app](https://utuh.vercel.app/)** — it reads the chain from your own
 browser, lets anyone sweep Ethereum and break an incomplete claim, and lets a borrower be
 underwritten end to end without cloning anything. `npm run web` runs the same page locally.
 

@@ -8,7 +8,7 @@ import { expect, test } from '@playwright/test';
 /// broken. The watch workflow runs it hourly, because Pages can serve a stale or broken build with
 /// nothing in CI noticing, and a console that lies quietly is worse than one that is down.
 ///
-///   PUBLISHED_URL=https://pugarhuda.github.io/utuh/ npx playwright test published
+///   PUBLISHED_URL=https://utuh.vercel.app/ npx playwright test published
 
 const PUBLISHED = process.env.PUBLISHED_URL;
 test.skip(!PUBLISHED, 'set PUBLISHED_URL to the console to smoke');

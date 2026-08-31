@@ -19,7 +19,7 @@ will get an answer within a week, and credit in the fix.
 
 - `src/` — the registry, the credit contract, the scope library, the source-chain ledger.
 - `offchain/` and `web/` — anything that builds, sweeps, proves, refutes or signs.
-- The published console at https://pugarhuda.github.io/utuh/.
+- The published console at https://utuh.vercel.app/ (and its mirror at https://pugarhuda.github.io/utuh/).
 
 ## What is already known
 
