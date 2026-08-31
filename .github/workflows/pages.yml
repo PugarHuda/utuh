@@ -66,6 +66,13 @@ jobs:
           VERCEL_ORG_ID: team_NdlwQPgRp4Fn2WzyuKh1BLB2
           VERCEL_PROJECT_ID: prj_ax7c7Tmvo59dozvBUZRo8nxZYFPS
         if: env.VERCEL_TOKEN != ''
+        # Not allowed to take the mirror down with it. A missing token was already survivable; a
+        # quota was not, and Vercel's free tier stops at 100 deployments a day — so a busy day
+        # ended with the Vercel step failing *before* the Pages upload, leaving both hosts on the
+        # previous build and the run red for a reason that is nobody's bug. Degrading to "Vercel
+        # is stale, Pages is current" is the honest outcome, and watch.yml's hourly smoke of the
+        # canonical URL is what notices if the staleness lasts.
+        continue-on-error: true
         run: npx --yes vercel@59 deploy web/static --prod --yes --token "$VERCEL_TOKEN"
 
       - uses: actions/configure-pages@v5
