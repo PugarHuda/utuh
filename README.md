@@ -561,6 +561,33 @@ transfers, the events are real logs in real blocks, and Creditcoin attests them 
 attests Aave's. A scope is a scope — the registry cannot tell the difference, and does not need
 to.
 
+## The watcher as an MCP server, and why an agent can hold the role
+
+```bash
+npm run mcp     # stdio — point Claude Desktop, Cursor, or any MCP client at it
+```
+
+Every guarantee here rests on *anyone may refute a claim by proving one in-scope event it left
+out*, and until now "anyone" meant a person: at a console, or at the published page. `offchain/mcp.ts`
+puts the same three verbs — look, sweep, refute — behind the Model Context Protocol, which makes
+the watcher a role an AI agent can hold. An agent needs no account and no capital to look, and the
+one that finds an omission is paid half the bond for proving it: a business model that fits inside
+a tool call.
+
+Five tools: `tally`, `list_claims`, `sweep_claim`, `refute_claim`, `audit_attestors`. None of them
+is new machinery — each is the same `offchain/lib` function the daemon and the browser console
+already run, because an MCP server with its own logic would be a third implementation waiting to
+drift, and "agents can enforce completeness" is only credible if agents run the code that
+demonstrably does.
+
+Two things about it were earned rather than designed. The first client ever connected to this
+server found the gap in a standing claim and refuted it — a real transaction, a real slashed bond,
+1 CTC of reward — during its own smoke test. That is the pitch demonstrating itself, and it is
+also why `refute_claim` now demands `confirm: true` before sending: an agent's "let me just try
+the tool" must cost a deliberate second call, not a bond. And stdout is the protocol channel, so
+the server reroutes every stray print to stderr up front — the SDK's attestation waiter logs
+progress, and one such line in the middle of a JSON-RPC stream is a corrupted session.
+
 ## The console, and why the watcher belongs in a browser
 
 ```bash
@@ -866,6 +893,7 @@ npm run cure                # a default recorded on chain, then made good — ne
 npm run finish -- <registry> <credit> <lineId>             # resume an interrupted run
 
 npm run watch               # the watcher; --once to sweep and exit, --dry to look without acting
+npm run mcp                 # the watcher as an MCP server, so an agent can hold the role
                             # (--dry needs no PRIVATE_KEY at all — it is what CI runs hourly)
 npm run bait                # seal a deliberately short claim for the watcher to find
 npm run livetest            # 107 guards asserted against the live chain, refunds included

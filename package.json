@@ -29,6 +29,7 @@
     "full": "tsx offchain/fullFlow.ts",
     "finish": "tsx offchain/finishLine.ts",
     "watch": "tsx offchain/watch.ts",
+    "mcp": "tsx offchain/mcp.ts",
     "bait": "tsx offchain/badClaim.ts",
     "livetest": "tsx offchain/liveTest.ts",
     "doctor": "tsx offchain/doctor.ts",
@@ -55,8 +56,10 @@
   "dependencies": {
     "@gluwa/usc-contracts": "^0.1.2",
     "@gluwa/usc-sdk": "^0.18.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "dotenv": "^17.4.2",
-    "ethers": "^6.17.0"
+    "ethers": "^6.17.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
