@@ -2,11 +2,15 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { Contract, JsonRpcProvider, Wallet, formatEther } from 'ethers';
-import { readFileSync } from 'node:fs';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, sources } from './config';
-import { ATTESTATION_INDEXERS, CHAIN_KEY, DEPLOYMENT_RECORDS, type DeploymentName } from './lib/networks';
-import { registryAt } from './lib/contracts';
+import { ATTESTATION_INDEXERS, CHAIN_KEY, type DeploymentName } from './lib/networks';
+// Imported rather than read at runtime, so `npm run mcp:package` can bake them into a bundle that
+// runs from `npx utuh-mcp` with no repository, no forge artifacts and no cwd to read from. Under
+// tsx these imports read the same files the old readFileSync did.
+import registryArtifact from '../out/UtuhRegistry.sol/UtuhRegistry.json';
+import sepoliaRecord from '../deployments.full.json';
+import mainnetRecord from '../deployments.json';
 import { scanScopeUnion, eventKey, type Scope } from './lib/scope';
 import { toScope } from './lib/specs';
 import { Prover } from './lib/proofs';
@@ -47,12 +51,21 @@ const DEPLOYMENT = z
   .enum(['sepolia', 'mainnet'])
   .describe('Which deployment: "sepolia" is the completed loop, "mainnet" underwrites real Aave history');
 
+const RECORDS: Record<DeploymentName, { registry?: string }> = {
+  sepolia: sepoliaRecord,
+  mainnet: mainnetRecord,
+};
+
+function registryAddress(which: DeploymentName): string {
+  const address = RECORDS[which].registry;
+  if (!address) throw new Error(`the ${which} deployment record names no registry`);
+  return address;
+}
+
 function registryFor(which: DeploymentName): Contract {
-  const record = JSON.parse(readFileSync(DEPLOYMENT_RECORDS[which], 'utf8')) as { registry?: string };
-  if (!record.registry) throw new Error(`${DEPLOYMENT_RECORDS[which]} names no registry`);
-  // Reads need no signer; refute attaches one. `registryAt` wants a Wallet, and a random unfunded
-  // one is exactly right for a read-only surface: it can sign nothing anyone would accept.
-  return registryAt(record.registry, Wallet.createRandom().connect(provider) as never);
+  // Reads need no signer; refute attaches one. A random unfunded wallet is exactly right for a
+  // read-only surface: it can sign nothing anyone would accept.
+  return new Contract(registryAddress(which), registryArtifact.abi, Wallet.createRandom().connect(provider));
 }
 
 const server = new McpServer({ name: 'utuh', version: '0.1.0' });
@@ -71,7 +84,7 @@ server.registerTool(
     let sealed = 0;
     let refuted = 0;
     let burned = 0n;
-    for (const which of Object.keys(DEPLOYMENT_RECORDS) as DeploymentName[]) {
+    for (const which of Object.keys(RECORDS) as DeploymentName[]) {
       const r = registryFor(which);
       const total = Number(await r.nextClaimId()) - 1;
       sealed += total;
@@ -208,8 +221,7 @@ server.registerTool(
       };
     }
     const wallet = new Wallet(key.startsWith('0x') ? key : `0x${key}`, provider);
-    const record = JSON.parse(readFileSync(DEPLOYMENT_RECORDS[deployment], 'utf8')) as { registry: string };
-    const r = registryAt(record.registry, wallet);
+    const r = new Contract(registryAddress(deployment), registryArtifact.abi, wallet);
     const c = await r.claim(claimId);
     if (claimStatus(c.status) !== 'Sealed') {
       return {

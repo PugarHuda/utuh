@@ -11,6 +11,7 @@ playwright-report/
 test-results/
 web/static/
 out-halmos/
+dist-mcp/
 
 # The Impeccable design tooling, vendored by `npx impeccable install` into the harness directory it
 # detected. It is 3.5 MB of somebody else's tool, reinstallable in one command, and no part of the
