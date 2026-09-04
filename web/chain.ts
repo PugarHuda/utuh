@@ -23,8 +23,8 @@ import {
 ///
 /// The page reads the chain itself. There is no backend holding a key, no indexer, no cached copy
 /// of what the registry says — the numbers on screen are `eth_call` results from
-/// `rpc.cc3-testnet.creditcoin.network`, which anyone can point their own client at and get the
-/// same answers from.
+/// `rpc.cc3-testnet.creditcoin.network` (or, when that does not answer, from Blockscout's proxy
+/// for the same chain), which anyone can point their own client at and get the same answers from.
 
 export interface Deployments {
   chainId?: number;

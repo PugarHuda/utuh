@@ -620,7 +620,11 @@ The console makes it true for whoever opens a page:
 That is possible only because the pieces are CORS-open and public: `rpc.cc3-testnet.creditcoin.network`,
 the source-chain endpoints, and the hosted Proof Builder all answer a browser directly. Nothing
 needed to be built to make it work, and it means enforcement does not depend on anyone deploying
-infrastructure.
+infrastructure. Creditcoin publishes exactly one RPC hostname, though, and it has had bad
+afternoons — on 2026-09-03 its nginx spent half a day refusing large `eth_call` bodies with 413,
+which the daily CI probe caught. So the page's reads fail over to Blockscout's `eth-rpc` proxy for
+the same chain, the one second way onto CC3 that exists; its batch ceiling and burst rationing were
+measured before being coded around (`web/chain.ts` has the numbers).
 
 The sweep is the daemon's own function, imported rather than reimplemented — `scanScopeUnion` in
 `offchain/lib/scope.ts`, bundled into the page. A browser cannot conclude that a claim is complete
