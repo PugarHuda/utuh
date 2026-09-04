@@ -101,8 +101,22 @@ test('a wallet whose owner says no leaves the page usable and says what happened
   await expect(send).toBeEnabled();
 });
 
+test('with the primary RPC down, the page reads Creditcoin through Blockscout instead', async ({ page }) => {
+  await page.route('**/rpc.cc3-testnet.creditcoin.network/**', (route) => route.abort('connectionrefused'));
+  await page.goto('/');
+
+  // Not "fails politely" — works. `ready` is only reached after live reads succeed, and the head
+  // block in the banner is one of them, so both came through Blockscout. The claims table is not
+  // asserted: the fallback rations bursts by parking them, and a pane of forty sequential reads
+  // can honestly take minutes there — degraded is the contract, dead is the bug.
+  await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
+  await expect(page.locator('#chain-id')).toHaveText('102031');
+  await expect(page.locator('#cc3-block')).toHaveText(/^[1-9]\d*$/);
+});
+
 test('with Creditcoin unreachable, the page fails loudly instead of showing stale numbers', async ({ page }) => {
   await page.route('**/rpc.cc3-testnet.creditcoin.network/**', (route) => route.abort('connectionrefused'));
+  await page.route('**/creditcoin-testnet.blockscout.com/api/eth-rpc**', (route) => route.abort('connectionrefused'));
   await page.goto('/');
 
   await expect(page.locator('body')).toHaveAttribute('data-state', /failed|ready/, { timeout: 45_000 });

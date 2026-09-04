@@ -155,7 +155,7 @@ async function renderAttestcoin(): Promise<void> {
 }
 
 async function renderHeader(): Promise<void> {
-  const block = await within(20_000, 'reading the head', cc3.getBlockNumber());
+  const block = await within(30_000, 'reading the head', cc3.getBlockNumber());
   const net = await cc3.getNetwork();
   $('chain-id').textContent = String(net.chainId);
   $('cc3-block').textContent = String(block);
@@ -261,7 +261,7 @@ async function renderTally(): Promise<void> {
   try {
     const registries = await Promise.all(
       (Object.keys(DEPLOYMENT_RECORDS) as DeploymentName[]).map(async (which) => {
-        const d = await within(20_000, `${which} deployment record`, loadDeployments(which));
+        const d = await within(30_000, `${which} deployment record`, loadDeployments(which));
         if (!d.registry) return null;
         return new Contract(d.registry, wired.abis.registry as never, cc3);
       }),
@@ -273,7 +273,7 @@ async function renderTally(): Promise<void> {
     let burned = 0n;
     // The newest claim a stranger could still break, and where it lives.
     let openNow: { which: DeploymentName; id: number; blocksLeft: number } | undefined;
-    const head = await within(20_000, 'block number', cc3.getBlockNumber());
+    const head = await within(30_000, 'block number', cc3.getBlockNumber());
 
     for (const [at, registry] of registries.entries()) {
       if (!registry) continue;
@@ -282,20 +282,20 @@ async function renderTally(): Promise<void> {
       // this strip would sit on its placeholders indefinitely. A tally stuck at "…" is survivable;
       // one that resolved to a plausible zero would not be, because "0 refuted" is exactly the
       // wrong conclusion to hand a reader.
-      const total = Number(await within(20_000, 'nextClaimId', registry.nextClaimId() as Promise<bigint>)) - 1;
-      burned += await within(20_000, 'burned', registry.burned() as Promise<bigint>);
+      const total = Number(await within(30_000, 'nextClaimId', registry.nextClaimId() as Promise<bigint>)) - 1;
+      burned += await within(30_000, 'burned', registry.burned() as Promise<bigint>);
       sealed += total;
 
       const ids = Array.from({ length: total }, (_, i) => i + 1);
       for (let at = 0; at < ids.length; at += CLAIM_BATCH) {
         const slice = await Promise.all(
           ids.slice(at, at + CLAIM_BATCH).map(async (i) => {
-            const c = await within(20_000, `claim ${i}`, registry.claim(i));
+            const c = await within(30_000, `claim ${i}`, registry.claim(i));
             return {
               id: i,
               status: Number(c.status),
               until: Number(c.sealedAt) + Number(c.challengeWindow),
-              members: await within(20_000, `memberCount ${i}`, registry.memberCount(i) as Promise<bigint>),
+              members: await within(30_000, `memberCount ${i}`, registry.memberCount(i) as Promise<bigint>),
             };
           }),
         );

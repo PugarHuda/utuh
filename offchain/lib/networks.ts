@@ -11,6 +11,16 @@
 
 export const CC3_RPC_DEFAULT = 'https://rpc.cc3-testnet.creditcoin.network';
 
+/// Blockscout's JSON-RPC proxy for the same chain — the only second way onto CC3 that exists.
+///
+/// The chain publishes exactly one RPC hostname, and on 2026-09-03 its nginx spent half a day
+/// answering large `eth_call` bodies with 413, which took the proving path down with it. This
+/// proxy is run by Blockscout rather than by the same nginx, is CORS-open, answers batches,
+/// `eth_call` against the precompiles, and `eth_getLogs` — verified live before it was written
+/// down here. Reads only ever need those, so the console falls back to it when the primary does
+/// not answer.
+export const CC3_RPC_FALLBACK = 'https://creditcoin-testnet.blockscout.com/api/eth-rpc';
+
 /// Chain id verified live: eth_chainId -> 0x18e8f (102031).
 export const CC3_CHAIN_ID = 102031;
 

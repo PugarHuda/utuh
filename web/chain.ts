@@ -1,7 +1,17 @@
-import { BrowserProvider, Contract, JsonRpcProvider, type Eip1193Provider, type Signer } from 'ethers';
+import {
+  BrowserProvider,
+  Contract,
+  FetchRequest,
+  JsonRpcProvider,
+  type Eip1193Provider,
+  type JsonRpcPayload,
+  type JsonRpcResult,
+  type Signer,
+} from 'ethers';
 import {
   CC3_CHAIN_ID,
   CC3_RPC_DEFAULT,
+  CC3_RPC_FALLBACK,
   CHAIN_INFO_ADDRESS,
   SOURCE_CHAIN_ID,
   SOURCE_RPCS_DEFAULT,
@@ -45,8 +55,77 @@ export async function within<T>(ms: number, what: string, work: Promise<T>): Pro
   }
 }
 
+/// One request against one endpoint, with a deadline of its own — the body of ethers'
+/// `JsonRpcProvider._send`, minus the connection it keeps.
+async function sendTo(url: string, payload: JsonRpcPayload | JsonRpcPayload[], timeoutMs: number) {
+  const request = new FetchRequest(url);
+  request.body = JSON.stringify(payload);
+  request.setHeader('content-type', 'application/json');
+  request.timeout = timeoutMs;
+  const response = await request.send();
+  response.assertOk();
+  // JSON-RPC errors ride along in this array too; ethers' own `_send` types it the same way.
+  const body = response.bodyJson as JsonRpcResult | JsonRpcResult[];
+  return Array.isArray(body) ? body : [body];
+}
+
+/// Creditcoin publishes exactly one RPC hostname, and a page whose every number comes from it is
+/// down whenever it is. Reads retry against Blockscout's proxy for the same chain when the primary
+/// fails to *answer* — a transport failure, an HTTP error, a deadline. A JSON-RPC error is an
+/// answer (a revert is the chain speaking) and is never retried, so the two endpoints cannot give
+/// this page two opinions. Writes are unaffected: they go through the visitor's wallet.
+///
+/// Every read on this page is raced against 30s. A dead primary fails in milliseconds, which
+/// leaves both fallback attempts inside that budget; only a primary that *hangs* for its full 7s
+/// can push the retry past the bell, and then the pane says so rather than waiting.
+class FailoverProvider extends JsonRpcProvider {
+  override async _send(payload: JsonRpcPayload | JsonRpcPayload[]) {
+    try {
+      return await sendTo(CC3_RPC_DEFAULT, payload, 7_000);
+    } catch {
+      // 15s, not 10: the proxy rations bursts by *holding* the excess, not by refusing it —
+      // measured, a parked request is answered within ~12s of being sent. A 10s deadline was
+      // aborting requests moments before their answer arrived. The second attempt is for the
+      // request parked past even that: the ration refills on a ~10s cycle, so a retry that
+      // rejoins the queue almost always lands in the next window.
+      try {
+        return await gated(() => sendTo(CC3_RPC_FALLBACK, payload, 15_000));
+      } catch {
+        return await gated(() => sendTo(CC3_RPC_FALLBACK, payload, 15_000));
+      }
+    }
+  }
+}
+
+/// At most three fallback requests in the air at once.
+///
+/// The proxy serves bursts one after another rather than side by side — eight concurrent
+/// batches measured 4–7s *each*, against ~2s alone — so a page-load's worth of ungated reads
+/// queues its own tail past any per-request deadline. The gate holds the queue here, where
+/// waiting is free, instead of inside the request, where it counts against the deadline.
+let inFlight = 0;
+const waiting: (() => void)[] = [];
+async function gated<T>(work: () => Promise<T>): Promise<T> {
+  while (inFlight >= 3) await new Promise<void>((wake) => waiting.push(wake));
+  inFlight++;
+  try {
+    return await work();
+  } finally {
+    inFlight--;
+    waiting.shift()?.();
+  }
+}
+
 /// The read-only side, always available, wallet or no wallet.
-export const cc3 = new JsonRpcProvider(CC3_RPC_DEFAULT, CC3_CHAIN_ID, { staticNetwork: true });
+///
+/// `batchMaxCount: 5` is the fallback's measured ceiling, not a taste: Blockscout's proxy answers
+/// a 5-call batch in 2s and 413s a 10-call one, while sending every call singly trips its rate
+/// limit instead — the Claims pane's burst of forty reads timed out one by one. Five per request
+/// clears both, and costs the primary nothing it notices.
+export const cc3: JsonRpcProvider = new FailoverProvider(CC3_RPC_DEFAULT, CC3_CHAIN_ID, {
+  staticNetwork: true,
+  batchMaxCount: 5,
+});
 
 /// Independent source-chain endpoints, the same list the watcher script sweeps.
 export function sourceEndpoints(chainKey: number): { url: string; provider: JsonRpcProvider }[] {
