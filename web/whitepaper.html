@@ -487,10 +487,10 @@
         the same as closing it, and an inclusion proof gives none of them a way to.
       </p>
       <p>
-        Creditcoin's own <a href="https://github.com/gluwa/usc-testnet-bridge-examples/tree/main/loan-flow"><code>loan-flow</code> tutorial</a> shows the shape cleanly, and it is the
+        Creditcoin's own <a href="https://github.com/gluwa/attestcoin-protocol-examples/tree/main/loan"><code>loan-flow</code> tutorial</a> shows the shape cleanly, and it is the
         reference most builders will start from. <code>_markLoanAsFunded</code> and
         <code>_noteLoanRepayment</code> each take one proven transaction;
-        <code>USCBase.execute</code> verifies it through <code>0x0FD2</code> and records the query
+        <code>ASCBase.execute</code> verifies it through <code>0x0FD2</code> and records the query
         so it cannot be replayed. Every present fact is cryptographic, and that half is sound.
         Nothing asks whether the set is complete &mdash; which is correct for a loan already
         registered on chain, and insufficient the moment the question is about a stranger. And

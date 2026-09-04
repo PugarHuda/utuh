@@ -93,13 +93,16 @@ listing eleven we bolted on.
 
 ## Where this sits next to Creditcoin's own example
 
-Creditcoin ships a [loan-flow tutorial](https://github.com/gluwa/usc-testnet-bridge-examples/tree/main/loan-flow)
-— `USCLoanManager` on Creditcoin, an auxiliary contract on Sepolia, an offchain worker between
-them. It is a good tutorial and it is the right shape for what it teaches. It is also a precise
-illustration of the gap, because it is the reference every builder will start from.
+Creditcoin ships a [loan-flow tutorial](https://github.com/gluwa/attestcoin-protocol-examples/tree/main/loan)
+— `ASCLoanManager` on Creditcoin, an auxiliary contract on Sepolia, an offchain worker between
+them. (Mid-season, gluwa reorganised that repo and began renaming USC to ASC — Attestcoin Smart
+Contracts; the old `USCLoanManager` link now redirects to a 404, and everything below was re-read
+against the renamed sources on 2026-09-04. The mechanics are unchanged.) It is a good tutorial and
+it is the right shape for what it teaches. It is also a precise illustration of the gap, because it
+is the reference every builder will start from.
 
 Each event proves itself as it happens. `_markLoanAsFunded` and `_noteLoanRepayment` take one
-proven transaction each; `USCBase.execute` verifies it through `0x0FD2` and records the query so
+proven transaction each; `ASCBase.execute` verifies it through `0x0FD2` and records the query so
 it cannot be replayed. Every _present_ fact is cryptographic, and that part is sound.
 
 Two things follow from proving one event at a time, and neither is a defect in the tutorial:
