@@ -69,3 +69,37 @@ test('offers borrowing, and says what it needs first', async ({ page }) => {
   await expect(page.locator('#borrow-body')).toContainText(/connect a wallet/i);
   await expect(page.locator('[data-testid=build-volume]')).toHaveCount(0);
 });
+
+test('the other reader is served too, and it agrees with the server it points at', async ({ request, page }) => {
+  // llmstxt.org: what an agent reads when it lands on a URL instead of a repository. Creditcoin's
+  // own Attestcoin docs publish one. This project's whole claim about agents is that the watcher
+  // role is open to them, so leaving nothing at the address for a machine to read would be asking
+  // one to parse a screenshot.
+  //
+  // The page itself never fetches it, which is why the "four files" list above is unchanged: a
+  // static host hands it over, nothing on the page asks for it.
+  const res = await request.get('/llms.txt');
+  expect(res.ok(), `/llms.txt answered ${res.status()}`).toBe(true);
+  expect(res.headers()['content-type'] ?? '').toMatch(/text|plain|octet/);
+  const body = await res.text();
+
+  expect(body, 'it opens with the project as an H1, per the convention').toMatch(/^# Utuh/);
+  expect(body, 'and states the gap it exists to close').toMatch(/cannot prove a set of/);
+  expect(body, 'it tells an agent the role pays').toMatch(/half the bond/);
+  expect(body, 'and how to hold it without a browser').toContain('npx utuh-mcp');
+  expect(body, 'it says what may be refuted at all').toMatch(/refutable/);
+  expect(body, 'and that this is testnet').toMatch(/CC3 Testnet/);
+
+  // Every tool it advertises must be one the server actually has. Two artifacts, one truth: the
+  // list in a text file is exactly the sort of thing that keeps its old shape after a rename.
+  for (const tool of ['tally', 'list_claims', 'sweep_claim', 'refute_claim', 'audit_attestors']) {
+    expect(body, `${tool} is named for an agent to find`).toContain(tool);
+  }
+
+  // And the package it sends them to is really published, under the name it gives.
+  const npm = await page.request.get('https://registry.npmjs.org/utuh-mcp/latest');
+  expect(npm.ok(), 'utuh-mcp is on npm').toBe(true);
+  const meta = (await npm.json()) as { name?: string; mcpName?: string };
+  expect(meta.name).toBe('utuh-mcp');
+  expect(meta.mcpName, 'and carries the registry ownership marker').toBe('io.github.PugarHuda/utuh-mcp');
+});

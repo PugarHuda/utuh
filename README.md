@@ -752,6 +752,18 @@ page boots, reads the live chain, and asks its host for nothing but `index.html`
 `style.css` and the font they use. A GitHub Actions workflow builds it from each commit's own artifacts, so the ABI the
 page carries is the ABI the contracts were compiled with.
 
+Three more files are written beside those and never requested by the page, because they are for
+other readers. `.well-known/security.txt` is RFC 9116, for a researcher who found the deployment
+rather than the repository. `whitepaper.pdf` is the document. And `llms.txt` is the
+[convention](https://llmstxt.org) an agent reads on arrival — Creditcoin's own Attestcoin docs
+publish one, which is where this project found it. That last one is not a summary of the page: the
+page is for a person, and an agent landing here needs three things in the order it needs them —
+that the watcher role exists, that holding it costs nothing while it is only looking, and that
+`npx utuh-mcp` lets it hold the role without a browser. A project whose argument is that a watcher
+need not be a person, leaving nothing at its own URL for a machine to read, is asking one to parse
+a screenshot. `static.spec.ts` checks that every tool it advertises is one the server actually has,
+and that the package it points at is really published under the name it gives.
+
 `web/tests/borrow.live.spec.ts` is the test that makes the Borrow pane a claim rather than a hope.
 A fresh key — derived from the operator's, holding nothing but a little Sepolia ETH and a little
 CTC — pays a lender three times on Sepolia, then, **through the page**: sends the control commitment
@@ -879,6 +891,8 @@ web/
                             screenshots — what a link preview shows, and what it used to be a
                             week behind because the copy was made by hand
   build-static.ts           the published build: four files and a picture, no server, ABIs baked in
+                            — plus security.txt, the whitepaper and llms.txt, which the page never
+                            asks for because they are for other readers
   whitepaper.html           the whitepaper, and the source the submitted PDF is rendered from
   build-pdf.ts              renders it with the Chromium the browser suite already installs
   tests/console.spec.ts     Playwright, against the live chain: no fixtures, no stubs

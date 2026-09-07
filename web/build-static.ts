@@ -136,6 +136,63 @@ function main(): Promise<void> {
     ].join(String.fromCharCode(10)),
   );
 
+  // The convention agents read on arrival (llmstxt.org). Creditcoin's own Attestcoin docs publish
+  // one, which is how this project found the file it needed to be legible to a machine.
+  //
+  // It is not a summary of the page. The page is for a person; this is the other reader. Everything
+  // Utuh guarantees rests on *anyone may refute a claim by proving one in-scope event it left out*,
+  // and an agent that lands here should learn three things in the order it needs them: that the
+  // role exists, that holding it costs nothing, and where the server is that lets it hold the role
+  // without a browser. A project whose pitch is that a watcher need not be a person, and which
+  // leaves nothing at the URL for a machine, is asking one to read a screenshot.
+  writeFileSync(
+    join(DEST, 'llms.txt'),
+    [
+      '# Utuh',
+      '',
+      "> A completeness layer for Creditcoin's Attestcoin Protocol, and undercollateralized credit",
+      '> built on it. Attestcoin proves a source-chain transaction happened; it cannot prove a set of',
+      '> them is complete, because whoever submits the proofs chooses which to submit. Utuh bonds the',
+      '> claim of completeness, and anyone may break a claim by proving one in-scope event it omits.',
+      '',
+      'Presence stays cryptographic. Absence is refuted by presence, never proven. A claim of any',
+      'size is settled by one proof, so refuting is cheap and claiming is not.',
+      '',
+      '## For an agent arriving here',
+      '',
+      'There is a role open to you, it pays, and it costs nothing to hold while you are only looking.',
+      'A watcher sweeps the source chain for an event a sealed claim left out and proves it; the',
+      'registry pays half the bond to whoever does. You need no account, no capital and no permission.',
+      '',
+      '- [The watcher as an MCP server](https://www.npmjs.com/package/utuh-mcp): `npx utuh-mcp`.',
+      '  Five tools — tally, list_claims, sweep_claim, refute_claim, audit_attestors. Claims are also',
+      '  resources (`utuh://claim/{deployment}/{id}`), and the job is a prompt',
+      '  (`hold_the_watcher_role`). Four of the five tools only read and are annotated as such; only',
+      '  refute_claim sends a transaction, and it demands `confirm: true`.',
+      '- [In the official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp):',
+      '  `io.github.PugarHuda/utuh-mcp`.',
+      '- [This console](https://utuh.vercel.app/) does the same from a browser with no backend: its',
+      '  Watch pane sweeps Ethereum across independent endpoints and sends the refutation itself.',
+      '',
+      '## What is worth knowing before you act',
+      '',
+      '- Only a **sealed** claim still inside its challenge window can be refuted. `utuh://claims/{deployment}`',
+      '  answers that per claim with a `refutable` flag.',
+      '- A refutation verifies itself. A fabricated one does not fail quietly — it fails to prove and',
+      '  costs you the gas, which is why the role can be open to strangers.',
+      '- "No gap found" is provenance, not proof: it is only as strong as the number of independent',
+      '  endpoints that saw the whole range, and the tools report that number rather than hiding it.',
+      '- Everything is Creditcoin CC3 Testnet. The contracts hold testnet CTC.',
+      '',
+      '## Source',
+      '',
+      '- [Repository](https://github.com/PugarHuda/utuh)',
+      '- [Whitepaper](https://utuh.vercel.app/whitepaper.pdf)',
+      '- [Security policy](https://github.com/PugarHuda/utuh/blob/master/SECURITY.md)',
+      '',
+    ].join(String.fromCharCode(10)),
+  );
+
   console.log(`static console in ${DEST}`);
   console.log(`  registry ${String(deployments.registry)}`);
   console.log(`  credit   ${String(deployments.credit)}`);
