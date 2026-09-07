@@ -928,6 +928,7 @@ npm run mcp                 # the watcher as an MCP server, so an agent can hold
                             # (--dry needs no PRIVATE_KEY at all — it is what CI runs hourly)
 npm run bait                # seal a deliberately short claim for the watcher to find
 npm run livetest            # 121 guards asserted against the live chain, refunds included
+npm run puretest            # the 46 of them that need no key and no chain — what CI runs
 
 npm run web                 # the console on http://127.0.0.1:5173 — read-only without a wallet
 npm run web:build           # bundle it; the server serves ABIs straight out of out/
@@ -1276,6 +1277,12 @@ saying so needs bytes that fail: `test/fixtures` now carries a real Ethereum mai
 that reverted, block 25,926,178 index 96, fetched from the same hosted Proof Builder a claimant
 uses. What is still uncovered is mostly arithmetic arms and the transfer-refused path, which needs
 a payee that rejects ether and a credited balance to refuse.
+
+`npm run puretest` is the half of that suite which needs neither: 46 assertions about classifiers,
+the payload reader, the gas model, and the difference between a prover saying "absent" and a prover
+saying nothing. They were written beside the live checks because that is where their callers are,
+and the cost was that CI never ran one of them — the whole file needed a funded wallet. It runs on
+every push now, in the job that holds no secrets at all, which is also the proof that it needs none.
 
 `npm run livetest` is the one that reaches furthest: 121 guards, most of them `staticCall`s that
 prove a revert without spending gas, plus the steps that have to be real for the later ones to

@@ -1,5 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
+import registryArtifact from '../out/UtuhRegistry.sol/UtuhRegistry.json';
 import {
+  Contract,
+  ZeroAddress,
+  ZeroHash,
   makeError,
   Wallet,
   formatEther,
@@ -93,6 +97,18 @@ async function expectOk(name: string, fn: () => Promise<unknown>): Promise<void>
 }
 
 async function main() {
+  // Everything below the pure block needs a funded key and a live chain, which is why CI never ran
+  // any of it — and dozens of these assertions need neither. `--pure` runs exactly those, so a
+  // classifier that stops telling a revert from a timeout, or a gas model that stops bounding an
+  // append, fails on the push that broke it rather than the next time somebody spends CTC by hand.
+  if (process.argv.includes('--pure')) {
+    console.log('the checks that need no key and no chain\n');
+    await pureChecks();
+    console.log(`\n${passed} passed, ${failed} failed`);
+    if (failed > 0) process.exitCode = 1;
+    return;
+  }
+
   const [registryArg, creditArg] = process.argv.slice(2);
   const d = readDeployments();
   const registryAddress = registryArg ?? d.registry!;
@@ -356,38 +372,8 @@ async function main() {
     }
   }
 
-  // ------------------------------------------------------------------
-  // Reading a number out of a log's payload. The window is a fixed 64 characters at a fixed
-  // offset, and the offset used to be counted from the whole string — so a payload arriving
-  // without its `0x` shifted every window two characters early. With three data words that is not
-  // a short read any length check would catch: it is a different number, returned in silence.
-  console.log('');
-  console.log('reading a value out of a payload');
-  {
-    const word = (n: bigint) => n.toString(16).padStart(64, '0');
-    const three = '0x' + word(0xaan) + word(1234567n) + word(0n);
-    // valueOf reads nothing from a scope but its metric and which word to take.
-    const dataScope = { ...scope, metric: 1, metricArg: 1 } as Scope;
-    check('the second word of three reads as itself', valueOf(dataScope, three) === 1234567n);
-    let threw = false;
-    try {
-      valueOf(dataScope, three.slice(2));
-    } catch {
-      threw = true;
-    }
-    check('the same payload without its 0x is refused, not misread', threw);
-    check(
-      'a COUNT scope does not read the payload at all',
-      valueOf({ ...dataScope, metric: 0 } as Scope, '0x') === 1n,
-    );
-    let short = false;
-    try {
-      valueOf({ ...dataScope, metricArg: 9 } as Scope, three);
-    } catch {
-      short = true;
-    }
-    check('a word past the end of the payload is refused', short);
-  }
+  // Everything that needs neither a key nor a network, run here as well as on its own.
+  await pureChecks();
 
   // ------------------------------------------------------------------
   // Scope equality, checked against scopes the contract itself built. `finishLine` uses this to
@@ -433,187 +419,6 @@ async function main() {
       } else {
         failed++;
         console.log(`  FAIL  ${name} → ${got ? 'same' : 'different'}, expected the opposite`);
-      }
-    }
-  }
-
-  // ------------------------------------------------------------------
-  // Whether a failure came from the chain or from the wire. `buildClaim` drops an event the
-  // registry rejects, because one the registry will not take is one no refuter could use against
-  // the claim either — but an RPC that timed out has said nothing about the event, and dropping it
-  // there seals a claim short of a real member and forfeits the bond for it.
-  console.log('');
-  console.log('telling a rejection apart from a failure to ask');
-  {
-    const rejection = { code: 'CALL_EXCEPTION', revert: { name: 'EventOutOfScope' } };
-    const encoded = {
-      code: 'CALL_EXCEPTION',
-      revert: null,
-      data: registry.interface.encodeErrorResult('NotClaimant'),
-    };
-    const cases: [string, any, boolean][] = [
-      ['a decoded revert', rejection, true],
-      ['revert data this ABI can parse', encoded, true],
-      ['a revert with no data at all', { code: 'CALL_EXCEPTION', revert: null, data: '0x' }, false],
-      ['revert data from some other contract', { code: 'CALL_EXCEPTION', revert: null, data: '0xdeadbeef' }, false],
-      ['the endpoint timed out', { code: 'TIMEOUT', message: 'timeout' }, false],
-      ['the endpoint was unreachable', { code: 'NETWORK_ERROR', message: 'could not detect network' }, false],
-      ['the endpoint returned nonsense', { code: 'SERVER_ERROR', message: '502' }, false],
-      ['nothing at all', undefined, false],
-    ];
-    // ethers builds these, so the guards are checked against what it actually produces rather than
-    // against a hand-written idea of the shape.
-    const transport: [string, unknown, boolean][] = [
-      ['a timeout', makeError('timed out', 'TIMEOUT'), true],
-      ['an unreachable endpoint', makeError('no network', 'NETWORK_ERROR'), true],
-      ['a 502 from the endpoint', makeError('bad gateway', 'SERVER_ERROR'), true],
-      ['a malformed response', makeError('bad data', 'BAD_DATA'), true],
-      ['a destroyed provider', makeError('cancelled', 'CANCELLED'), true],
-      ['a revert', makeError('reverted', 'CALL_EXCEPTION'), false],
-      ['not enough funds', makeError('insufficient funds', 'INSUFFICIENT_FUNDS'), false],
-      // Nullish input is the case that found the bug: ethers' isError is a type predicate, so
-      // TypeScript believes it returns a boolean, and for a nullish argument it returns the
-      // argument. An `||` chain of those yielded `undefined` from a function typed `boolean`.
-      // Compared with `===` here rather than for truthiness, which is why it showed up at all.
-      ['nothing at all', undefined, false],
-      ['null', null, false],
-      ['an object that is not an error', {}, false],
-    ];
-    // A 413 is a SERVER_ERROR as well, so the narrowing has to read what the endpoint actually
-    // said rather than the code. CI found this one: a batch of ten queries whose ten in-scope logs
-    // all came from a single large transaction sends that transaction ten times over, and the
-    // proxy in front of the RPC refused the body before the precompile saw any of it. A timeout is
-    // worth retrying unchanged; this never is, because the same bytes get the same answer.
-    // ethers types SERVER_ERROR's info as { request, response }, but the object JsonRpcProvider
-    // actually throws carries requestUrl, responseStatus and responseBody — which is what the
-    // guard reads, so that is what these are built with.
-    const served = (message: string, responseStatus: string, responseBody: string): unknown =>
-      Object.assign(makeError(message, 'SERVER_ERROR'), {
-        info: { requestUrl: 'https://rpc.cc3-testnet.creditcoin.network', responseStatus, responseBody },
-      });
-
-    const oversize: [string, unknown, boolean][] = [
-      [
-        'nginx 413',
-        served(
-          'server response 413 Request Entity Too Large',
-          '413 Request Entity Too Large',
-          '<html><head><title>413 Request Entity Too Large</title></head></html>',
-        ),
-        true,
-      ],
-      ['a 502 is not too large', served('bad gateway', '502 Bad Gateway', ''), false],
-      // The status is read from its start for this reason: a body is arbitrary content and a bare
-      // 413 in it may be a block number, not a verdict on the request that carried it.
-      [
-        'a 500 whose body merely contains 413',
-        served('server error', '500 Internal Server Error', '{"error":"no block at height 413"}'),
-        false,
-      ],
-      ['a timeout is not too large', makeError('timed out', 'TIMEOUT'), false],
-      ['a revert is not too large', makeError('reverted', 'CALL_EXCEPTION'), false],
-      ['a SERVER_ERROR with no info', makeError('unknown', 'SERVER_ERROR'), false],
-      ['nothing at all', undefined, false],
-    ];
-    for (const [name, err, want] of oversize) {
-      const got = isPayloadTooLarge(err);
-      if (got === want) {
-        passed++;
-        console.log(`  ok    ${name} → ${got ? 'split and retry' : 'not a size problem'}`);
-      } else {
-        failed++;
-        console.log(`  FAIL  ${name} → ${got ? 'split and retry' : 'not a size problem'}, expected the opposite`);
-      }
-    }
-
-    for (const [name, err, want] of transport) {
-      const got = isTransportFailure(err);
-      if (got === want) {
-        passed++;
-        console.log(`  ok    ${name} → ${got ? 'never answered' : 'answered'}`);
-      } else {
-        failed++;
-        console.log(`  FAIL  ${name} → ${got ? 'never answered' : 'answered'}, expected the opposite`);
-      }
-    }
-    for (const [name, err, want] of cases) {
-      const got = isChainRejection(registry, err);
-      if (got === want) {
-        passed++;
-        console.log(`  ok    ${name} → ${got ? 'the chain refused' : 'we failed to ask'}`);
-      } else {
-        failed++;
-        console.log(`  FAIL  ${name} → ${got ? 'the chain refused' : 'we failed to ask'}, expected the opposite`);
-      }
-    }
-  }
-
-  // ------------------------------------------------------------------
-  // The gas model that carries a refutation when a node will not estimate one. Wrong low and the
-  // transaction runs out; wrong high and no block will hold it.
-  console.log('');
-  console.log('the fallback gas model');
-  {
-    check('empty calldata costs nothing', calldataGas('0x') === 0n);
-    check('a zero byte costs 4', calldataGas('0x00') === 4n);
-    check('a non-zero byte costs 16', calldataGas('0xff') === 16n);
-    check('mixed bytes add up', calldataGas('0x00ff00') === 4n + 16n + 4n);
-    check('the 0x prefix is optional', calldataGas('ff') === calldataGas('0xff'));
-
-    const small = modelledGas('0x' + 'ff'.repeat(100), 1);
-    const wide = modelledGas('0x' + 'ff'.repeat(1000), 1);
-    const many = modelledGas('0x' + 'ff'.repeat(100), 10);
-    check('more calldata costs more', wide > small);
-    check('more members cost more', many > small);
-    // A single append measured 453,592 gas at its cheapest. The model has to clear that or the
-    // fallback loses the transaction it exists to save.
-    check('a one-member append is budgeted above what one really cost', small > 500_000n);
-    // And a full batch has to stay inside a block.
-    check('a ten-member append still fits a 75M block', modelledGas('0x' + 'ff'.repeat(100_000), 10) < 75_000_000n);
-  }
-
-  // ------------------------------------------------------------------
-  // Which failures mean "the chain does not have it" and which mean "I could not tell". Getting
-  // this backwards either forfeits a bond or lets one bad endpoint stop every honest claimant, and
-  // it is decided by reading strings — the exact thing that silently broke once already when a
-  // regex meant to match 404 was mangled into literal backspace characters.
-  console.log('');
-  console.log('telling absence apart from not knowing');
-  {
-    const hash = '0x' + 'ab'.repeat(32);
-    const cases: [string, string, string, boolean][] = [
-      ['hosted 404', 'hosted', 'Failed to fetch proof: AxiosError: Request failed with status code 404', true],
-      ['hosted refused', 'hosted', 'Failed to fetch proof: Error: connect ECONNREFUSED 127.0.0.1:1', false],
-      ['hosted 503', 'hosted', 'Failed to fetch proof: AxiosError: Request failed with status code 503', false],
-      ['local absent', 'local', `Failed to generate merkle proof: Transaction ${hash} not found`, true],
-      [
-        'local sibling missing',
-        'local',
-        `Failed to generate merkle proof: Transaction ${hash} not found in block 25834280`,
-        false,
-      ],
-      [
-        'local block missing',
-        'local',
-        `Failed to generate merkle proof: Block 25834280 not found for transaction ${hash}`,
-        false,
-      ],
-      [
-        'local pending',
-        'local',
-        `Failed to generate merkle proof: Transaction ${hash} is pending and not yet included in a block`,
-        false,
-      ],
-      ['local unreachable', 'local', 'getBlockWithReceipts: fetch failed', false],
-    ];
-    for (const [name, prover, message, want] of cases) {
-      const got = isAbsence(prover, message);
-      if (got === want) {
-        passed++;
-        console.log(`  ok    ${name} → ${got ? 'absent' : 'unknown'}`);
-      } else {
-        failed++;
-        console.log(`  FAIL  ${name} → ${got ? 'absent' : 'unknown'}, expected the opposite`);
       }
     }
   }
@@ -816,6 +621,244 @@ async function main() {
   // ------------------------------------------------------------------
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exitCode = 1;
+}
+
+/// Everything the suite asserts that touches neither a wallet nor a chain.
+///
+/// These are classifiers and pure readers — what a value in a payload is, whether a failure came
+/// from the chain or the wire, what an append will cost, whether a prover said "absent" or "I do
+/// not know". They were written here because this is where their callers are exercised, and the
+/// cost of that was that they only ever ran when somebody had a funded key: `npm run livetest` is
+/// not something CI can do on every push. `npm run puretest` is.
+async function pureChecks(): Promise<void> {
+  // A scope to read payloads against. `valueOf` looks at the metric and the word index and nothing
+  // else, so this needs no contract to have built it — which is the whole point of it being here.
+  const scope: Scope = {
+    chainKey: 1,
+    emitter: '0x0000000000000000000000000000000000000001',
+    eventSig: keccak256(toUtf8Bytes('Settled(address,address,uint256)')),
+    topics: [ZeroHash, ZeroHash, ZeroHash],
+    topicMask: 0,
+    metric: 1,
+    metricArg: 0,
+  };
+
+  // Only its interface is used — `isChainRejection` decodes revert data against the ABI. No
+  // provider, and no address that has to exist.
+  const registry = new Contract(ZeroAddress, registryArtifact.abi);
+
+  // ------------------------------------------------------------------
+  // Reading a number out of a log's payload. The window is a fixed 64 characters at a fixed
+  // offset, and the offset used to be counted from the whole string — so a payload arriving
+  // without its `0x` shifted every window two characters early. With three data words that is not
+  // a short read any length check would catch: it is a different number, returned in silence.
+  console.log('');
+  console.log('reading a value out of a payload');
+  {
+    const word = (n: bigint) => n.toString(16).padStart(64, '0');
+    const three = '0x' + word(0xaan) + word(1234567n) + word(0n);
+    // valueOf reads nothing from a scope but its metric and which word to take.
+    const dataScope = { ...scope, metric: 1, metricArg: 1 } as Scope;
+    check('the second word of three reads as itself', valueOf(dataScope, three) === 1234567n);
+    let threw = false;
+    try {
+      valueOf(dataScope, three.slice(2));
+    } catch {
+      threw = true;
+    }
+    check('the same payload without its 0x is refused, not misread', threw);
+    check(
+      'a COUNT scope does not read the payload at all',
+      valueOf({ ...dataScope, metric: 0 } as Scope, '0x') === 1n,
+    );
+    let short = false;
+    try {
+      valueOf({ ...dataScope, metricArg: 9 } as Scope, three);
+    } catch {
+      short = true;
+    }
+    check('a word past the end of the payload is refused', short);
+  }
+  // ------------------------------------------------------------------
+  // Whether a failure came from the chain or from the wire. `buildClaim` drops an event the
+  // registry rejects, because one the registry will not take is one no refuter could use against
+  // the claim either — but an RPC that timed out has said nothing about the event, and dropping it
+  // there seals a claim short of a real member and forfeits the bond for it.
+  console.log('');
+  console.log('telling a rejection apart from a failure to ask');
+  {
+    const rejection = { code: 'CALL_EXCEPTION', revert: { name: 'EventOutOfScope' } };
+    const encoded = {
+      code: 'CALL_EXCEPTION',
+      revert: null,
+      data: registry.interface.encodeErrorResult('NotClaimant'),
+    };
+    const cases: [string, any, boolean][] = [
+      ['a decoded revert', rejection, true],
+      ['revert data this ABI can parse', encoded, true],
+      ['a revert with no data at all', { code: 'CALL_EXCEPTION', revert: null, data: '0x' }, false],
+      ['revert data from some other contract', { code: 'CALL_EXCEPTION', revert: null, data: '0xdeadbeef' }, false],
+      ['the endpoint timed out', { code: 'TIMEOUT', message: 'timeout' }, false],
+      ['the endpoint was unreachable', { code: 'NETWORK_ERROR', message: 'could not detect network' }, false],
+      ['the endpoint returned nonsense', { code: 'SERVER_ERROR', message: '502' }, false],
+      ['nothing at all', undefined, false],
+    ];
+    // ethers builds these, so the guards are checked against what it actually produces rather than
+    // against a hand-written idea of the shape.
+    const transport: [string, unknown, boolean][] = [
+      ['a timeout', makeError('timed out', 'TIMEOUT'), true],
+      ['an unreachable endpoint', makeError('no network', 'NETWORK_ERROR'), true],
+      ['a 502 from the endpoint', makeError('bad gateway', 'SERVER_ERROR'), true],
+      ['a malformed response', makeError('bad data', 'BAD_DATA'), true],
+      ['a destroyed provider', makeError('cancelled', 'CANCELLED'), true],
+      ['a revert', makeError('reverted', 'CALL_EXCEPTION'), false],
+      ['not enough funds', makeError('insufficient funds', 'INSUFFICIENT_FUNDS'), false],
+      // Nullish input is the case that found the bug: ethers' isError is a type predicate, so
+      // TypeScript believes it returns a boolean, and for a nullish argument it returns the
+      // argument. An `||` chain of those yielded `undefined` from a function typed `boolean`.
+      // Compared with `===` here rather than for truthiness, which is why it showed up at all.
+      ['nothing at all', undefined, false],
+      ['null', null, false],
+      ['an object that is not an error', {}, false],
+    ];
+    // A 413 is a SERVER_ERROR as well, so the narrowing has to read what the endpoint actually
+    // said rather than the code. CI found this one: a batch of ten queries whose ten in-scope logs
+    // all came from a single large transaction sends that transaction ten times over, and the
+    // proxy in front of the RPC refused the body before the precompile saw any of it. A timeout is
+    // worth retrying unchanged; this never is, because the same bytes get the same answer.
+    // ethers types SERVER_ERROR's info as { request, response }, but the object JsonRpcProvider
+    // actually throws carries requestUrl, responseStatus and responseBody — which is what the
+    // guard reads, so that is what these are built with.
+    const served = (message: string, responseStatus: string, responseBody: string): unknown =>
+      Object.assign(makeError(message, 'SERVER_ERROR'), {
+        info: { requestUrl: 'https://rpc.cc3-testnet.creditcoin.network', responseStatus, responseBody },
+      });
+
+    const oversize: [string, unknown, boolean][] = [
+      [
+        'nginx 413',
+        served(
+          'server response 413 Request Entity Too Large',
+          '413 Request Entity Too Large',
+          '<html><head><title>413 Request Entity Too Large</title></head></html>',
+        ),
+        true,
+      ],
+      ['a 502 is not too large', served('bad gateway', '502 Bad Gateway', ''), false],
+      // The status is read from its start for this reason: a body is arbitrary content and a bare
+      // 413 in it may be a block number, not a verdict on the request that carried it.
+      [
+        'a 500 whose body merely contains 413',
+        served('server error', '500 Internal Server Error', '{"error":"no block at height 413"}'),
+        false,
+      ],
+      ['a timeout is not too large', makeError('timed out', 'TIMEOUT'), false],
+      ['a revert is not too large', makeError('reverted', 'CALL_EXCEPTION'), false],
+      ['a SERVER_ERROR with no info', makeError('unknown', 'SERVER_ERROR'), false],
+      ['nothing at all', undefined, false],
+    ];
+    for (const [name, err, want] of oversize) {
+      const got = isPayloadTooLarge(err);
+      if (got === want) {
+        passed++;
+        console.log(`  ok    ${name} → ${got ? 'split and retry' : 'not a size problem'}`);
+      } else {
+        failed++;
+        console.log(`  FAIL  ${name} → ${got ? 'split and retry' : 'not a size problem'}, expected the opposite`);
+      }
+    }
+
+    for (const [name, err, want] of transport) {
+      const got = isTransportFailure(err);
+      if (got === want) {
+        passed++;
+        console.log(`  ok    ${name} → ${got ? 'never answered' : 'answered'}`);
+      } else {
+        failed++;
+        console.log(`  FAIL  ${name} → ${got ? 'never answered' : 'answered'}, expected the opposite`);
+      }
+    }
+    for (const [name, err, want] of cases) {
+      const got = isChainRejection(registry, err);
+      if (got === want) {
+        passed++;
+        console.log(`  ok    ${name} → ${got ? 'the chain refused' : 'we failed to ask'}`);
+      } else {
+        failed++;
+        console.log(`  FAIL  ${name} → ${got ? 'the chain refused' : 'we failed to ask'}, expected the opposite`);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // The gas model that carries a refutation when a node will not estimate one. Wrong low and the
+  // transaction runs out; wrong high and no block will hold it.
+  console.log('');
+  console.log('the fallback gas model');
+  {
+    check('empty calldata costs nothing', calldataGas('0x') === 0n);
+    check('a zero byte costs 4', calldataGas('0x00') === 4n);
+    check('a non-zero byte costs 16', calldataGas('0xff') === 16n);
+    check('mixed bytes add up', calldataGas('0x00ff00') === 4n + 16n + 4n);
+    check('the 0x prefix is optional', calldataGas('ff') === calldataGas('0xff'));
+
+    const small = modelledGas('0x' + 'ff'.repeat(100), 1);
+    const wide = modelledGas('0x' + 'ff'.repeat(1000), 1);
+    const many = modelledGas('0x' + 'ff'.repeat(100), 10);
+    check('more calldata costs more', wide > small);
+    check('more members cost more', many > small);
+    // A single append measured 453,592 gas at its cheapest. The model has to clear that or the
+    // fallback loses the transaction it exists to save.
+    check('a one-member append is budgeted above what one really cost', small > 500_000n);
+    // And a full batch has to stay inside a block.
+    check('a ten-member append still fits a 75M block', modelledGas('0x' + 'ff'.repeat(100_000), 10) < 75_000_000n);
+  }
+
+  // ------------------------------------------------------------------
+  // Which failures mean "the chain does not have it" and which mean "I could not tell". Getting
+  // this backwards either forfeits a bond or lets one bad endpoint stop every honest claimant, and
+  // it is decided by reading strings — the exact thing that silently broke once already when a
+  // regex meant to match 404 was mangled into literal backspace characters.
+  console.log('');
+  console.log('telling absence apart from not knowing');
+  {
+    const hash = '0x' + 'ab'.repeat(32);
+    const cases: [string, string, string, boolean][] = [
+      ['hosted 404', 'hosted', 'Failed to fetch proof: AxiosError: Request failed with status code 404', true],
+      ['hosted refused', 'hosted', 'Failed to fetch proof: Error: connect ECONNREFUSED 127.0.0.1:1', false],
+      ['hosted 503', 'hosted', 'Failed to fetch proof: AxiosError: Request failed with status code 503', false],
+      ['local absent', 'local', `Failed to generate merkle proof: Transaction ${hash} not found`, true],
+      [
+        'local sibling missing',
+        'local',
+        `Failed to generate merkle proof: Transaction ${hash} not found in block 25834280`,
+        false,
+      ],
+      [
+        'local block missing',
+        'local',
+        `Failed to generate merkle proof: Block 25834280 not found for transaction ${hash}`,
+        false,
+      ],
+      [
+        'local pending',
+        'local',
+        `Failed to generate merkle proof: Transaction ${hash} is pending and not yet included in a block`,
+        false,
+      ],
+      ['local unreachable', 'local', 'getBlockWithReceipts: fetch failed', false],
+    ];
+    for (const [name, prover, message, want] of cases) {
+      const got = isAbsence(prover, message);
+      if (got === want) {
+        passed++;
+        console.log(`  ok    ${name} → ${got ? 'absent' : 'unknown'}`);
+      } else {
+        failed++;
+        console.log(`  FAIL  ${name} → ${got ? 'absent' : 'unknown'}, expected the opposite`);
+      }
+    }
+  }
 }
 
 function readClaimId(registry: any, receipt: any): bigint {

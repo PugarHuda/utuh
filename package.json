@@ -32,6 +32,7 @@
     "mcp": "tsx offchain/mcp.ts",
     "bait": "tsx offchain/badClaim.ts",
     "livetest": "tsx offchain/liveTest.ts",
+    "puretest": "tsx offchain/liveTest.ts --pure",
     "doctor": "tsx offchain/doctor.ts",
     "verify": "tsx offchain/verify.ts",
     "provers": "tsx offchain/provers.ts",

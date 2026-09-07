@@ -120,6 +120,14 @@ jobs:
 
       # Unused files, exports and dependencies. @gluwa/usc-contracts is ignored because it is
       # imported from Solidity, which a TypeScript analyser cannot see.
+      # The half of the live suite that needs neither a key nor a network: classifiers, the payload
+      # reader, the gas model, and the difference between "the prover says absent" and "the prover
+      # did not answer". They lived behind `npm run livetest`, which needs a funded wallet, so CI
+      # had never run one of them. This job has no secrets at all, which is exactly the proof that
+      # they need none.
+      - name: the checks that need no chain
+        run: npm run puretest
+
       - name: dead code
         run: npx knip
 
