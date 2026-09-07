@@ -128,6 +128,15 @@ jobs:
       - name: the checks that need no chain
         run: npm run puretest
 
+      # The published server, spoken to over its own protocol. `npx utuh-mcp` is a public artifact
+      # with an entry in the official MCP Registry, and the thing that reaches users is an esbuild
+      # bundle with the registry ABI and both deployment records baked into it — all of which can
+      # quietly stop being included. This builds that bundle, spawns it, and speaks real JSON-RPC:
+      # the three listings, a prompt fetched, the tally read live off Creditcoin, and the one tool
+      # that spends asked to spend without saying so, which must refuse. No key involved.
+      - name: the MCP server, over the protocol
+        run: npm run mcp:test
+
       - name: dead code
         run: npx knip
 

@@ -605,6 +605,12 @@ back rather than spending. And every tool carries its **annotations**, so a clie
 that only read from the one that sends a transaction and slashes somebody's bond — the confirmation
 belongs on exactly one of the five, and now the server says which.
 
+`npm run mcp:test` builds that bundle and speaks the protocol to it — the three listings, a prompt
+fetched, the tally read live off Creditcoin, and `refute_claim` asked to spend with `confirm`
+withheld, which must refuse. Twenty-nine assertions, no key, and CI runs it on every push: what
+reaches a user is an esbuild bundle with the registry ABI and both deployment records baked in, and
+every one of those is a thing that can quietly stop being included.
+
 Two things about it were earned rather than designed. The first client ever connected to this
 server found the gap in a standing claim and refuted it — a real transaction, a real slashed bond,
 1 CTC of reward — during its own smoke test. That is the pitch demonstrating itself, and it is

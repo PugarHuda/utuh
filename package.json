@@ -53,7 +53,8 @@
     "symbolic": "npm run symbolic:build && halmos --forge-build-out out-halmos --contract EventScopeKeySymbolic",
     "symbolic:deep": "npm run symbolic:build && halmos --forge-build-out out-halmos --contract CreditRoundingSymbolic --solver-timeout-assertion 600000",
     "symbolic:build": "forge build --no-dynamic-test-linking --ast --out out-halmos",
-    "mcp:package": "tsx offchain/build-mcp.ts"
+    "mcp:package": "tsx offchain/build-mcp.ts",
+    "mcp:test": "tsx offchain/build-mcp.ts && tsx offchain/mcpTest.ts"
   },
   "dependencies": {
     "@gluwa/usc-contracts": "^0.1.2",
