@@ -33,7 +33,7 @@ jobs:
             address: '0x8FA0BD5301D998Be873E31453E53d114929a5Fac'
     name: ${{ matrix.registry.name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -68,7 +68,7 @@ jobs:
     name: published console
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
