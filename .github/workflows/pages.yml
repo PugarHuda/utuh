@@ -60,18 +60,44 @@ jobs:
       # is still green — a fork should not fail this workflow over a deployment it cannot make —
       # which does mean a missing token shows up as a stale site rather than as a red build. The
       # smoke test in watch.yml is what catches that: it reads the published page hourly.
+      # Deploy only when the canonical host is actually serving something else.
+      #
+      # Vercel's free tier allows 100 deployments a day across the account, and this workflow ran on
+      # every push — including the ones that changed a README, a Solidity comment or an offchain
+      # script, none of which alter a byte of `web/static`. That is how the quota ran out on
+      # 2026-09-07 while the console itself had not changed in hours: the deployments that used it
+      # up published identical bundles. Comparing the freshly built `main.js` against the one the
+      # canonical URL is serving right now costs one request and skips the deployment that would
+      # change nothing. When the two do differ — a real change, or a canonical left behind by a
+      # quota — it runs, which means the next push after a reset repairs it.
+      - name: is the canonical console already serving this build
+        id: canonical
+        run: |
+          set -uo pipefail
+          built=$(sha256sum web/static/main.js | cut -d' ' -f1)
+          live=$(curl -fsS --max-time 20 https://utuh.vercel.app/main.js | sha256sum | cut -d' ' -f1) || live=unreachable
+          echo "built $built"
+          echo "live  $live"
+          if [ "$built" = "$live" ]; then
+            echo "same=true" >> "$GITHUB_OUTPUT"
+            echo "the canonical console already serves this build — nothing to deploy"
+          else
+            echo "same=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: publish to Vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: team_NdlwQPgRp4Fn2WzyuKh1BLB2
           VERCEL_PROJECT_ID: prj_ax7c7Tmvo59dozvBUZRo8nxZYFPS
-        if: env.VERCEL_TOKEN != ''
+        if: env.VERCEL_TOKEN != '' && steps.canonical.outputs.same != 'true'
         # Not allowed to take the mirror down with it. A missing token was already survivable; a
         # quota was not, and Vercel's free tier stops at 100 deployments a day — so a busy day
         # ended with the Vercel step failing *before* the Pages upload, leaving both hosts on the
         # previous build and the run red for a reason that is nobody's bug. Degrading to "Vercel
         # is stale, Pages is current" is the honest outcome, and watch.yml's hourly smoke of the
-        # canonical URL is what notices if the staleness lasts.
+        # canonical URL is what notices if the staleness lasts — which it did not, until the smoke
+        # learned to compare the canonical's bundle against the mirror's. It does now.
         continue-on-error: true
         run: npx --yes vercel@59 deploy web/static --prod --yes --token "$VERCEL_TOKEN"
 

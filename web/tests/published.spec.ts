@@ -81,3 +81,33 @@ test('asks its host for nothing but its own four files', async ({ page }) => {
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   expect([...new Set(asked)].sort()).toEqual(['archivo.woff2', 'index.html', 'main.js', 'style.css']);
 });
+
+test('the canonical console and its mirror are serving the same build', async ({ request }) => {
+  // pages.yml publishes both hosts from the same `web/static`, in the same run, on purpose: the
+  // address the page gives out must not drift behind the address that merely mirrors it. Nothing
+  // checked that, and the way it fails is silent — Vercel's free tier stops at 100 deployments a
+  // day, the deploy step is allowed to fail so a quota cannot take the Pages upload down with it,
+  // and the run stays green while the canonical URL keeps serving last week's bundle. Every link
+  // in the submission, the whitepaper and the npm package points at the canonical one.
+  //
+  // Seen 2026-09-07: `api-deployments-free-per-day`, canonical 319,512 bytes against the mirror's
+  // 331,024, and five other published-console checks passing over the top of it.
+  const MIRROR = 'https://pugarhuda.github.io/utuh/main.js';
+  const canonicalUrl = new URL('main.js', PUBLISHED!).href;
+  if (canonicalUrl === MIRROR) test.skip(true, 'PUBLISHED_URL is the mirror itself');
+
+  const [canonical, mirror] = await Promise.all([request.get(canonicalUrl), request.get(MIRROR)]);
+  expect(canonical.ok(), `${canonicalUrl} answered ${canonical.status()}`).toBe(true);
+  expect(mirror.ok(), `${MIRROR} answered ${mirror.status()}`).toBe(true);
+
+  const a = await canonical.body();
+  const b = await mirror.body();
+  expect(
+    a.length,
+    `the canonical console is serving a different build than the mirror (${a.length} bytes against ` +
+      `${b.length}). Both are published from the same commit in the same run, so one host did not ` +
+      'take the deployment — check the "publish to Vercel" step in the last pages run; a daily ' +
+      'deployment quota fails it without failing the workflow.',
+  ).toBe(b.length);
+  expect(a.equals(b), 'the two hosts serve builds of the same size but different bytes').toBe(true);
+});
