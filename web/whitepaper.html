@@ -1088,6 +1088,32 @@ function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repa
           in-scope logs spends three slots. Batching by transaction count earns
           <code>heights: Value is too large for length</code>.
         </li>
+        <li>
+          <b>The hash ChainInfo returns is the attestation's digest, not the block's header.</b>
+          At Ethereum height 25,925,380 the precompile answers <code>0x8786ef14&hellip;</code>, the
+          attestation indexer's <code>digest</code> field for that height answers the same, and
+          Ethereum's own header hash for that block is <code>0xd5ea7299&hellip;</code>. Read as a
+          header hash and compared against the source chain, it produces a mismatch about a
+          perfectly healthy oracle.
+        </li>
+        <li>
+          <b><code>find_highest_attested_before</code> is exclusive of its target.</b> Height
+          25,925,400 is itself an attestation point, and asking for the highest attestation before
+          it returns 25,925,390 &mdash; one full interval back. That is exactly what a claimant
+          wants, since the frontier's own attestation is the one still settling, and exactly wrong
+          for anyone using it to ask whether a height is attested.
+        </li>
+        <li>
+          <b>The two Creditcoin networks sign the same Ethereum block into the same digest.</b>
+          CC3 Testnet attests Ethereum mainnet under chain key 3 and Creditcoin Mainnet under key 1,
+          from attestor sets with no BLS public key in common &mdash; five registered against seven
+          &mdash; and their attestation digests for the same height are byte-identical.
+          <code>get_attestation_height_for_digest</code> makes that checkable in two
+          <code>eth_call</code>s from a browser: hand one network's digest to the other's index and
+          it answers with the height. The two do not run in lockstep, so the comparison has to be
+          taken at the lower of the two frontiers; asked at either network's own edge, the other has
+          not indexed it yet and a lag reads as a disagreement.
+        </li>
       </ul>
     </div>
   </section>

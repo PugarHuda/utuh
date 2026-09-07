@@ -328,6 +328,7 @@ async function main() {
     check('a height past the frontier is not provable yet', !far.attested);
 
     const lag = await checkpointLag(owner.provider!, key);
+    check('this chain has been checkpointed, not only attested', lag.exists);
     check('the checkpoint is confirmed by its own digest', lag.confirmed);
     check('the checkpoint is at or behind the attestation frontier', lag.lag >= 0);
     check('checkpoints land on hundreds, as measured', lag.checkpointHeight % 100 === 0);

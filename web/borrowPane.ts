@@ -225,7 +225,19 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
   steps.push(step(1, 'Bind your address', bound, bindBody));
 
   // ---------------------------------------------------------------- 2. claims
-  const range = await defaultRange(wired.credit, wired.chainInfo, chainKey);
+  //
+  // `defaultRange` refuses rather than returning a range that cannot be opened: a chain attested
+  // from a recent genesis may not hold enough history for this lender's floor, and the old code
+  // returned a range ending past the attestation frontier that died three transactions later
+  // inside `open`. The refusal has to land in the pane, not as an unhandled rejection that takes
+  // the whole render down with it.
+  let range: Awaited<ReturnType<typeof defaultRange>>;
+  try {
+    range = await defaultRange(wired.credit, wired.chainInfo, chainKey);
+  } catch (e) {
+    box.replaceChildren(el('p', 'bad', e instanceof Error ? e.message : String(e)));
+    return;
+  }
   const bond = formatEther(await wired.registry.MIN_BOND());
   const window = Number(await wired.registry.MIN_CHALLENGE_WINDOW());
 

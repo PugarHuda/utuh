@@ -12,7 +12,9 @@ Three roles meet at the same console, and none of them is a consumer.
 
 - **Watchers** sweep a source chain looking for an in-scope event a claim left out, and refute it
   for half the bond. Adversarial, unpaid until they win, and the only reason the system's central
-  claim holds. The console must let a stranger do this with no backend, no key, and no clone.
+  claim holds. The console must let a stranger do this with no backend, no key, and no clone — and
+  since a watcher need not be a person, `npx utuh-mcp` puts the same role behind the Model Context
+  Protocol, listed in its official registry so an agent can find it without being told the name.
 - **Claimants / borrowers** open a claim over a block range, append proven events, post a bond,
   wait out a challenge window, and draw a credit line against the history that survived.
 - **Lenders and integrators** read a claim's standing before extending anything, or wire the

@@ -49,6 +49,18 @@ console.warn = (...a: unknown[]) => console.error(...a);
 
 const provider = new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
 
+/// The ChainInfo precompile lives on both Creditcoin networks, and the audit reads both. One
+/// provider per network, built once: this server is long-lived, and a new provider per tool call
+/// leaves a socket behind every time an agent asks.
+const networks = new Map<string, JsonRpcProvider>();
+function networkFor(indexer: { rpc: string; chainId: number }): JsonRpcProvider {
+  const had = networks.get(indexer.rpc);
+  if (had) return had;
+  const made = new JsonRpcProvider(indexer.rpc, indexer.chainId, { staticNetwork: true });
+  networks.set(indexer.rpc, made);
+  return made;
+}
+
 const DEPLOYMENT = z
   .enum(['sepolia', 'mainnet'])
   .describe('Which deployment: "sepolia" is the completed loop, "mainnet" underwrites real Aave history');
@@ -308,15 +320,17 @@ server.registerTool(
       ['CC3 Testnet', ATTESTATION_INDEXERS.testnet, CHAIN_KEY.mainnet],
       ['Creditcoin Mainnet', ATTESTATION_INDEXERS.mainnet, ATTESTATION_INDEXERS.mainnet.ethereumKey],
     ] as const) {
-      const network = new JsonRpcProvider(indexer.rpc, indexer.chainId, { staticNetwork: true });
+      const network = networkFor(indexer);
       const [{ total, nodes }, lag] = await Promise.all([
         recentAttestations(indexer, chainKey, 4),
         checkpointLag(network, chainKey),
       ]);
       out.push(`${label}: ${total.toLocaleString()} attestations of Ethereum indexed (chain key ${chainKey})`);
       out.push(
-        `  attested to ${lag.attestationHeight.toLocaleString()}, last checkpoint ` +
-          `${lag.checkpointHeight.toLocaleString()} (${lag.lag} source blocks behind)`,
+        lag.exists
+          ? `  attested to ${lag.attestationHeight.toLocaleString()}, last checkpoint ` +
+              `${lag.checkpointHeight.toLocaleString()} (${lag.lag} source blocks behind)`
+          : `  attested to ${lag.attestationHeight.toLocaleString()}, not checkpointed yet`,
       );
       for (const a of nodes) {
         const answers = await Promise.all(
@@ -540,8 +554,8 @@ async function crossNetworkLine(): Promise<string> {
   const t = ATTESTATION_INDEXERS.testnet;
   const m = ATTESTATION_INDEXERS.mainnet;
   try {
-    const netT = new JsonRpcProvider(t.rpc, t.chainId, { staticNetwork: true });
-    const netM = new JsonRpcProvider(m.rpc, m.chainId, { staticNetwork: true });
+    const netT = networkFor(t);
+    const netM = networkFor(m);
     const [latestT, latestM] = await Promise.all([
       latestAttestation(netT, CHAIN_KEY.mainnet),
       latestAttestation(netM, m.ethereumKey),

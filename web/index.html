@@ -165,15 +165,22 @@
         <h2>Audit the attestors</h2>
         <p class="note">
           Everything above trusts one thing this page has not checked: that the header Creditcoin attested is the
-          header Ethereum actually has. The precompile will not say — it answers how far a chain is attested, not with
-          what hash. The indexer publishes the hash, so this asks Creditcoin what it signed and asks independent
-          source-chain endpoints what is really there, and compares. A mismatch here would mean the attestors signed a
-          block that does not exist.
+          header Ethereum actually has. The precompile will not say — the hash it returns is the attestation's own
+          digest, not the block's. The indexer publishes the header hash, so this asks Creditcoin what it signed and
+          asks independent source-chain endpoints what is really there, and compares. A mismatch here would mean the
+          attestors signed a block that does not exist.
+        </p>
+        <p class="note">
+          That check has a hole, and the digest closes it: it assumes the indexer's rows are real, and an invented row
+          about a real block would agree with Ethereum perfectly. So every row also goes back to the chain's own
+          digest-to-height index, on the network that published it. A digest no attestation carries resolves to
+          nothing.
         </p>
         <p class="note">
           Both Creditcoin networks are audited, not just the one these contracts sit on. Creditcoin Mainnet attests
           Ethereum mainnet under chain key 1 &mdash; the same number that means Sepolia on testnet &mdash; by a
-          different set of attestors, and it is checked against Ethereum rather than against testnet.
+          different set of attestors, and it is checked against Ethereum rather than against testnet. The last line
+          compares the two: the same Ethereum block, the same digest, signed by sets with nothing in common.
         </p>
         <div id="attestors-body" class="body">reading the attestation indexer…</div>
       </section>

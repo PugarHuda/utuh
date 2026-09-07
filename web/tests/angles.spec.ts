@@ -130,3 +130,42 @@ test('with Creditcoin unreachable, the page fails loudly instead of showing stal
   }
   await expect(page.locator('[data-testid=claims-table] tbody tr')).toHaveCount(0);
 });
+
+test('an endpoint answering for the wrong chain is refused, and the sweep does not run', async ({ page }) => {
+  // The failure this guards against is the quiet one. A source endpoint serving a different chain
+  // than the claim's scope names returns no in-scope logs, and no logs is exactly what a claim
+  // with nothing left out looks like — so a misconfigured or repointed endpoint would hand a
+  // visitor a confident, wrong "complete". Every provider in the page asserts its chain id through
+  // ethers' staticNetwork and never asks, which is why the page asks itself before it sweeps.
+  //
+  // Nothing is stubbed but the answer to one method: every source-chain endpoint still serves its
+  // logs, and only `eth_chainId` lies. That is the shape of the real accident.
+  await page.route(
+    (url) => !url.host.includes('creditcoin') && url.protocol.startsWith('http'),
+    async (route) => {
+      const body = route.request().postData() ?? '';
+      if (!body.includes('eth_chainId')) return route.fallback();
+      const id = JSON.parse(body).id;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id, result: '0x7a69' }),
+      });
+    },
+  );
+
+  await page.goto('/');
+  await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
+  const options = await page.locator('[data-testid=claim-select] option').count();
+  test.skip(options === 0, 'no sweepable claim');
+
+  await page.locator('#sweep').click();
+  const log = page.locator('#log');
+  await expect(log).toContainText(/ENDPOINT REJECTED/, { timeout: 60_000 });
+  const text = await log.innerText();
+  expect(text, 'the page says which chain it expected').toMatch(
+    /serves chain id 31337, not 1|serves chain id 31337, not 11155111/,
+  );
+  expect(text, 'and refuses to sweep rather than reporting a verdict').toMatch(/serving some chain other than/);
+  expect(text, 'no completeness verdict may be reached this way').not.toMatch(/INCOMPLETE|no gap found/);
+});

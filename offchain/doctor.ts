@@ -244,11 +244,15 @@ async function main() {
     // and it is the one nothing publishes.
     try {
       const lag = await checkpointLag(cc3, key);
-      console.log(
-        `  ${lag.confirmed ? 'ok   ' : 'WARN '} last checkpoint ${lag.checkpointHeight}, ${lag.lag} block(s) ` +
-          `behind the frontier${lag.confirmed ? '' : ' — the precompile did not confirm it by digest'}`,
-      );
-      if (!lag.confirmed) problems++;
+      if (!lag.exists) {
+        console.log('  WARN  no checkpoint yet on this chain — attested but not checkpointed');
+      } else {
+        console.log(
+          `  ${lag.confirmed ? 'ok   ' : 'WARN '} last checkpoint ${lag.checkpointHeight}, ${lag.lag} block(s) ` +
+            `behind the frontier${lag.confirmed ? '' : ' — the precompile did not confirm it by digest'}`,
+        );
+        if (!lag.confirmed) problems++;
+      }
     } catch (e: any) {
       problems++;
       console.log(`  FAIL  checkpoints: ${e.shortMessage ?? e.message}`);

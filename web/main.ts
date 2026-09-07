@@ -789,10 +789,11 @@ async function auditIndexer(indexer: AttestationIndexer, chainKey: number): Prom
   let lag = '';
   try {
     const c = await within(15_000, 'checkpoint lag', checkpointLag(network, chainKey));
-    lag =
-      ` Attested to source block ${c.attestationHeight.toLocaleString()}; last checkpoint at ` +
-      `${c.checkpointHeight.toLocaleString()}, ${c.lag} block(s) behind it` +
-      `${c.confirmed ? ', confirmed by digest' : ' (the precompile did not confirm its own checkpoint)'}.`;
+    lag = c.exists
+      ? ` Attested to source block ${c.attestationHeight.toLocaleString()}; last checkpoint at ` +
+        `${c.checkpointHeight.toLocaleString()}, ${c.lag} block(s) behind it` +
+        `${c.confirmed ? ', confirmed by digest' : ' (the precompile did not confirm its own checkpoint)'}.`
+      : ` Attested to source block ${c.attestationHeight.toLocaleString()}, and not checkpointed yet.`;
   } catch {
     /* the pane is still worth drawing without it */
   }

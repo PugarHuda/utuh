@@ -154,6 +154,9 @@ export interface CheckpointLag {
   lag: number;
   /// True when the precompile confirms its own reported checkpoint height by digest.
   confirmed: boolean;
+  /// False on a chain attested but not yet checkpointed — a real state on a young chain, and one
+  /// that would otherwise read as a checkpoint at height zero and a lag of twenty-five million.
+  exists: boolean;
 }
 
 export async function checkpointLag(provider: Provider, chainKey: number): Promise<CheckpointLag> {
@@ -163,12 +166,16 @@ export async function checkpointLag(provider: Provider, chainKey: number): Promi
     ci.get_latest_checkpoint_height_and_hash(chainKey),
   ]);
   const checkpointHeight = Number(checkpoint.height);
+  if (!checkpoint.exists) {
+    return { attestationHeight: Number(latest.height), checkpointHeight: 0, lag: 0, confirmed: false, exists: false };
+  }
   const exact = await ci.get_checkpoint_for_height(chainKey, checkpointHeight);
   return {
     attestationHeight: Number(latest.height),
     checkpointHeight,
     lag: Number(latest.height) - checkpointHeight,
     confirmed: Boolean(exact.exists) && String(exact.hash).toLowerCase() === String(checkpoint.hash).toLowerCase(),
+    exists: true,
   };
 }
 
