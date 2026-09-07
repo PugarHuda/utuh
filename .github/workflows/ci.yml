@@ -61,17 +61,26 @@ jobs:
       # trading away the point of fuzzing to stabilise a gas number. Without them the figures are
       # deterministic, and the 5% left is for compiler and toolchain drift, far below what any
       # real regression costs on a path that spends hundreds of thousands of gas.
-      # Lines, over the contracts, with the invariant suite left out — it runs thousands of calls
-      # and adds nothing to which lines are reached. The floor is a regression guard, not a target:
-      # it reads 96% today, and the number in the README is this number.
+      # Lines and branches, over the contracts, with the invariant suite left out — it runs
+      # thousands of calls and adds nothing to which lines are reached. The floors are regression
+      # guards, not targets, and the numbers in the README are these numbers.
+      #
+      # Branches were added after lines alone proved they could not see the hole they were meant to
+      # guard: line coverage read 97.69% while barely half the *decisions* were ever taken, and the
+      # missing half was almost entirely the refusals on the function that turns two claims into
+      # money. A guard is not covered by a test that never makes it fire, and a floor on lines
+      # calls it covered anyway.
       - name: coverage floor
         run: |
           forge coverage --no-match-test "invariant" --no-match-coverage "test|script" --report summary | tee coverage.txt
-          # The first percentage on the Total row is lines; a greedy match took the last, which is
-          # functions, and reported 100% on a tree whose lines stood at 97.69%.
-          pct=$(grep -E '^\| Total' coverage.txt | sed -E 's/^\| Total *\| *([0-9.]+)%.*/\1/' | head -1)
-          echo "line coverage: $pct%"
-          awk -v p="$pct" 'BEGIN { if (p+0 < 90) { print "::error::line coverage fell below 90%"; exit 1 } }'
+          # The Total row reads lines, statements, branches, functions. A greedy match took the
+          # last, which is functions, and reported 100% on a tree whose lines stood at 97.69%.
+          total=$(grep -E '^\| Total' coverage.txt | head -1)
+          lines=$(echo "$total" | sed -E 's/^\| Total *\| *([0-9.]+)%.*/\1/')
+          branches=$(echo "$total" | sed -E 's/^[^|]*\|[^|]*\|[^|]*\|[^|]*\| *([0-9.]+)%.*/\1/')
+          echo "line coverage: $lines%   branch coverage: $branches%"
+          awk -v p="$lines" 'BEGIN { if (p+0 < 90) { print "::error::line coverage fell below 90%"; exit 1 } }'
+          awk -v p="$branches" 'BEGIN { if (p+0 < 70) { print "::error::branch coverage fell below 70%"; exit 1 } }'
 
       - name: gas snapshot
         # Invariant runs are random sequences and their gas is a different number every run, for

@@ -817,6 +817,315 @@ contract LifecycleTest is Test {
     }
 
     // ------------------------------------------------------------------
+    // The registry's own refusals
+    // ------------------------------------------------------------------
+    //
+    // Same story as the credit guards above: `forge coverage` had the registry at 60% of branches,
+    // and the missing ones were the refusals — including both places where the Block Prover says
+    // no, which is the answer the whole design rests on and the one no local test had ever seen.
+    //
+    // Every scope is built before its prank. `_volumeScope` is an external call into the credit
+    // contract, so evaluating it inside a pranked call's arguments spends the prank on it and the
+    // test then measures the wrong caller.
+
+    /// @notice A range the network has not attested cannot be claimed over.
+    /// @dev Every other test here runs with `is_height_attested` answering true, because that is
+    ///      what it answers for a range in the past. This is the refusal that makes a challenge
+    ///      window mean something: without it a claim could run its whole window over data nobody
+    ///      was yet able to prove anything about.
+    function test_openRefusesAnUnattestedRange() public {
+        EventScope.Scope memory scope = _volumeScope();
+        vm.mockCall(CHAIN_INFO, abi.encodeWithSelector(IChainInfo.is_height_attested.selector), abi.encode(false));
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhRegistry.RangeNotAttested.selector, SEPOLIA, VOL_TO));
+        registry.open{value: BOND}(scope, VOL_FROM, VOL_TO, WINDOW);
+        _mockChainInfo(FRONTIER);
+    }
+
+    /// @notice Nor one that starts before the attestation data does.
+    function test_openRefusesARangeBeforeGenesis() public {
+        EventScope.Scope memory scope = _volumeScope();
+        uint64 genesis = 500;
+        vm.mockCall(
+            CHAIN_INFO, abi.encodeWithSelector(IChainInfo.get_attestation_genesis_height.selector), abi.encode(genesis)
+        );
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhRegistry.RangeBeforeGenesis.selector, uint64(100), genesis));
+        registry.open{value: BOND}(scope, 100, VOL_TO, WINDOW);
+        _mockChainInfo(FRONTIER);
+    }
+
+    /// @notice The batch cap is the precompile's, and the registry refuses past it rather than
+    ///         spending the gas to be told.
+    function test_appendRefusesABatchOverTheCap() public {
+        uint256 claimId = _open(_volumeScope(), VOL_FROM, VOL_TO);
+        uint256 tooMany = registry.MAX_BATCH() + 1;
+        UtuhRegistry.EventProof[] memory ps = new UtuhRegistry.EventProof[](tooMany);
+        for (uint256 i = 0; i < tooMany; i++) {
+            ps[i] = _one(VOL_FROM + uint64(10 * (i + 1)), 0);
+        }
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhRegistry.BatchTooLarge.selector, tooMany));
+        registry.appendBatch(claimId, ps, _continuity());
+    }
+
+    /// @notice A batch the Block Prover will not verify appends nothing.
+    function test_appendRefusesWhatTheProverRejects() public {
+        uint256 claimId = _open(_volumeScope(), VOL_FROM, VOL_TO);
+        UtuhRegistry.EventProof[] memory ps = _batch(_one(VOL_FROM + 10, 0));
+        vm.mockCall(PROVER, abi.encodeWithSelector(VERIFY_BATCH), abi.encode(false));
+        vm.prank(payer);
+        vm.expectRevert(UtuhRegistry.ProofRejected.selector);
+        registry.appendBatch(claimId, ps, _continuity());
+        _mockProver();
+    }
+
+    /// @notice And a refutation the prover will not verify breaks nothing.
+    /// @dev This is the asymmetry that makes the whole mechanism safe to open to strangers: a
+    ///      fabricated refutation is not a risk to be managed, it simply fails to prove and costs
+    ///      the sender their gas.
+    function test_refutingWithAProofTheProverRejectsIsRefused() public {
+        uint256 claimId = _sealedClaim(_volumeScope(), VOL_FROM, VOL_TO, _heights(2));
+        UtuhRegistry.EventProof memory p = _one(VOL_FROM + 30, 0);
+        vm.mockCall(PROVER, abi.encodeWithSelector(VERIFY_ONE), abi.encode(false));
+        vm.prank(WATCHER);
+        vm.expectRevert(UtuhRegistry.ProofRejected.selector);
+        registry.refute(claimId, p, _continuity());
+        _mockProver();
+    }
+
+    /// @notice A log index the receipt does not have is a refusal, not a read of whatever is there.
+    function test_appendRefusesALogIndexPastTheEndOfTheReceipt() public {
+        uint256 claimId = _open(_volumeScope(), VOL_FROM, VOL_TO);
+        uint256 logCount = EvmV1Decoder.decodeReceiptFields(settlement).receiptLogs.length;
+        UtuhRegistry.EventProof[] memory ps = _batch(_one(VOL_FROM + 10, uint32(logCount)));
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhRegistry.LogIndexOutOfRange.selector, uint32(logCount), logCount));
+        registry.appendBatch(claimId, ps, _continuity());
+    }
+
+    /// @notice A transaction that reverted on the source chain is still in its block, and proves
+    ///         nothing.
+    /// @dev The fixture is a real Ethereum mainnet transaction that failed — block 25,926,178,
+    ///      index 96, receipt status 0 — with its bytes taken from the hosted Proof Builder, the
+    ///      same service a claimant uses. The Block Prover attests inclusion and says so in its own
+    ///      documentation; every consumer has to read the status itself, and the ones that do not
+    ///      pay out against transactions that did nothing.
+    function test_appendRefusesATransactionThatRevertedOnTheSourceChain() public {
+        bytes memory reverted = vm.parseJsonBytes(vm.readFile("test/fixtures/encodedTransactions.json"), ".reverted");
+        assertEq(EvmV1Decoder.decodeReceiptFields(reverted).receiptStatus, 0, "the fixture is a failed transaction");
+
+        uint256 claimId = _open(_volumeScope(), VOL_FROM, VOL_TO);
+        UtuhRegistry.EventProof memory p = _one(VOL_FROM + 10, 0);
+        p.encodedTransaction = reverted;
+        UtuhRegistry.EventProof[] memory ps = _batch(p);
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhRegistry.TransactionFailedOnSource.selector, uint8(0)));
+        registry.appendBatch(claimId, ps, _continuity());
+    }
+
+    /// @notice Finalizing before the window closes is refused, whoever asks.
+    function test_finalizeRefusesAnOpenChallengeWindow() public {
+        uint256 claimId = _sealedClaim(_volumeScope(), VOL_FROM, VOL_TO, _heights(1));
+        uint64 until = registry.challengeUntil(claimId);
+        vm.expectRevert(abi.encodeWithSelector(UtuhRegistry.ChallengeWindowOpen.selector, uint64(block.number), until));
+        registry.finalize(claimId);
+    }
+
+    // ------------------------------------------------------------------
+    // The guards on the way in
+    // ------------------------------------------------------------------
+    //
+    // `forge coverage` put UtuhCredit's branches at 49%: lines and functions were near-total, and
+    // half the *decisions* were never taken. Almost all of the missing ones were here, on the
+    // function that turns two claims into money — and none of them was reachable from the live
+    // suite either, so ten refusals that decide whether a liquidated borrower gets a credit line
+    // had no test anywhere. Each one below trips exactly one guard, in the order `openLine`
+    // actually checks them.
+
+    /// @notice A lender listing one adverse class will not open a line on zero assertions about it.
+    function test_openLineRefusesTheWrongNumberOfCleanClaims() public {
+        _bindPayer();
+        uint256 volume = _volumeClaim(VOL_FROM, VOL_TO);
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.WrongNumberOfCleanClaims.selector, uint256(0), uint256(1)));
+        credit.openLine(payer, volume, new uint256[](0));
+    }
+
+    /// @notice A volume claim whose challenge window is shorter than this lender demands.
+    /// @dev The registry's floor and this lender's happen to be the same number, so the refusal
+    ///      needs a lender that asks for more than the registry's minimum — which is the whole
+    ///      point of the policy field: a lender may be stricter than the registry, never looser.
+    function test_openLineRefusesAVolumeClaimWithTooShortAWindow() public {
+        UtuhCredit strict = _strictLender(WINDOW * 2);
+        _bindOn(strict);
+        uint256 volume = _volumeClaim(VOL_FROM, VOL_TO);
+        uint256 clean = _cleanClaim(VOL_FROM, VOL_TO);
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.WindowTooShort.selector, WINDOW, WINDOW * 2));
+        strict.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice And the same floor applies to the clean claim, which is checked separately.
+    function test_openLineRefusesACleanClaimWithTooShortAWindow() public {
+        UtuhCredit strict = _strictLender(WINDOW * 2);
+        _bindOn(strict);
+        uint256 volume = _sealedClaimWithWindow(_volumeScope(), VOL_FROM, VOL_TO, _heights(3), WINDOW * 2);
+        _finalize(volume);
+        uint256 clean = _cleanClaim(VOL_FROM, VOL_TO);
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.WindowTooShort.selector, WINDOW, WINDOW * 2));
+        strict.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice A history too short to say anything about a borrower.
+    function test_openLineRefusesTooLittleHistory() public {
+        uint64 to = VOL_FROM + 50;
+        _bindPayer();
+        uint256 volume = _volumeClaim(VOL_FROM, to);
+        uint256 clean = _cleanClaim(VOL_FROM, to);
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.HistoryTooShort.selector, uint64(50), uint64(100)));
+        credit.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice A history that ended too long ago to still describe the borrower.
+    /// @dev The claims are built while the frontier is where it was; the chain then moves past this
+    ///      lender's staleness bound before the line is asked for. Nothing about the claims changed
+    ///      — only how old they are, which is the whole idea.
+    function test_openLineRefusesStaleUnderwriting() public {
+        _bindPayer();
+        uint256 volume = _volumeClaim(VOL_FROM, VOL_TO);
+        uint256 clean = _cleanClaim(VOL_FROM, VOL_TO);
+        uint64 far = VOL_TO + 5_001;
+        _mockChainInfo(far);
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.UnderwritingStale.selector, VOL_TO, far));
+        credit.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice A clean claim over a different range than the volume it is paired with.
+    /// @dev This is the attack the range check exists for: a long history of repayments beside a
+    ///      short, quiet window asserted clean. Both claims are honest on their own.
+    function test_openLineRefusesACleanClaimOverAnotherRange() public {
+        _bindPayer();
+        uint256 volume = _volumeClaim(VOL_FROM, VOL_TO);
+        uint256 clean = _cleanClaim(VOL_FROM, VOL_TO + 10);
+        vm.prank(payer);
+        vm.expectRevert(UtuhCredit.RangeMismatch.selector);
+        credit.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice A clean claim that is not clean.
+    /// @dev The fixture only carries settlement logs, so this uses a lender whose adverse class is
+    ///      that same event: the claim then holds three real, proven members and asserts absence
+    ///      anyway. Membership is counted rather than summed, so this fires whatever the metric.
+    function test_openLineRefusesACleanClaimThatHoldsEvents() public {
+        UtuhCredit.HistorySpec[] memory clean = new UtuhCredit.HistorySpec[](1);
+        clean[0] = _paymentSpec();
+        UtuhCredit odd = new UtuhCredit(registry, _policy(), _paymentSpec(), clean, _paymentSpec());
+        _bindOn(odd);
+
+        uint256 volume = _volumeClaim(VOL_FROM, VOL_TO);
+        uint256 notClean = _volumeClaim(VOL_FROM, VOL_TO);
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.NotClean.selector, uint256(3)));
+        odd.openLine(payer, volume, _ids(notClean));
+    }
+
+    /// @notice One underwriting funds one line, even after the first is given back.
+    function test_openLineRefusesToSpendAClaimTwice() public {
+        _bindPayer();
+        uint256 volume = _volumeClaim(VOL_FROM, VOL_TO);
+        uint256 clean = _cleanClaim(VOL_FROM, VOL_TO);
+        vm.prank(payer);
+        uint256 lineId = credit.openLine(payer, volume, _ids(clean));
+        vm.prank(payer);
+        credit.closeLine(lineId);
+
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.ClaimAlreadySpent.selector, volume));
+        credit.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice A claim about something else, offered as the volume history.
+    function test_openLineRefusesAClaimWithTheWrongScope() public {
+        _bindPayer();
+        uint256 clean = _cleanClaim(VOL_FROM, VOL_TO);
+        uint256 other = _cleanClaim(VOL_FROM, VOL_TO);
+        bytes32 want = EventScope.id(credit.expectedScope(_paymentSpec(), payer));
+        bytes32 got = EventScope.id(credit.expectedScope(_adverseSpec(), payer));
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.ScopeMismatch.selector, want, got));
+        credit.openLine(payer, clean, _ids(other));
+    }
+
+    /// @notice A claim still inside its challenge window is not yet worth anything.
+    function test_openLineRefusesAClaimThatIsNotFinalized() public {
+        _bindPayer();
+        uint256 volume = _sealedClaim(_volumeScope(), VOL_FROM, VOL_TO, _heights(3));
+        uint256 clean = _cleanClaim(VOL_FROM, VOL_TO);
+        // Worked out before the prank: `backingFor` is an external call, and it would otherwise be
+        // the call the prank applied to — leaving `openLine` to run as this contract and fail on
+        // control instead of on the guard under test.
+        uint256 cap = registry.enforceableLoss(clean) * credit.BOND_MULTIPLE();
+        uint256 uncapped = _limitFor(3);
+        uint256 backing = credit.backingFor(uncapped < cap ? uncapped : cap);
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.ClaimNotUsable.selector, volume, backing));
+        credit.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice A control proof the Block Prover refuses binds nothing.
+    /// @dev Every other test here runs with the prover answering true, which is the answer the
+    ///      live chain gives for a real proof. This is the other one, and it is the only thing
+    ///      standing between "I can read this history" and "this history is mine".
+    function test_proveControlRefusesAProofTheProverRejects() public {
+        vm.mockCall(PROVER, abi.encodeWithSelector(VERIFY_ONE), abi.encode(false));
+        vm.expectRevert(UtuhCredit.ProofRejected.selector);
+        credit.proveControl(_controlProof(), _continuity());
+        _mockProver();
+    }
+
+    /// @dev What a volume claim of `members` fixture settlements underwrites, before any cap.
+    function _limitFor(uint256 members) internal view returns (uint256) {
+        return (members * settledAmount * RATE * credit.LTV_BPS()) / 10_000;
+    }
+
+    /// @dev A lender identical to the default one but demanding a longer challenge window.
+    function _strictLender(uint64 window) internal returns (UtuhCredit) {
+        UtuhCredit.Policy memory p = _policy();
+        p.minUnderwritingWindow = window;
+        UtuhCredit.HistorySpec[] memory clean = new UtuhCredit.HistorySpec[](1);
+        clean[0] = _adverseSpec();
+        return new UtuhCredit(registry, p, _paymentSpec(), clean, _paymentSpec());
+    }
+
+    /// @dev Control is bound per lender, because each holds its own record of who proved what.
+    function _bindOn(UtuhCredit c) internal {
+        if (c.controllerOf(payer) == payer) return;
+        c.proveControl(_controlProof(), _continuity());
+    }
+
+    /// @dev {_sealedClaim} with the challenge window spelled out rather than assumed.
+    function _sealedClaimWithWindow(
+        EventScope.Scope memory scope,
+        uint64 from,
+        uint64 to,
+        uint64[] memory at,
+        uint64 window
+    ) internal returns (uint256 claimId) {
+        vm.prank(payer);
+        claimId = registry.open{value: BOND}(scope, from, to, window);
+        vm.startPrank(payer);
+        for (uint256 i = 0; i < at.length; i++) {
+            registry.appendBatch(claimId, _batch(_one(at[i], 0)), _continuity());
+        }
+        registry.seal(claimId);
+        vm.stopPrank();
+    }
+
+    // ------------------------------------------------------------------
     // The two substituted answers
     // ------------------------------------------------------------------
 

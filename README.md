@@ -817,7 +817,9 @@ test/
   Lifecycle.t.sol           the whole loop locally — claim, refute, finalize, underwrite, draw,
                             settle, default, cure — on real Sepolia transaction bytes, with only
                             the two precompiles' answers substituted
-  fixtures/                 two real Sepolia transactions, captured from a recorded run
+  fixtures/                 two real Sepolia transactions from a recorded run, and one real
+                            mainnet transaction that reverted — inclusion is not success, and the
+                            check that says so had no test until there were bytes to fail it with
   SettlementLedger.t.sol    what the source-chain ledger will and will not record as a payment
   EventScopeKey.symbolic.t.sol  halmos proofs of the ordering key, over every input rather
                             than 256 samples — `npm run symbolic`
@@ -900,7 +902,7 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 136 forge tests, five of them invariants
+npm run test                # 155 forge tests, five of them invariants
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -1153,7 +1155,7 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-136 tests, 9 of them fuzzed and 5 of them invariants over random sequences. Everything below runs with `forge test`, no key and no network.
+155 tests, 9 of them fuzzed and 5 of them invariants over random sequences. Everything below runs with `forge test`, no key and no network.
 
 Most of them cover the part that runs in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
@@ -1187,8 +1189,15 @@ the registry cannot afford to break — a bond that leaks is a deterrent that qu
 deterring — and it is now checked three thousand times a run rather than once per hand-written
 path. Its gas is random and is excluded from the snapshot for the same reason the fuzz tests are.
 
-CI also refuses a push that drops line coverage under 90%; it reads 97.69% today, and the table below
-is that number.
+CI also refuses a push that drops line coverage under 90% or branch coverage under 70%; they read
+99.54% and 75.96% today, and the table below is those numbers.
+
+The branch floor was added the day it was needed. Lines had been the only gate, and lines are easy
+to satisfy: 97.69% of them were covered while barely half the *decisions* had ever been taken, and
+the missing half was almost entirely the refusals on `openLine` — the function that turns two claims
+into money. Ten guards, none of them with a test anywhere, including the one that refuses a clean
+claim holding a liquidation and the one that refuses a clean window pasted beside a longer volume
+history. A guard is not covered by a test that never makes it fire; a floor on lines says it is.
 
 ### The precompiles, and what a local test may and may not say about them
 
@@ -1246,18 +1255,27 @@ tree that has this line in it.
 
 `forge coverage` now reads:
 
-| File                              | Lines            | Functions       |
-| --------------------------------- | ---------------- | --------------- |
-| `src/UtuhCredit.sol`              | 97.48% (232/238) | 100.00% (35/35) |
-| `src/UtuhRegistry.sol`            | 97.45% (153/157) | 100.00% (21/21) |
-| `src/lib/EventScope.sol`          | 100.00% (25/25)  | 100.00% (6/6)   |
-| `src/source/SettlementLedger.sol` | 100.00% (8/8)    | 100.00% (2/2)   |
-| **Total**                         | **97.69%**       | **100.00%**     |
+| File                              | Lines            | Branches       | Functions       |
+| --------------------------------- | ---------------- | -------------- | --------------- |
+| `src/UtuhCredit.sol`              | 99.58% (237/238) | 67.80% (40/59) | 100.00% (35/35) |
+| `src/UtuhRegistry.sol`            | 99.36% (156/157) | 82.86% (29/35) | 100.00% (21/21) |
+| `src/lib/EventScope.sol`          | 100.00% (25/25)  | 100.00% (7/7)  | 100.00% (6/6)   |
+| `src/source/SettlementLedger.sol` | 100.00% (8/8)    | 100.00% (3/3)  | 100.00% (2/2)   |
+| **Total**                         | **99.54%**       | **75.96%**     | **100.00%**     |
 
 It read 9.6%, then 47%, then 96%, and the sentence that followed the first of those — that everything
-reachable without a precompile was covered — was not true when it was written. Branch coverage is
-58%, and that is the honest number to look at next: the uncovered branches are mostly revert arms
-of guards whose other side is exercised.
+reachable without a precompile was covered — was not true when it was written. Branches were 58%,
+and the previous version of this paragraph said that was the honest number to look at next. Looking
+at it found nineteen guards with no test anywhere: ten on `openLine`, where a clean claim holding a
+liquidation, a clean window pasted beside a longer volume history, a stale underwriting and a
+double-spent claim were all refused by code nothing had ever made fire; and nine on the registry,
+including both arms where the Block Prover says no — the answer the entire design rests on.
+
+The one that needed more than a test was `TransactionFailedOnSource`. Inclusion is not success, and
+saying so needs bytes that fail: `test/fixtures` now carries a real Ethereum mainnet transaction
+that reverted, block 25,926,178 index 96, fetched from the same hosted Proof Builder a claimant
+uses. What is still uncovered is mostly arithmetic arms and the transfer-refused path, which needs
+a payee that rejects ether and a credited balance to refuse.
 
 `npm run livetest` is the one that reaches furthest: 121 guards, most of them `staticCall`s that
 prove a revert without spending gas, plus the steps that have to be real for the later ones to
@@ -1269,7 +1287,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 136 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 155 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings**, which is only worth stating alongside what it was allowed to look
 for.
 
