@@ -38,12 +38,21 @@ test('a tally that cannot be read says so instead of showing zero', async ({ pag
   // outage would draw exactly the wrong conclusion. Blocking the endpoint outright would not test
   // this — boot fails first and the strip never runs — so only the call the tally makes per claim
   // is killed, leaving the rest of the page to load normally.
+  //
+  // Both endpoints, because the page has two. `FailoverProvider` retries a read that did not get an
+  // answer against Blockscout's proxy for the same chain, so killing `memberCount` on the primary
+  // alone leaves the tally perfectly readable — the strip then reports success and this test passes
+  // or fails on whether the fallback happened to be quick that minute. It failed exactly that way
+  // on two dependency PRs while passing on four others, which is the signature of a test asserting
+  // a failure the product no longer has on the path it blocked.
   const MEMBER_COUNT = '0x6e8165e8'; // memberCount(uint256)
-  await page.route('**/rpc.cc3-testnet.creditcoin.network/**', (route) => {
+  const killTally = (route: import('@playwright/test').Route) => {
     const body = route.request().postData() ?? '';
     if (body.includes(MEMBER_COUNT)) return route.abort();
     return route.continue();
-  });
+  };
+  await page.route('**/rpc.cc3-testnet.creditcoin.network/**', killTally);
+  await page.route('**/creditcoin-testnet.blockscout.com/api/eth-rpc**', killTally);
 
   await page.goto('/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 120_000 });

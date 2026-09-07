@@ -109,7 +109,12 @@ test('with the primary RPC down, the page reads Creditcoin through Blockscout in
   // block in the banner is one of them, so both came through Blockscout. The claims table is not
   // asserted: the fallback rations bursts by parking them, and a pane of forty sequential reads
   // can honestly take minutes there — degraded is the contract, dead is the bug.
-  await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
+  //
+  // Three minutes, not ninety seconds. Measured here: 31s on a good run and 1m0s on a slower one,
+  // and it has failed at 1m30s on a CI runner. The fallback parks excess requests for ~12s each
+  // and this page's boot is several of them, so a budget close to the median turns a working
+  // degraded path into a red build on somebody's dependency bump.
+  await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 180_000 });
   await expect(page.locator('#chain-id')).toHaveText('102031');
   await expect(page.locator('#cc3-block')).toHaveText(/^[1-9]\d*$/);
 });
