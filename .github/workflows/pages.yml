@@ -66,16 +66,30 @@ jobs:
       # every push — including the ones that changed a README, a Solidity comment or an offchain
       # script, none of which alter a byte of `web/static`. That is how the quota ran out on
       # 2026-09-07 while the console itself had not changed in hours: the deployments that used it
-      # up published identical bundles. Comparing the freshly built `main.js` against the one the
-      # canonical URL is serving right now costs one request and skips the deployment that would
-      # change nothing. When the two do differ — a real change, or a canonical left behind by a
-      # quota — it runs, which means the next push after a reset repairs it.
+      # up published identical bundles.
+      #
+      # The first version of this check hashed `main.js` alone and treated it as the build. It is
+      # not: `llms.txt` was added the same day, `main.js` did not move, and the deployment was
+      # skipped — so the canonical host served a build missing a file while the mirror had it, which
+      # is precisely the drift this step exists to prevent. Every published file is compared now.
+      #
+      # `.well-known/security.txt` is excluded on purpose: the RFC requires an `Expires` field and
+      # the build stamps it a year from *now*, so it differs on every run and would make this
+      # compare unequal forever — deploying every push again, which is where this started.
       - name: is the canonical console already serving this build
         id: canonical
         run: |
           set -uo pipefail
-          built=$(sha256sum web/static/main.js | cut -d' ' -f1)
-          live=$(curl -fsS --max-time 20 https://utuh.vercel.app/main.js | sha256sum | cut -d' ' -f1) || live=unreachable
+          files="index.html main.js style.css llms.txt og.png whitepaper.pdf"
+          built=""
+          live=""
+          for f in $files; do
+            built="$built$(sha256sum "web/static/$f" | cut -d' ' -f1)"
+            got=$(curl -fsS --max-time 25 "https://utuh.vercel.app/$f" | sha256sum | cut -d' ' -f1) || got="missing:$f"
+            live="$live$got"
+          done
+          built=$(printf '%s' "$built" | sha256sum | cut -d' ' -f1)
+          live=$(printf '%s' "$live" | sha256sum | cut -d' ' -f1)
           echo "built $built"
           echo "live  $live"
           if [ "$built" = "$live" ]; then
