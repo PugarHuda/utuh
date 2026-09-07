@@ -567,7 +567,12 @@ to.
 ## The watcher as an MCP server, and why an agent can hold the role
 
 ```bash
-npm run mcp     # stdio — point Claude Desktop, Cursor, or any MCP client at it
+npx utuh-mcp    # published on npm — no clone, no key, no build
+npm run mcp     # the same server from this repo, for hacking on it
+```
+
+```json
+{ "mcpServers": { "utuh": { "command": "npx", "args": ["-y", "utuh-mcp"] } } }
 ```
 
 Every guarantee here rests on *anyone may refute a claim by proving one in-scope event it left
