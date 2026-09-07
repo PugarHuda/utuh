@@ -174,3 +174,52 @@ test('an endpoint answering for the wrong chain is refused, and the sweep does n
   expect(text, 'and refuses to sweep rather than reporting a verdict').toMatch(/serving some chain other than/);
   expect(text, 'no completeness verdict may be reached this way').not.toMatch(/INCOMPLETE|no gap found/);
 });
+
+test('the range the borrow pane offers ends on a settled attestation, not near one', async ({ page }) => {
+  // `defaultRange` used to end a claim two blocks under the attestation frontier, which was a guess
+  // at how far the edge moves while a claim is being built. It now asks the ChainInfo precompile
+  // for the newest attestation strictly *before* the frontier — a finished one, which is what the
+  // proof builder needs before it will serve proofs over the range.
+  //
+  // The whole underwriting flow behind this pane takes forty minutes and real money
+  // (`borrow.live.spec.ts`). This is the first ten seconds of it: connect a wallet that never
+  // signs, and read the range the page proposes. Attestations land every ten source blocks, so a
+  // range that ends on a real attestation point ends on a multiple of ten — which is a fact about
+  // the chain, checked against the chain, not a number this test knows.
+  await injectWallet(page, Wallet.createRandom().privateKey, { rejectSends: true });
+  await page.goto('/');
+  await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
+  await page.locator('#connect').click();
+
+  const pane = page.locator('#borrow-body');
+  const from = pane.locator('[data-testid=range-from]');
+  await expect(from).toBeVisible({ timeout: 90_000 });
+  const fromBlock = Number(await from.inputValue());
+  const toBlock = Number(await pane.locator('[data-testid=range-to]').inputValue());
+
+  expect(Number.isFinite(fromBlock) && fromBlock > 0, `from block: ${fromBlock}`).toBe(true);
+  expect(toBlock, 'the range runs forwards').toBeGreaterThan(fromBlock);
+  expect(toBlock % 10, `to block ${toBlock} is an attestation point`).toBe(0);
+
+  // And it is behind the frontier, which is what makes it settled rather than in flight.
+  const res = await page.request.post('https://rpc.cc3-testnet.creditcoin.network', {
+    data: {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'eth_call',
+      params: [
+        {
+          to: '0x0000000000000000000000000000000000000fD3',
+          // get_latest_attestation_height_and_hash(uint64) for Sepolia, chain key 1
+          data: '0x809112da' + '0000000000000000000000000000000000000000000000000000000000000001',
+        },
+        'latest',
+      ],
+    },
+  });
+  const hex = (await res.json()).result as string | undefined;
+  if (hex && hex.length >= 66) {
+    const frontier = Number(BigInt('0x' + hex.slice(2, 66)));
+    expect(toBlock, `the range ends behind the attestation frontier ${frontier}`).toBeLessThan(frontier);
+  }
+});
