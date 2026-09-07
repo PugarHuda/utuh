@@ -3,7 +3,7 @@
   "name": "io.github.PugarHuda/utuh-mcp",
   "description": "Sweep bonded completeness claims on Creditcoin against Ethereum, and refute one that omits an event.",
   "title": "Utuh watcher",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "repository": {
     "url": "https://github.com/PugarHuda/utuh",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "utuh-mcp",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "transport": {
         "type": "stdio"
       },

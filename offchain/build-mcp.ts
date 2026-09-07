@@ -89,6 +89,15 @@ Five tools, each the same function the daemon and the [live console](https://utu
   network. Both networks attest Ethereum mainnet from disjoint attestor sets, and the tool reports
   whether their digests for the same block agree
 
+Claims are addressable as resources too, so an agent can hold one as context instead of re-reading
+a paragraph: \`utuh://tally\`, \`utuh://claims/{deployment}\`, \`utuh://claim/{deployment}/{id}\` —
+live JSON, read from the same contracts. And the watcher's job is written down as a prompt,
+\`hold_the_watcher_role\`, which sweeps every claim still inside its window and reports the gaps
+without spending anything.
+
+Every tool carries its annotations, so a client knows which four only read and which one sends a
+transaction that slashes a real bond.
+
 The first MCP client ever connected to this server found the gap in a standing claim and refuted
 it — a real slashed bond, during its own smoke test.
 `,

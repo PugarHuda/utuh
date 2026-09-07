@@ -1,6 +1,6 @@
 {
   "name": "utuh",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "A completeness layer for the Attestcoin Protocol, and undercollateralized credit built on it.",
   "private": true,
   "license": "MIT",

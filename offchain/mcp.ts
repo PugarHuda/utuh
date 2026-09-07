@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { Contract, JsonRpcProvider, Wallet, formatEther } from 'ethers';
@@ -9,6 +9,7 @@ import { ATTESTATION_INDEXERS, CHAIN_KEY, type DeploymentName } from './lib/netw
 // runs from `npx utuh-mcp` with no repository, no forge artifacts and no cwd to read from. Under
 // tsx these imports read the same files the old readFileSync did.
 import registryArtifact from '../out/UtuhRegistry.sol/UtuhRegistry.json';
+import { version } from '../package.json';
 import sepoliaRecord from '../deployments.full.json';
 import mainnetRecord from '../deployments.json';
 import { scanScopeUnion, eventKey, type Scope } from './lib/scope';
@@ -16,7 +17,7 @@ import { toScope } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { findOmission, refuteClaim } from './lib/claims';
 import { attestorKeys, recentAttestations } from './lib/attestations';
-import { attestationBefore, checkpointLag, heightForDigest, latestAttestation } from './lib/attest';
+import { attestationBefore, checkpointLag, confirmEndpoints, heightForDigest, latestAttestation } from './lib/attest';
 import { claimStatus } from './lib/status';
 import { runScript } from './lib/cli';
 
@@ -69,7 +70,16 @@ function registryFor(which: DeploymentName): Contract {
   return new Contract(registryAddress(which), registryArtifact.abi, Wallet.createRandom().connect(provider));
 }
 
-const server = new McpServer({ name: 'utuh', version: '0.1.0' });
+// The version a client sees is the one that was published, not one typed twice — `build-mcp.ts`
+// stamps the same field into the npm package, and a server announcing a version it is not is a
+// small lie that survives every release.
+const server = new McpServer({ name: 'utuh', version });
+
+/// Four of the five tools only read: a chain, an indexer, a public Ethereum endpoint. Saying so in
+/// the protocol's own words is what lets a client run them without asking a person first, and
+/// reserve the confirmation for the one that spends. `openWorldHint` is true because every one of
+/// them talks to the outside world and can therefore fail for reasons the caller did not cause.
+const LOOKING = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
 
 server.registerTool(
   'tally',
@@ -79,29 +89,17 @@ server.registerTool(
       'The four numbers across both deployments: events proven into claims, claims sealed, claims ' +
       'broken by a refutation, and bond slashed. Read live from Creditcoin CC3 Testnet.',
     inputSchema: {},
+    annotations: LOOKING,
   },
   async () => {
-    let proven = 0n;
-    let sealed = 0;
-    let refuted = 0;
-    let burned = 0n;
-    for (const which of Object.keys(RECORDS) as DeploymentName[]) {
-      const r = registryFor(which);
-      const total = Number(await r.nextClaimId()) - 1;
-      sealed += total;
-      burned += (await r.burned()) as bigint;
-      for (let i = 1; i <= total; i++) {
-        proven += (await r.memberCount(i)) as bigint;
-        if (claimStatus((await r.claim(i)).status) === 'Refuted') refuted++;
-      }
-    }
+    const t = await tally();
     return {
       content: [
         {
           type: 'text',
           text:
-            `events proven into claims: ${proven}\nclaims sealed: ${sealed}\n` +
-            `claims broken by a refutation: ${refuted}\nbond slashed: ${formatEther(burned)} CTC`,
+            `events proven into claims: ${t.eventsProvenIntoClaims}\nclaims sealed: ${t.claimsSealed}\n` +
+            `claims broken by a refutation: ${t.claimsRefuted}\nbond slashed: ${t.bondSlashedCTC} CTC`,
         },
       ],
     };
@@ -117,6 +115,7 @@ server.registerTool(
       'how many Creditcoin blocks remain in the challenge window. Sealed claims are the ones a ' +
       'watcher can still act on.',
     inputSchema: { deployment: DEPLOYMENT },
+    annotations: LOOKING,
   },
   async ({ deployment }) => {
     const r = registryFor(deployment);
@@ -147,6 +146,7 @@ server.registerTool(
       'key and spends nothing. Reports COMPLETE with provenance, or INCOMPLETE with the omitted ' +
       'event — which refute_claim can then prove.',
     inputSchema: { deployment: DEPLOYMENT, claimId: z.number().int().positive() },
+    annotations: LOOKING,
   },
   async ({ deployment, claimId }) => {
     const r = registryFor(deployment);
@@ -158,9 +158,30 @@ server.registerTool(
       };
     }
     const scope: Scope = toScope(c.scope);
-    const sweep = await scanScopeUnion(sources(scope.chainKey), scope, Number(c.fromBlock), Number(c.toBlock));
+    // The same guard the browser and the daemon apply, for the same reason: an endpoint serving
+    // another chain returns no in-scope logs, and no logs reads exactly like a complete claim.
+    const { chain, usable, rejected } = await confirmEndpoints(provider, scope.chainKey, sources(scope.chainKey));
+    if (usable.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              `every endpoint is serving some chain other than ${chain?.name ?? `chain key ${scope.chainKey}`}` +
+              ` — nothing can be concluded about claim ${claimId}`,
+          },
+        ],
+      };
+    }
+    const sweep = await scanScopeUnion(usable, scope, Number(c.fromBlock), Number(c.toBlock));
     const gap = await findOmission(r, BigInt(claimId), sweep.events);
-    const provenance = `union of ${sweep.events.length} event(s) from ${sweep.vouched}/${sweep.attempted} endpoint(s) that saw everything (${sweep.perSource.join(', ')})`;
+    const rejectedNote = rejected.length
+      ? `
+${rejected.length} endpoint(s) rejected: ${rejected.map((x) => `${x.url} ${x.why}`).join('; ')}`
+      : '';
+    const provenance =
+      `union of ${sweep.events.length} event(s) from ${sweep.vouched}/${sweep.attempted} endpoint(s) that saw everything ` +
+      `(${sweep.perSource.join(', ')}), on ${chain?.name ?? `chain key ${scope.chainKey}`} confirmed by chain id${rejectedNote}`;
     const text = gap
       ? `INCOMPLETE: claim ${claimId} does not contain the event at source block ${gap.blockNumber}, ` +
         `tx #${gap.txIndex}, log #${gap.logIndexInTx} (ordering key ${eventKey(gap)}).\n${provenance}\n` +
@@ -186,6 +207,17 @@ server.registerTool(
         .boolean()
         .default(false)
         .describe('Must be true. This sends an irreversible transaction that slashes a real bond.'),
+    },
+    // The one tool that spends. `destructiveHint` is not decoration here: a refutation burns half
+    // of somebody's bond and marks their claim broken for good, and a client that surfaces a
+    // confirmation for exactly one of these five tools should surface it for this one. It is not
+    // idempotent either — the second call against a refuted claim reverts.
+    annotations: {
+      title: 'Refute an incomplete claim',
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
     },
   },
   async ({ deployment, claimId, confirm }) => {
@@ -268,6 +300,7 @@ server.registerTool(
       'network. A MISMATCH would mean attestors signed a block Ethereum does not have; NOT ON CHAIN ' +
       'would mean the indexer published an attestation the chain does not hold.',
     inputSchema: {},
+    annotations: LOOKING,
   },
   async () => {
     const out: string[] = [];
@@ -316,6 +349,184 @@ server.registerTool(
     out.push(await crossNetworkLine());
     return { content: [{ type: 'text', text: out.join('\n') }] };
   },
+);
+
+/// Claims as data, not as prose.
+///
+/// Tools were the whole server, and a tool answers in text a model has to re-read every turn.
+/// Resources are the protocol's other half: a client can attach one to a conversation, hand it back
+/// unchanged as often as it likes, and re-read it when it changes. A watcher deciding whether a
+/// claim is worth refuting wants the claim — its scope, its range, its bond, what remains of its
+/// window — as JSON it can hold, not as a paragraph it has to parse. So the same reads the tools do
+/// are also addressable:
+///
+///   utuh://tally                      the four numbers across both deployments
+///   utuh://claims/{deployment}        every claim, with status and remaining window
+///   utuh://claim/{deployment}/{id}    one claim in full, scope included
+///
+/// Nothing here is a second implementation — they read the same contracts through the same helpers.
+server.registerResource(
+  'tally',
+  'utuh://tally',
+  {
+    title: 'Registry tally',
+    description: 'Events proven, claims sealed, claims refuted and bond slashed, across both deployments.',
+    mimeType: 'application/json',
+  },
+  async (uri) => ({
+    contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(await tally(), null, 2) }],
+  }),
+);
+
+server.registerResource(
+  'claims',
+  new ResourceTemplate('utuh://claims/{deployment}', { list: undefined }),
+  {
+    title: 'Claims on a deployment',
+    description: 'Every claim with its status, members, source range, bond and remaining challenge window.',
+    mimeType: 'application/json',
+  },
+  async (uri, { deployment }) => {
+    const which = DEPLOYMENT.parse(deployment);
+    const r = registryFor(which);
+    const head = await provider.getBlockNumber();
+    const total = Number(await r.nextClaimId()) - 1;
+    const claims = [];
+    for (let i = 1; i <= total; i++) claims.push(await claimJson(r, i, head));
+    return {
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: 'application/json',
+          text: JSON.stringify({ deployment: which, registry: registryAddress(which), head, claims }, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+server.registerResource(
+  'claim',
+  new ResourceTemplate('utuh://claim/{deployment}/{claimId}', { list: undefined }),
+  {
+    title: 'One claim',
+    description: 'A single claim in full, including the scope it bonded — what a refuter needs to sweep it.',
+    mimeType: 'application/json',
+  },
+  async (uri, { deployment, claimId }) => {
+    const which = DEPLOYMENT.parse(deployment);
+    const r = registryFor(which);
+    const head = await provider.getBlockNumber();
+    const id = Number(claimId);
+    const c = await r.claim(id);
+    const scope = toScope(c.scope);
+    return {
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: 'application/json',
+          text: JSON.stringify(
+            {
+              deployment: which,
+              registry: registryAddress(which),
+              ...(await claimJson(r, id, head)),
+              scope: {
+                chainKey: scope.chainKey,
+                emitter: scope.emitter,
+                eventSig: scope.eventSig,
+                topics: scope.topics,
+                topicMask: scope.topicMask,
+                metric: scope.metric,
+                metricArg: scope.metricArg,
+              },
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  },
+);
+
+/// One claim, as the shape both resources hand back.
+async function claimJson(r: Contract, id: number, head: number) {
+  const c = await r.claim(id);
+  const status = claimStatus(c.status);
+  const until = Number(c.sealedAt) + Number(c.challengeWindow);
+  return {
+    claimId: id,
+    status,
+    members: Number(await r.memberCount(id)),
+    fromBlock: Number(c.fromBlock),
+    toBlock: Number(c.toBlock),
+    bondCTC: formatEther(c.bondPosted),
+    claimant: c.claimant,
+    // Only a sealed claim has a window that means anything; a refuter reads this first.
+    challengeBlocksLeft: status === 'Sealed' ? Math.max(0, until - head) : null,
+    refutable: status === 'Sealed' && until > head,
+  };
+}
+
+/// The four numbers, shared by the `tally` tool and the `utuh://tally` resource.
+async function tally() {
+  let proven = 0n;
+  let sealed = 0;
+  let refuted = 0;
+  let burned = 0n;
+  for (const which of Object.keys(RECORDS) as DeploymentName[]) {
+    const r = registryFor(which);
+    const total = Number(await r.nextClaimId()) - 1;
+    sealed += total;
+    burned += (await r.burned()) as bigint;
+    for (let i = 1; i <= total; i++) {
+      proven += (await r.memberCount(i)) as bigint;
+      if (claimStatus((await r.claim(i)).status) === 'Refuted') refuted++;
+    }
+  }
+  return {
+    eventsProvenIntoClaims: Number(proven),
+    claimsSealed: sealed,
+    claimsRefuted: refuted,
+    bondSlashedCTC: formatEther(burned),
+  };
+}
+
+/// The watcher's job, written down once so a client does not have to invent it.
+///
+/// An agent handed five tools and no instructions will usually sweep one claim and stop. The job is
+/// a loop with a stopping rule and a spending rule, and both matter: sweep only what is still
+/// inside its window, believe a gap only when the endpoints that saw everything agree, and never
+/// send the transaction without being told to. A prompt is where that belongs in this protocol.
+server.registerPrompt(
+  'hold_the_watcher_role',
+  {
+    title: 'Hold the watcher role',
+    description: 'Sweep every refutable claim on a deployment and report the gaps, without spending anything.',
+    argsSchema: { deployment: DEPLOYMENT },
+  },
+  ({ deployment }) => ({
+    messages: [
+      {
+        role: 'user',
+        content: {
+          type: 'text',
+          text:
+            `Hold the watcher role on the ${deployment} deployment of the Utuh registry.\n\n` +
+            `1. Read utuh://claims/${deployment} and take every claim whose "refutable" is true — a claim ` +
+            'outside its challenge window cannot be broken no matter what it left out.\n' +
+            '2. For each, call sweep_claim. It sweeps the source chain across independent endpoints and ' +
+            'checks every event it finds against the claim on-chain.\n' +
+            '3. Treat INCOMPLETE as a finding, not a verdict: report the omitted event, the claim it ' +
+            'belongs to, and the bond at stake. Treat "no gap found" as provenance — it is only as ' +
+            'strong as the number of endpoints that saw everything, which the tool tells you.\n' +
+            '4. Do not call refute_claim. It sends a real transaction that slashes a real bond; bring the ' +
+            'finding back and let the person decide.\n\n' +
+            'Finish with a table of every claim you swept, its verdict, and the provenance behind it.',
+        },
+      },
+    ],
+  }),
 );
 
 /// The two networks compared at a height both have reached.

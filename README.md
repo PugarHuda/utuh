@@ -575,6 +575,13 @@ npm run mcp     # the same server from this repo, for hacking on it
 { "mcpServers": { "utuh": { "command": "npx", "args": ["-y", "utuh-mcp"] } } }
 ```
 
+Listed in the official [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp)
+as `io.github.PugarHuda/utuh-mcp`, so a client that does not know the package name can still find
+it. The registry hosts metadata only; it proves ownership by fetching the published tarball and
+requiring its `mcpName` to equal the server name being claimed, which `offchain/build-mcp.ts`
+writes. `.github/workflows/mcp-registry.yml` publishes the listing from CI over GitHub OIDC — no
+secret to store — after checking that npm really serves the version being announced.
+
 Every guarantee here rests on *anyone may refute a claim by proving one in-scope event it left
 out*, and until now "anyone" meant a person: at a console, or at the published page. `offchain/mcp.ts`
 puts the same three verbs — look, sweep, refute — behind the Model Context Protocol, which makes
@@ -587,6 +594,16 @@ is new machinery — each is the same `offchain/lib` function the daemon and the
 already run, because an MCP server with its own logic would be a third implementation waiting to
 drift, and "agents can enforce completeness" is only credible if agents run the code that
 demonstrably does.
+
+Tools are only one of the protocol's three primitives, and a server that stops there hands a model
+prose it has to re-read every turn. Claims are also **resources** — `utuh://tally`,
+`utuh://claims/{deployment}`, `utuh://claim/{deployment}/{id}` — live JSON a client can attach and
+re-read, carrying the scope a refuter needs and a `refutable` flag that answers the only question
+worth asking first. The watcher's job is a **prompt**, `hold_the_watcher_role`: sweep everything
+still inside its window, treat "no gap found" as provenance rather than proof, and bring a finding
+back rather than spending. And every tool carries its **annotations**, so a client can tell the four
+that only read from the one that sends a transaction and slashes somebody's bond — the confirmation
+belongs on exactly one of the five, and now the server says which.
 
 Two things about it were earned rather than designed. The first client ever connected to this
 server found the gap in a standing claim and refuted it — a real transaction, a real slashed bond,
