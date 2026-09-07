@@ -925,7 +925,7 @@ npm run watch               # the watcher; --once to sweep and exit, --dry to lo
 npm run mcp                 # the watcher as an MCP server, so an agent can hold the role
                             # (--dry needs no PRIVATE_KEY at all — it is what CI runs hourly)
 npm run bait                # seal a deliberately short claim for the watcher to find
-npm run livetest            # 107 guards asserted against the live chain, refunds included
+npm run livetest            # 121 guards asserted against the live chain, refunds included
 
 npm run web                 # the console on http://127.0.0.1:5173 — read-only without a wallet
 npm run web:build           # bundle it; the server serves ABIs straight out of out/
@@ -1259,7 +1259,7 @@ reachable without a precompile was covered — was not true when it was written.
 58%, and that is the honest number to look at next: the uncovered branches are mostly revert arms
 of guards whose other side is exercised.
 
-`npm run livetest` is the one that reaches furthest: 107 guards, most of them `staticCall`s that
+`npm run livetest` is the one that reaches furthest: 121 guards, most of them `staticCall`s that
 prove a revert without spending gas, plus the steps that have to be real for the later ones to
 mean anything. It underwrites whichever address the source chain says was busiest in its window,
 which is a deliberate change — it used to underwrite a wallet derived from the operator's key,
