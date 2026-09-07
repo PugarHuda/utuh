@@ -869,7 +869,9 @@ web/
   borrowPane.ts             the steps, each one reading back what the chain says rather than
                             what the page thinks
   serve.ts                  a static server, and nothing else — no key, no indexer, no cache
-  og.png                    the page, photographed by tests/shots.ts — what a link preview shows
+  og.png                    the page, photographed by tests/shots.ts in the same run as the
+                            screenshots — what a link preview shows, and what it used to be a
+                            week behind because the copy was made by hand
   build-static.ts           the published build: four files and a picture, no server, ABIs baked in
   whitepaper.html           the whitepaper, and the source the submitted PDF is rendered from
   build-pdf.ts              renders it with the Chromium the browser suite already installs

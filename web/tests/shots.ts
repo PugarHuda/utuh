@@ -13,7 +13,8 @@ import { injectWallet } from './wallet';
 /// The borrow pane is shown connected as the browser-borrower — a key derived from the operator's,
 /// which has two settled lines on the Sepolia deployment — with a wallet that never signs.
 
-const OUT = process.argv[2] ?? join(process.cwd(), 'web', 'static', 'shots');
+const ROOT = process.cwd();
+const OUT = process.argv[2] ?? join(ROOT, 'web', 'static', 'shots');
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:5173';
 
 async function ready(page: import('@playwright/test').Page, url: string): Promise<void> {
@@ -84,10 +85,17 @@ async function main(): Promise<void> {
   page = await context.newPage();
   await ready(page, `${BASE}/`);
   await page.screenshot({ path: join(OUT, 'top.png'), clip: { x: 0, y: 0, width: 1180, height: 820 } });
+
+  // The link preview is the same photograph, and it used to be a copy somebody remembered to make.
+  // `web/og.png` is what every share of this URL shows and what the submission uses as its cover,
+  // and it had drifted a week behind the page it claims to be — the only kind of staleness nothing
+  // here can detect, because a picture cannot be checked against a chain. Written from the same
+  // capture, in the same run, so it cannot drift again.
+  await page.screenshot({ path: join(ROOT, 'web', 'og.png'), clip: { x: 0, y: 0, width: 1180, height: 820 } });
   await page.close();
 
   await browser.close();
-  console.log(`screenshots in ${OUT}`);
+  console.log(`screenshots in ${OUT}, link preview in web/og.png`);
 }
 
 main().then(
