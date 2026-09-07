@@ -180,6 +180,14 @@ export interface AttestationIndexer {
   graphql: string;
   /// The chain key Ethereum mainnet has *on that network*.
   ethereumKey: number;
+  /// That network's own JSON-RPC, so the ChainInfo precompile can be read on it directly.
+  ///
+  /// The indexer publishes rows; the precompile on the same network can confirm each row's digest
+  /// belongs to the height it was reported at. Without an RPC per network the audit could only
+  /// ever check the network the console is connected to, and would have to take the other
+  /// indexer's word entirely.
+  rpc: string;
+  chainId: number;
 }
 
 export const ATTESTATION_INDEXERS: { testnet: AttestationIndexer; mainnet: AttestationIndexer } = {
@@ -187,11 +195,19 @@ export const ATTESTATION_INDEXERS: { testnet: AttestationIndexer; mainnet: Attes
     label: 'Creditcoin CC3 Testnet',
     graphql: 'https://attestations-graphql.cc3-testnet.creditcoin.network/graphql',
     ethereumKey: 3,
+    rpc: CC3_RPC_DEFAULT,
+    chainId: CC3_CHAIN_ID,
   },
   mainnet: {
     label: 'Creditcoin Mainnet',
     graphql: 'https://attestations-graphql.cc3-mainnet-usc.creditcoin.network/graphql',
     ethereumKey: 1,
+    // Verified live 2026-09-07: eth_chainId -> 0x18e8e (102030), the ChainInfo precompile answers,
+    // and it is CORS-open (`access-control-allow-origin: *`) so a browser can read it directly.
+    // `rpc.cc3-mainnet-usc.creditcoin.network` — the hostname that matches the indexer's — does not
+    // resolve; this one and `mainnet3.creditcoin.network` both do.
+    rpc: 'https://rpc.cc3-mainnet.creditcoin.network',
+    chainId: 102030,
   },
 };
 

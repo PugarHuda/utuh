@@ -28,8 +28,10 @@ import { refute, sweepClaim, type Sweep } from './watch';
 import { renderBorrow } from './borrowPane';
 import { abandonClaim } from './borrow';
 import { explainRevert } from '../offchain/lib/revert';
-import { attestorCount, recentAttestations } from '../offchain/lib/attestations';
-import { CHAIN_KEY } from '../offchain/lib/networks';
+import { attestorCount, attestorKeys, recentAttestations } from '../offchain/lib/attestations';
+import { CC3_CHAIN_ID, CHAIN_KEY } from '../offchain/lib/networks';
+import { attestationBefore, checkpointLag, heightForDigest, latestAttestation } from '../offchain/lib/attest';
+import { JsonRpcProvider } from 'ethers';
 
 /// The Utuh console.
 ///
@@ -562,19 +564,25 @@ function say(line: string): void {
   log.scrollTop = log.scrollHeight;
 }
 
-/// Check the attestation layer against the chain it claims to attest.
+/// Check the attestation layer against the chain it claims to attest, from three directions.
 ///
 /// This is the one pane that does not take Creditcoin's word for anything. The ChainInfo
-/// precompile reports how far a source chain has been attested; it does not return the header hash
-/// the attestors signed, so on the precompile alone their claim cannot be contradicted from
-/// outside. The indexer publishes the hash. So: ask Creditcoin what it attested for source block N,
-/// ask the same independent endpoints the watcher sweeps what the hash of block N actually is, and
-/// put the two side by side.
+/// precompile reports how far a source chain has been attested; the hash it returns is the
+/// attestation's own digest rather than the header the attestors signed, so on that alone their
+/// claim about Ethereum cannot be contradicted from outside. The indexer publishes the header hash.
+///
+/// So each row is checked twice. Against **Ethereum**: ask the same independent endpoints the
+/// watcher sweeps what the hash of source block N actually is, and put it beside the hash
+/// Creditcoin signed. And against **Creditcoin itself**: hand the row's digest to
+/// `get_attestation_height_for_digest` on that network's own precompile, which answers with the
+/// height the digest belongs to, and `exists: false` for a digest no attestation carries. The first
+/// check catches attestors signing a header Ethereum does not have. The second catches an indexer
+/// inventing a row that Ethereum would happily agree with — the hole the first check leaves open,
+/// and the reason this pane reads the precompile on *both* Creditcoin networks rather than only the
+/// one the console is connected to.
 ///
 /// Every row here is expected to agree, and saying so is the point — an oracle nobody audits is an
-/// oracle you are trusting. A row that disagreed would mean the attestors signed a header the
-/// source chain does not have, which is a far larger failure than any claim on this page, and this
-/// is the only place a visitor could find that out without running anything.
+/// oracle you are trusting.
 async function renderAttestors(): Promise<void> {
   const box = $('attestors-body');
   try {
@@ -588,9 +596,109 @@ async function renderAttestors(): Promise<void> {
       { indexer: ATTESTATION_INDEXERS.mainnet, chainKey: ATTESTATION_INDEXERS.mainnet.ethereumKey },
     ];
     const sections = await Promise.all(audits.map((a) => auditIndexer(a.indexer, a.chainKey)));
-    box.replaceChildren(...sections.flat());
+    box.replaceChildren(...sections.flat(), await crossNetwork());
   } catch (e) {
     fail(box, e);
+  }
+}
+
+/// The ChainInfo precompile on the Creditcoin network an indexer belongs to.
+///
+/// The console's own provider already fails over between two endpoints for the network it is
+/// connected to, so that one is reused rather than rebuilt. The other network gets a plain
+/// read-only provider — it is only ever read, it needs no key, and its RPC sends
+/// `access-control-allow-origin: *`, which is the only reason a page with no backend can audit a
+/// network it is not connected to.
+const others = new Map<string, JsonRpcProvider>();
+function precompileOn(indexer: AttestationIndexer): JsonRpcProvider {
+  if (indexer.chainId === CC3_CHAIN_ID) return cc3;
+  const had = others.get(indexer.rpc);
+  if (had) return had;
+  const made = new JsonRpcProvider(indexer.rpc, indexer.chainId, { staticNetwork: true });
+  others.set(indexer.rpc, made);
+  return made;
+}
+
+/// Do the two Creditcoin networks agree, and are they actually independent?
+///
+/// Both attest Ethereum mainnet, under different chain keys, from different attestor sets. If the
+/// attestation digest for a given Ethereum height is the same on both, then two separate sets of
+/// signers reached byte-identical conclusions about the same block — which is worth far more than
+/// either network's own record, and takes a handful of `eth_call`s to establish.
+///
+/// The comparison has to be taken at a height *both* networks have reached. They do not run in
+/// lockstep — measured 2026-09-07, the testnet frontier sat 30 source blocks ahead of the mainnet's
+/// — and comparing at either network's own frontier reliably asks the other about a digest it has
+/// not indexed yet, which reads as a disagreement and is only a lag. So: the lower of the two
+/// frontiers, stepped back to the newest attestation at or below it on each side.
+///
+/// The claim only means something if the signers really are different, so that is checked too,
+/// against the BLS public keys each network has registered. An overlap would be reported here
+/// rather than quietly weakening the sentence above it.
+async function crossNetwork(): Promise<HTMLElement> {
+  const t = ATTESTATION_INDEXERS.testnet;
+  const m = ATTESTATION_INDEXERS.mainnet;
+  try {
+    const [latestT, latestM] = await within(
+      25_000,
+      'both frontiers',
+      Promise.all([
+        latestAttestation(precompileOn(t), CHAIN_KEY.mainnet),
+        latestAttestation(precompileOn(m), m.ethereumKey),
+      ]),
+    );
+    // Exclusive bound, so `+ 1` asks for the newest attestation at or below the common height.
+    const common = Math.min(latestT.height, latestM.height) + 1;
+    const [pointT, pointM] = await within(
+      25_000,
+      'the common attestation',
+      Promise.all([
+        attestationBefore(precompileOn(t), CHAIN_KEY.mainnet, common),
+        attestationBefore(precompileOn(m), m.ethereumKey, common),
+      ]),
+    );
+
+    const [inMainnetIndex, testnetKeys, mainnetKeys] = await Promise.all([
+      // Not a third read of the same thing: this asks the *other* network's digest index where the
+      // testnet's digest lives, which is the mapping the two records have to share.
+      within(20_000, 'the mainnet digest index', heightForDigest(precompileOn(m), m.ethereumKey, pointT.digest)),
+      attestorKeys(t, CHAIN_KEY.mainnet).catch(() => [] as string[]),
+      attestorKeys(m, m.ethereumKey).catch(() => [] as string[]),
+    ]);
+
+    const shared = testnetKeys.filter((k) => mainnetKeys.includes(k)).length;
+    const independence =
+      testnetKeys.length && mainnetKeys.length
+        ? `${testnetKeys.length} and ${mainnetKeys.length} registered attestor keys, ${shared} shared`
+        : 'attestor keys unavailable';
+
+    const agree =
+      pointT.height === pointM.height &&
+      pointT.digest.toLowerCase() === pointM.digest.toLowerCase() &&
+      inMainnetIndex.exists &&
+      inMainnetIndex.height === pointT.height;
+
+    if (agree) {
+      return el(
+        'p',
+        shared === 0 ? 'note' : 'bad',
+        `Both networks signed Ethereum block ${pointT.height.toLocaleString()} into the same digest ` +
+          `${pointT.digest.slice(0, 10)}…${pointT.digest.slice(-6)} — ${t.label} under chain key ` +
+          `${CHAIN_KEY.mainnet}, ${m.label} under chain key ${m.ethereumKey}, ${independence}. Two ` +
+          'independent sets of signers, one identical conclusion, checked from this browser. ' +
+          `Frontiers: ${latestT.height.toLocaleString()} and ${latestM.height.toLocaleString()}.`,
+      );
+    }
+    return el(
+      'p',
+      'bad',
+      `The two networks do not agree about Ethereum block ${pointT.height.toLocaleString()}: ` +
+        `${t.label} signed ${pointT.digest.slice(0, 12)}… and ${m.label} ` +
+        `${pointM.height === pointT.height ? `signed ${pointM.digest.slice(0, 12)}…` : `has no attestation there (its newest at or below is ${pointM.height.toLocaleString()})`}` +
+        `. Its digest index ${inMainnetIndex.exists ? `places the testnet digest at ${inMainnetIndex.height.toLocaleString()}` : 'does not hold the testnet digest at all'}.`,
+    );
+  } catch (e) {
+    return el('p', 'note', `the two networks could not be compared right now — ${reason(e)}`);
   }
 }
 
@@ -602,6 +710,10 @@ async function auditIndexer(indexer: AttestationIndexer, chainKey: number): Prom
   // would produce a table of MISMATCH rows about a perfectly honest oracle.
   const sourceKey = indexer === ATTESTATION_INDEXERS.mainnet ? CHAIN_KEY.mainnet : chainKey;
   const heading = el('h3', 'sub', `${indexer.label} — attesting ${CHAIN_NAME[requireChainKey(sourceKey)]}`);
+  // The precompile on the network whose indexer this is — the console's own failover provider when
+  // that is the network it is connected to, a plain read-only one otherwise. Both are keyless and
+  // CORS-open, and neither is a server this project runs.
+  const network = precompileOn(indexer);
 
   let total: number;
   let nodes: Awaited<ReturnType<typeof recentAttestations>>['nodes'];
@@ -638,22 +750,63 @@ async function auditIndexer(indexer: AttestationIndexer, chainKey: number): Prom
           : agree === seen.length
             ? `matches ${agree}/${seen.length}`
             : `MISMATCH — ${agree}/${seen.length} agree`;
+
+      // The second check, and the one the indexer cannot pass by being consistent with Ethereum:
+      // the chain's own digest index has to agree that this digest sits at this height.
+      let onChain: string;
+      let forged = false;
+      try {
+        const r = await within(15_000, `digest ${a.headerNumber}`, heightForDigest(network, chainKey, a.digest));
+        if (!r.exists) {
+          onChain = 'NOT ON CHAIN';
+          forged = true;
+        } else if (r.height !== a.headerNumber) {
+          onChain = `WRONG HEIGHT — chain says ${r.height}`;
+          forged = true;
+        } else {
+          onChain = `at ${r.height}`;
+        }
+      } catch (e) {
+        onChain = `unreadable — ${reason(e)}`;
+      }
+
       return {
         cells: [
           String(a.headerNumber),
           `${a.headerHash.slice(0, 10)}…${a.headerHash.slice(-6)}`,
           new Date(a.timestampMs).toISOString().replace('T', ' ').slice(0, 19),
           verdict,
+          onChain,
         ],
-        bad: seen.length > 0 && agree !== seen.length,
+        bad: (seen.length > 0 && agree !== seen.length) || forged,
       };
     }),
   );
 
+  // Two cadences, and only the first is ever quoted: attestations land every ten source blocks,
+  // and every tenth of those is checkpointed. The distance between them is how far behind the
+  // settled view is, read straight off the precompile.
+  let lag = '';
+  try {
+    const c = await within(15_000, 'checkpoint lag', checkpointLag(network, chainKey));
+    lag =
+      ` Attested to source block ${c.attestationHeight.toLocaleString()}; last checkpoint at ` +
+      `${c.checkpointHeight.toLocaleString()}, ${c.lag} block(s) behind it` +
+      `${c.confirmed ? ', confirmed by digest' : ' (the precompile did not confirm its own checkpoint)'}.`;
+  } catch {
+    /* the pane is still worth drawing without it */
+  }
+
   return [
     heading,
     table(
-      ['source block', 'header hash Creditcoin signed', 'attested at (UTC)', 'independent check'],
+      [
+        'source block',
+        'header hash Creditcoin signed',
+        'attested at (UTC)',
+        'checked against the source chain',
+        "checked against Creditcoin's own digest index",
+      ],
       rows.map((r) => r.cells),
       `attestors-table-${indexer.ethereumKey}`,
       (i) => (rows[i]?.bad ? 'struck' : undefined),
@@ -663,8 +816,9 @@ async function auditIndexer(indexer: AttestationIndexer, chainKey: number): Prom
       'note',
       `${total.toLocaleString()} attestations indexed for this source chain, from ${attestors} registered ` +
         `attestor(s), under chain key ${chainKey} on this network. Each row above was checked against ` +
-        `${endpoints.length} independent endpoint(s) from this browser — no server was asked, and nothing ` +
-        'here is cached.',
+        `${endpoints.length} independent endpoint(s) and against ${indexer.label}'s ChainInfo precompile, ` +
+        'from this browser — no server was asked, and nothing here is cached.' +
+        lag,
     ),
   ];
 }

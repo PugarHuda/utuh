@@ -2,7 +2,8 @@ import { Contract, type Signer } from 'ethers';
 import { eventKey, scanScopeUnion, type Scope, type ScopedEvent } from '../offchain/lib/scope';
 import { toScope } from '../offchain/lib/specs';
 import { fetchSingleProof } from '../offchain/lib/proofApi';
-import { sourceEndpoints } from './chain';
+import { confirmEndpoints } from '../offchain/lib/attest';
+import { cc3, sourceEndpoints } from './chain';
 import { SWEEP_CHUNK, requireChainKey } from '../offchain/lib/networks';
 
 /// The watcher, in the browser.
@@ -45,10 +46,32 @@ export async function sweepClaim(
   const to = Number(claim.toBlock);
 
   log(`scope: ${scope.emitter} · ${scope.eventSig.slice(0, 10)}… on chain key ${scope.chainKey}`);
-  log(`sweeping source blocks ${from}..${to} from ${sourceEndpoints(scope.chainKey).length} endpoints`);
 
-  const endpoints = sourceEndpoints(scope.chainKey);
-  const union = await scanScopeUnion(endpoints, scope, from, to, SWEEP_CHUNK[requireChainKey(scope.chainKey)]);
+  // Which chain a scope's key denotes is Creditcoin's answer to give, not this build's to assume,
+  // and an endpoint serving a different chain answers a sweep with zero logs — which reads exactly
+  // like a claim that left nothing out. Ask the precompile what the scope key means, ask every
+  // endpoint what it is actually serving, and drop the ones that name another chain. An endpoint
+  // that does not answer at all is left in: the sweep below already reports it as errored and
+  // refuses to call a claim complete on it, which is the better answer to being unreachable.
+  const { chain, checks, usable, rejected } = await confirmEndpoints(
+    cc3,
+    scope.chainKey,
+    sourceEndpoints(scope.chainKey),
+  );
+  log(
+    `chain key ${scope.chainKey} is ${chain ? `${chain.name}, EVM chain id ${chain.chainId}` : 'not attested by this network'}`,
+  );
+  for (const c of rejected) log(`ENDPOINT REJECTED: ${c.url} — ${c.why}`);
+  if (usable.length === 0) {
+    throw new Error(
+      `every endpoint is serving some chain other than ${chain?.name ?? `chain key ${scope.chainKey}`} — ` +
+        'a sweep across the wrong chain would report an honest claim incomplete, so this one does not run',
+    );
+  }
+  const confirmed = checks.filter((c) => c.verdict === 'confirmed').length;
+  log(`sweeping source blocks ${from}..${to} from ${usable.length} endpoint(s), ${confirmed} confirmed on-chain`);
+
+  const union = await scanScopeUnion(usable, scope, from, to, SWEEP_CHUNK[requireChainKey(scope.chainKey)]);
 
   log(`answered: ${union.perSource.join('  ')}`);
   for (const c of union.conflicts) log(`ENDPOINT CONFLICT: ${c}`);

@@ -42,6 +42,11 @@ async function main(): Promise<void> {
       {
         name: 'utuh-mcp',
         version,
+        // The MCP Registry's ownership check for npm packages: it fetches the published tarball and
+        // requires this field to equal the server name being claimed. Without it the registry
+        // refuses the publish with "Registry validation failed for package", and with it nobody
+        // else can claim `io.github.PugarHuda/utuh-mcp` — the npm package is the proof.
+        mcpName: 'io.github.PugarHuda/utuh-mcp',
         description:
           'The Utuh watcher as an MCP server: sweep bonded completeness claims on Creditcoin CC3 ' +
           'Testnet against Ethereum, and refute an incomplete one for half its bond. Five tools, ' +
@@ -79,7 +84,10 @@ Five tools, each the same function the daemon and the [live console](https://utu
 - **sweep_claim** — sweep Ethereum across independent endpoints and check a claim's completeness
 - **refute_claim** — prove one omitted event and take half the bond (needs \`confirm: true\` and a
   funded \`PRIVATE_KEY\` — everything else needs no key and spends nothing)
-- **audit_attestors** — check what Creditcoin's attestors signed against Ethereum itself
+- **audit_attestors** — check what Creditcoin's attestors signed three ways: against Ethereum
+  itself, against each network's own ChainInfo digest index, and against the other Creditcoin
+  network. Both networks attest Ethereum mainnet from disjoint attestor sets, and the tool reports
+  whether their digests for the same block agree
 
 The first MCP client ever connected to this server found the gap in a standing claim and refuted
 it — a real slashed bond, during its own smoke test.

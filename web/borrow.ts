@@ -8,7 +8,8 @@ import {
 } from '../offchain/lib/proofApi';
 import { eventKey, scanScopeUnion, type Scope, type ScopedEvent } from '../offchain/lib/scope';
 import { toScope } from '../offchain/lib/specs';
-import { sourceEndpoints } from './chain';
+import { attestationBefore, provable } from '../offchain/lib/attest';
+import { cc3, sourceEndpoints } from './chain';
 import { SWEEP_CHUNK, requireChainKey } from '../offchain/lib/networks';
 
 /// Borrowing, from a browser.
@@ -112,10 +113,31 @@ export async function defaultRange(credit: Contract, chainInfo: Contract, chainK
   const genesis = Number(await chainInfo.get_attestation_genesis_height(chainKey));
   const history = Number(await credit.MIN_HISTORY_BLOCKS());
 
-  // A couple of blocks below the frontier, because it moves while a claim is being built and a
-  // range that ends exactly at it can be refused by the time `open` lands.
-  const toBlock = Math.max(genesis + history, frontier - 2);
-  return { fromBlock: Math.max(genesis, toBlock - history - 1), toBlock };
+  // End at the last attestation *before* the frontier rather than a couple of blocks under it.
+  //
+  // The old rule subtracted two, which was a guess at how far the edge moves while a claim is being
+  // built. `find_highest_attested_before` is the fact behind the guess: attestations land every ten
+  // source blocks, its bound is exclusive, so passing the frontier steps back to the attestation
+  // *before* the one still settling. That is the newest height whose attestation is finished — and
+  // finished is what the proof builder needs before it will serve a proof over the range.
+  const settled = await attestationBefore(cc3, chainKey, frontier);
+  const toBlock = settled.exists ? settled.height : frontier;
+
+  // Attestation has to reach far enough back to hold a whole history window, and on a chain
+  // attested from a recent genesis it may not yet. `Math.max` used to be applied here, which
+  // returned a range ending past the frontier — every underwriting built from it died three
+  // transactions later inside `open`, with a revert about an unattested range and nothing saying
+  // why the range was chosen that way.
+  const fromBlock = toBlock - history - 1;
+  if (fromBlock < genesis) {
+    throw new Error(
+      `this lender underwrites ${history.toLocaleString()} blocks of history, and Creditcoin has ` +
+        `attested chain key ${chainKey} only from block ${genesis.toLocaleString()} to ` +
+        `${toBlock.toLocaleString()} — ${(genesis - fromBlock).toLocaleString()} blocks short. ` +
+        'Nothing can be underwritten on this chain yet.',
+    );
+  }
+  return { fromBlock, toBlock };
 }
 
 export interface BuiltClaim {
@@ -133,7 +155,6 @@ export interface BuiltClaim {
 /// it is an incomplete one.
 export async function buildClaim(
   registry: Contract,
-  chainInfo: Contract,
   signer: Signer,
   scope: Scope,
   requested: Range,
@@ -156,7 +177,7 @@ export async function buildClaim(
   // block one. Attestation runs a few minutes behind the source chain, so a range ending near the
   // head has a real wait in front of it, and `open` sent early reverts RangeNotAttested after the
   // wallet has already asked the borrower to sign.
-  await waitAttested(chainInfo, scope.chainKey, range.toBlock, log);
+  await waitAttested(scope.chainKey, range.toBlock, log);
 
   log(`sweeping source blocks ${range.fromBlock}..${range.toBlock}`);
   const sweep = await scanScopeUnion(
@@ -242,14 +263,21 @@ export class OpenClaimLeft extends Error {
 
 /// Block until Creditcoin has attested `height` — and the proof builder has indexed it, which is
 /// a later moment, and the one that matters for the request that comes next.
-async function waitAttested(chainInfo: Contract, chainKey: number, height: number, log: Log): Promise<void> {
+async function waitAttested(chainKey: number, height: number, log: Log): Promise<void> {
   let said = -1;
   for (;;) {
-    const frontier = Number((await chainInfo.get_latest_attestation_height_and_hash(chainKey)).height);
-    if (frontier >= height) break;
-    if (frontier !== said) {
-      log(`waiting for Creditcoin to attest source block ${height} — at ${frontier}, ${height - frontier} to go`);
-      said = frontier;
+    // `get_attestation_bounds` answers for this height what the frontier only implies, and when the
+    // answer is no it comes with the attestation that will cover it — so the wait is reported as a
+    // height to reach rather than as a distance from a moving edge.
+    const p = await provable(cc3, chainKey, height);
+    if (p.attested) break;
+    if (p.waitFor !== said) {
+      log(
+        p.waitFor > 0
+          ? `waiting for Creditcoin to attest source block ${height} — the attestation at ${p.waitFor} covers it`
+          : `waiting for Creditcoin to attest source block ${height} — past the frontier, no attestation covers it yet`,
+      );
+      said = p.waitFor;
     }
     await new Promise((r) => setTimeout(r, 15_000));
   }

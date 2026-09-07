@@ -10,6 +10,7 @@ import { Prover } from './lib/proofs';
 import { refuteClaim } from './lib/claims';
 import { isTransportFailure } from './lib/gasLimit';
 import { claimStatus } from './lib/status';
+import { confirmEndpoints } from './lib/attest';
 import { runScript } from './lib/cli';
 
 /// The watcher.
@@ -214,6 +215,30 @@ async function byDeadline(registry: Contract, ids: string[]): Promise<bigint[]> 
   return withUntil.map((x) => x.id);
 }
 
+/// The source endpoints for a chain key, minus any that will not say they are on that chain.
+///
+/// Memoised per chain key: the answer is a property of the endpoints and the network, not of the
+/// claim being inspected, and a daemon that re-asks for every claim in a sweep spends a round trip
+/// per endpoint per claim to learn the same thing.
+const confirmedByKey = new Map<number, Promise<{ url: string; provider: JsonRpcProvider }[]>>();
+function confirmedSources(cc3: JsonRpcProvider, chainKey: number) {
+  const had = confirmedByKey.get(chainKey);
+  if (had) return had;
+  const pending = confirmEndpoints(cc3, chainKey, sources(chainKey)).then(({ chain, checks, usable, rejected }) => {
+    for (const c of rejected) console.log(`  ENDPOINT REJECTED: ${c.url} — ${c.why}`);
+    if (usable.length) {
+      const confirmed = checks.filter((c) => c.verdict === 'confirmed').length;
+      console.log(
+        `  chain key ${chainKey} is ${chain?.name ?? 'unknown'} (EVM chain id ${chain?.chainId ?? '?'}), ` +
+          `${confirmed} of ${usable.length} endpoint(s) confirmed on-chain`,
+      );
+    }
+    return usable;
+  });
+  confirmedByKey.set(chainKey, pending);
+  return pending;
+}
+
 async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: boolean): Promise<Verdict> {
   const claim = await registry.claim(claimId);
   if (Number(claim.status) !== 2) {
@@ -253,8 +278,18 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
   //
   // The negative case is the one that stays soft. "No gap found" is only ever as strong as the
   // endpoints that looked, which is why it is reported with its provenance rather than as a fact.
+  // Only endpoints that confirm, over the wire, that they are serving the chain Creditcoin says
+  // this scope's key denotes. Every provider here is built with `staticNetwork`, so its chain id is
+  // an assertion nobody checks; an endpoint quietly serving another chain returns no in-scope logs,
+  // and no logs is what a complete claim looks like. Checked once per chain key per process.
+  const confirmed = await confirmedSources(wallet.provider, scope.chainKey);
+  if (confirmed.length === 0) {
+    console.log('  every endpoint is serving another chain — cannot say anything about this claim, will retry');
+    return 'inconclusive';
+  }
+
   const sweep = await scanScopeUnion(
-    sources(scope.chainKey),
+    confirmed,
     scope,
     Number(claim.fromBlock),
     Number(claim.toBlock),

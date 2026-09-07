@@ -276,7 +276,6 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
           const scope = await scopeFor(wired.credit, 'volume', subject);
           const built = await buildClaim(
             wired.registry,
-            wired.chainInfo,
             signer,
             scope,
             { fromBlock: Number(from.value), toBlock: Number(to.value) },
@@ -308,7 +307,6 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
             const scope = await scopeFor(wired.credit, 'clean', subject, cleanIds.length);
             const built = await buildClaim(
               wired.registry,
-              wired.chainInfo,
               signer,
               scope,
               { fromBlock: Number(from.value), toBlock: Number(to.value) },
@@ -552,7 +550,6 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
                     const scope = await repayScopeFor(wired.credit, subject);
                     const built = await buildClaim(
                       wired.registry,
-                      wired.chainInfo,
                       signer,
                       scope,
                       { fromBlock: Number(rFrom.value), toBlock: Number(rTo.value) },

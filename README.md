@@ -1333,12 +1333,75 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 | `get_latest_attestation_height_and_hash`         | underwriting staleness bound                                                    |
 | `get_attestation_genesis_height`                 | lower bound on claimable ranges                                                 |
 | `get_supported_chains` on `0x0FD3`               | checking the chain keys this build assumes against the ones the network attests |
-| `PrecompileChainInfoProvider`                    | waiting for attestation without asking a hosted service                         |
+| `get_chain_by_key` on `0x0FD3`                   | the EVM chain id behind a scope's key, checked against every endpoint swept      |
+| `get_attestation_bounds` on `0x0FD3`             | whether one source height can be proven yet, and the window covering it          |
+| `find_highest_attested_before` on `0x0FD3`       | the newest settled attestation — where a claim's range ends                      |
+| `find_lowest_attested_after` on `0x0FD3`         | the height a not-yet-provable event becomes provable at                          |
+| `get_latest_checkpoint_height_and_hash`          | how far behind the settled view is, which only checkpoints answer                |
+| `get_checkpoint_for_height` on `0x0FD3`          | confirming a reported checkpoint is one, by digest                               |
+| `get_attestation_height_for_digest` on `0x0FD3`  | the leg that checks the attestation indexer against the chain itself             |
+| `PrecompileChainInfoProvider`                    | waiting for attestation without asking a hosted service                          |
 | `RawProofBuilder` over source RPCs               | proofs built locally when the hosted Proof Builder is down                      |
 | `PrecompileBlockProver`                          | `npm run probe` — the `view` twin of `verifyAndEmit`, over `eth_call`           |
 | `utils.gas.MAX_GAS_CAP` / `gasAsPercentageOfMax` | `npm run gas` — what a call costs against a 75M block                           |
 | Ethereum mainnet as source chain (`chainKey 3`)  | all demos                                                                       |
 | Hosted Proof Builder, both published hostnames   | `prover.` and `proof-gen-api.` are tried in turn before the local builder       |
+
+All sixteen entry points the protocol exposes are in that table — five on the Block Prover, eleven
+on ChainInfo — and each is there because something needed it, which is the only reason worth having.
+Seven of the ChainInfo eleven were added late, when a stocktake found them unused; what they bought
+is below, and none of it is a call made to be counted.
+
+### What Creditcoin itself says about the source chain
+
+Three things were being assumed that the network will answer, and the answers are undocumented
+enough that finding them out took probing the live chain rather than reading anything.
+
+**Which chain an endpoint is really serving.** Every provider in this repository is built with
+ethers' `staticNetwork`, which makes its chain id an assertion nobody checks. An endpoint that
+quietly serves a different chain — a URL edited by hand, a gateway repointed, a testnet path on a
+mainnet host — returns zero in-scope logs, and zero logs is indistinguishable from a claim with
+nothing left out. That is a false *complete*, on the one verdict this project exists to make. So
+`get_chain_by_key` gives the EVM chain id the scope's key means on this Creditcoin network, every
+endpoint is asked `eth_chainId` before a sweep, and one that names another chain is dropped by the
+browser, the daemon and `npm run doctor` alike. One that does not answer at all is kept: unreachable
+is not wrong, and the union sweep already refuses to call a claim complete on an endpoint that
+errored.
+
+**Whether a height can be proven yet, and when.** `get_attestation_bounds` answers for a single
+height what the frontier only implies — attested or not, and the attestation points either side —
+and `find_lowest_attested_after` names the height that will cover it. A borrower waiting on their
+own repayment is now told which attestation they are waiting for rather than how far a moving edge
+has left to travel. `find_highest_attested_before` sets where a claim's range ends; its bound is
+**exclusive**, which nothing says out loud — asking it about the frontier steps back one full
+attestation interval, which is exactly right for a claimant and exactly wrong for anyone using it to
+ask whether a height is attested.
+
+**How far behind the settled view is.** Attestations land every ten source blocks and every tenth is
+checkpointed, so there are two frontiers and only the optimistic one is ever quoted. The console and
+`audit_attestors` now show the gap, and confirm the reported checkpoint really is one by handing its
+height back to `get_checkpoint_for_height`.
+
+### Auditing the oracle three ways instead of one
+
+The console has always checked what Creditcoin's attestors signed against Ethereum itself. That
+catches attestors signing a header Ethereum does not have — and it cannot catch the attestation
+indexer inventing a row, because an invented row about a real block agrees with Ethereum perfectly.
+
+The `hash` the precompile returns is not the source header hash. It is the attestation's own digest:
+measured, at Ethereum height 25,925,380 the precompile returns `0x8786ef14…`, the indexer's `digest`
+field for that height returns the same `0x8786ef14…`, and Ethereum's header hash for that block is
+`0xd5ea7299…`. That makes `get_attestation_height_for_digest` the missing leg — the chain's own index
+from digest to height, which answers `exists: false` for a digest no attestation carries. Every row
+in the attestor pane now goes back to it, on the network that published the row.
+
+And because both Creditcoin networks attest Ethereum mainnet, the same call compares them. Read the
+newest attestation both have reached, and ask each for its digest there: **CC3 Testnet and Creditcoin
+Mainnet sign the same Ethereum block into a byte-identical digest, from attestor sets with nothing in
+common — five registered BLS keys against seven, zero shared.** The independence is checked rather
+than asserted, because two records agreeing means nothing if the same signers produced both. The
+comparison is taken at the lower of the two frontiers: they do not run in lockstep, and asking either
+about its own frontier reliably asks the other about a digest it has not indexed yet.
 
 Two SDK modules are deliberately unused, which is worth saying so it does not read as an oversight.
 `queryBuilder` builds ABIs for the oracle's query subsystem, and Utuh does not go through it — it
@@ -1347,6 +1410,16 @@ transactions off-chain; Utuh decodes them _on_-chain through `EvmV1Decoder`, bec
 decode is a claim about bytes and an on-chain one is a check of them. The one thing an off-chain
 decode would have bought — knowing a call will succeed before paying for it — is bought more
 cheaply by the `eth_call` in `sendRegistryCall`.
+
+`EvmV1Decoder` is used for four of its sixteen methods, and the other twelve are not an oversight
+either. The five `decodeTypeSpecificFields*` and their `DecodedTransaction*` wrappers return gas
+prices, access lists and signatures — a claim about which events happened has no use for any of it,
+and decoding it would cost gas per member to reach a field nothing reads.
+`getLogsByEventSignature` looks closer, and is the wrong shape: it filters a receipt's logs into a
+new array, while a claim's identity is `(blockHeight, txIndex, logIndex)` and its proof names the
+index directly. Selecting by index is both cheaper and the thing that makes the key sound; matching
+the scope afterwards is `EventScope.matches`, which checks the emitter and all four topics rather
+than only the signature.
 
 Because every append and every refutation goes through `verifyAndEmit` rather than the `view`
 twin, Utuh's use of the oracle is visible from outside this repository: Creditcoin's own

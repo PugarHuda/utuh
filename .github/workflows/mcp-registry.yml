@@ -1,0 +1,81 @@
+# List the watcher in the official MCP Registry.
+#
+# `npx utuh-mcp` already installs it; this is how a client that does not know the package name
+# finds it at all. The registry hosts metadata only — the artifact stays on npm — and it proves
+# ownership by fetching the published tarball and requiring `mcpName` in its package.json to equal
+# the server name being claimed. `offchain/build-mcp.ts` writes that field, so the npm package is
+# the proof and nobody else can claim the name.
+#
+# Authentication is GitHub OIDC: the job asks GitHub for a token that says which repository it is
+# running in, and the registry allows the `io.github.PugarHuda/*` namespace on the strength of it.
+# There is no secret to store and nothing to rotate — which is why this runs here rather than from
+# a laptop with a device-flow login.
+#
+# Runs on a `v*` tag, or by hand. It refuses to publish metadata that does not match what npm
+# actually serves, because a registry entry pointing at a version that does not exist is worse than
+# no entry.
+name: mcp-registry
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: The version in server.json must be on npm
+        run: |
+          set -euo pipefail
+          name=$(jq -r '.packages[0].identifier' server.json)
+          version=$(jq -r '.packages[0].version' server.json)
+          server_version=$(jq -r '.version' server.json)
+          test "$version" = "$server_version" || {
+            echo "server.json version $server_version and package version $version disagree"; exit 1; }
+          published=$(npm view "$name@$version" version 2>/dev/null || true)
+          test "$published" = "$version" || {
+            echo "npm does not serve $name@$version — publish the package first"; exit 1; }
+          echo "$name@$version is on npm"
+
+      - name: The published package must carry the ownership marker
+        run: |
+          set -euo pipefail
+          name=$(jq -r '.packages[0].identifier' server.json)
+          version=$(jq -r '.packages[0].version' server.json)
+          claimed=$(jq -r '.name' server.json)
+          npm pack "$name@$version" --silent >/dev/null
+          tar -xzOf "$name-$version.tgz" package/package.json | jq -e --arg n "$claimed" '.mcpName == $n' >/dev/null || {
+            echo "the published tarball does not declare mcpName $claimed"; exit 1; }
+          echo "the tarball claims $claimed"
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Authenticate with GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish
+        run: ./mcp-publisher publish
+
+      - name: Read it back out of the registry
+        run: |
+          set -euo pipefail
+          claimed=$(jq -r '.name' server.json)
+          version=$(jq -r '.version' server.json)
+          for i in 1 2 3 4 5; do
+            if curl -sf "https://registry.modelcontextprotocol.io/v0/servers?search=$claimed" \
+              | jq -e --arg n "$claimed" --arg v "$version" \
+                '.servers | map(.server) | any(.name == $n and .version == $v)' >/dev/null; then
+              echo "the registry serves $claimed@$version"; exit 0
+            fi
+            sleep 5
+          done
+          echo "the registry did not return $claimed@$version"; exit 1

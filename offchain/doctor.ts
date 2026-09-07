@@ -14,6 +14,7 @@ import {
 } from './config';
 import { signer, readDeployments, creditAt } from './lib/contracts';
 import { chainInfoAt, supportedChains, verifyChainKeys } from './lib/chain';
+import { checkpointLag, confirmEndpoints, latestAttestation } from './lib/attest';
 import { Prover } from './lib/proofs';
 import { ATTESTATION_INDEXERS, ORACLE_DASHBOARD, chunkFor, type AttestationIndexer } from './lib/networks';
 import { runScript } from './lib/cli';
@@ -117,18 +118,33 @@ async function ecosystem(): Promise<number> {
     }
   }
 
-  // The console audits Creditcoin Mainnet's attestors even though nothing here is deployed there,
-  // so the network answering at all is part of what this project depends on.
+  // The console audits Creditcoin Mainnet's attestors even though nothing here is deployed there —
+  // and since it now reads that network's ChainInfo precompile as well as its indexer, this checks
+  // the RPC the console will actually use rather than a second hostname for the same network.
+  const mainnet = ATTESTATION_INDEXERS.mainnet;
   try {
-    const r = await get('https://mainnet3.creditcoin.network', {
+    const r = await get(mainnet.rpc, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
     });
     const b = (await r.json()) as { result?: string };
-    say(b.result === '0x18e8e', 'Creditcoin Mainnet RPC', `chain id ${b.result ? Number(b.result) : '?'}`);
+    const got = b.result ? Number(b.result) : 0;
+    say(got === mainnet.chainId, 'Creditcoin Mainnet RPC', `chain id ${got || '?'}`);
   } catch (e: any) {
     say(false, 'Creditcoin Mainnet RPC', String(e.message ?? e).slice(0, 50));
+  }
+
+  // And that its precompile answers a browser: the console reads it cross-origin from a static
+  // page, so a network that answers curl and refuses a browser would take the pane down silently.
+  try {
+    const point = await latestAttestation(
+      new JsonRpcProvider(mainnet.rpc, mainnet.chainId, { staticNetwork: true }),
+      mainnet.ethereumKey,
+    );
+    say(point.exists, 'Creditcoin Mainnet ChainInfo', `attested to Ethereum block ${point.height.toLocaleString()}`);
+  } catch (e: any) {
+    say(false, 'Creditcoin Mainnet ChainInfo', String(e.shortMessage ?? e.message ?? e).slice(0, 50));
   }
 
   const d = readDeployments();
@@ -221,6 +237,46 @@ async function main() {
       problems++;
       console.log(`  FAIL  ChainInfo precompile: ${e.shortMessage ?? e.message}`);
       continue;
+    }
+
+    // The frontier is the optimistic number. Attestations land every ten source blocks and every
+    // tenth of those is checkpointed, so the checkpoint is where the settled view actually is —
+    // and it is the one nothing publishes.
+    try {
+      const lag = await checkpointLag(cc3, key);
+      console.log(
+        `  ${lag.confirmed ? 'ok   ' : 'WARN '} last checkpoint ${lag.checkpointHeight}, ${lag.lag} block(s) ` +
+          `behind the frontier${lag.confirmed ? '' : ' — the precompile did not confirm it by digest'}`,
+      );
+      if (!lag.confirmed) problems++;
+    } catch (e: any) {
+      problems++;
+      console.log(`  FAIL  checkpoints: ${e.shortMessage ?? e.message}`);
+    }
+
+    // Every provider in this repository is built with ethers' `staticNetwork`, which makes its
+    // chain id an assertion nobody ever checks. An endpoint quietly serving a different chain
+    // answers a sweep with zero in-scope logs, and zero logs is exactly what a claim with nothing
+    // left out looks like — a false "complete" on the one verdict this project exists to make. So
+    // ask Creditcoin what this key means and ask every endpoint what it is really on.
+    const identity = sources(key);
+    try {
+      const { chain, checks } = await confirmEndpoints(cc3, key, identity);
+      for (const c of checks) {
+        if (c.verdict === 'confirmed') {
+          console.log(`  ok    ${host(c.url)} confirms chain id ${c.chainId} (${chain?.name})`);
+        } else if (c.verdict === 'mismatch') {
+          problems++;
+          console.log(`  FAIL  ${host(c.url)} — ${c.why}`);
+        } else {
+          console.log(`  WARN  ${host(c.url)} did not answer eth_chainId — ${c.why}`);
+        }
+      }
+    } catch (e: any) {
+      problems++;
+      console.log(`  FAIL  chain identity: ${e.shortMessage ?? e.message}`);
+    } finally {
+      for (const e of identity) e.provider.destroy();
     }
 
     // Every endpoint gets the same question, and it has to be the question the sweeps actually

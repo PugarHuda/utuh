@@ -12,7 +12,16 @@ import {
   type JsonRpcProvider,
 } from 'ethers';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey, CHAIN_KEY, SOURCE_CHAIN_ID } from './config';
+import { CC3_RPC, CC3_CHAIN_ID, source, sources, requirePrivateKey, CHAIN_KEY, SOURCE_CHAIN_ID } from './config';
+import {
+  attestationBefore,
+  chainOf,
+  checkpointLag,
+  confirmEndpoints,
+  heightForDigest,
+  latestAttestation,
+  provable,
+} from './lib/attest';
 import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
 import { scopeFromCredit, plainSpec, sameScope } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
@@ -284,6 +293,66 @@ async function main() {
       caughtKey = true;
     }
     check('a chain key the network does not attest is refused', caughtKey);
+
+    // ----------------------------------------------------------------
+    // The rest of the ChainInfo precompile, whose behaviour is undocumented and therefore has to
+    // be pinned by something that runs. Every line below is a read: the whole block costs nothing
+    // and would go red the day the protocol changes one of these answers under us.
+    console.log('');
+    console.log('the ChainInfo precompile, measured rather than assumed');
+
+    const key = CHAIN_KEY.mainnet;
+    const chain = await chainOf(owner.provider!, key);
+    check('get_chain_by_key names the same chain as get_supported_chains', chain?.chainId === SOURCE_CHAIN_ID[key]);
+    check('an unattested chain key is answered, not reverted', (await chainOf(owner.provider!, 77)) === null);
+
+    const frontier = await latestAttestation(owner.provider!, key);
+    check('the frontier exists and carries a digest', frontier.exists && /^0x[0-9a-f]{64}$/i.test(frontier.digest));
+
+    // The trap: the bound is exclusive. Asking `before(h)` where h is itself an attestation gives
+    // the one before it, so anyone using this to answer "is h attested" is off by one interval.
+    const before = await attestationBefore(owner.provider!, key, frontier.height);
+    check(
+      'find_highest_attested_before is exclusive of its target',
+      before.exists && before.height < frontier.height,
+    );
+
+    const covered = await provable(owner.provider!, key, frontier.height - 5);
+    check('a height below the frontier is provable', covered.attested);
+    check(
+      'its bounds bracket it',
+      covered.parentHeight <= frontier.height - 5 && covered.childHeight >= frontier.height - 5,
+    );
+
+    const far = await provable(owner.provider!, key, frontier.height + 100_000);
+    check('a height past the frontier is not provable yet', !far.attested);
+
+    const lag = await checkpointLag(owner.provider!, key);
+    check('the checkpoint is confirmed by its own digest', lag.confirmed);
+    check('the checkpoint is at or behind the attestation frontier', lag.lag >= 0);
+    check('checkpoints land on hundreds, as measured', lag.checkpointHeight % 100 === 0);
+
+    const roundTrip = await heightForDigest(owner.provider!, key, frontier.digest);
+    check(
+      "the chain's digest index round-trips its own frontier",
+      roundTrip.exists && roundTrip.height === frontier.height,
+    );
+    const invented = await heightForDigest(owner.provider!, key, '0x' + 'ab'.repeat(32));
+    check('a digest no attestation carries resolves to nothing', !invented.exists);
+
+    // And the endpoint guard, which is only worth having if it fires. A Sepolia endpoint offered
+    // under Ethereum mainnet's chain key is exactly the misconfiguration that would sweep the wrong
+    // chain and report an honest claim complete.
+    const real = sources(key);
+    const wrong = sources(CHAIN_KEY.sepolia).slice(0, 1);
+    try {
+      const honest = await confirmEndpoints(owner.provider!, key, real);
+      check('every configured mainnet endpoint confirms it is on mainnet', honest.usable.length === real.length);
+      const liar = await confirmEndpoints(owner.provider!, key, wrong);
+      check('an endpoint on another chain is refused', liar.usable.length === 0);
+    } finally {
+      for (const e of [...real, ...wrong]) e.provider.destroy();
+    }
   }
 
   // ------------------------------------------------------------------

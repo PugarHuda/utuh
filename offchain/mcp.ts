@@ -15,7 +15,8 @@ import { scanScopeUnion, eventKey, type Scope } from './lib/scope';
 import { toScope } from './lib/specs';
 import { Prover } from './lib/proofs';
 import { findOmission, refuteClaim } from './lib/claims';
-import { recentAttestations } from './lib/attestations';
+import { attestorKeys, recentAttestations } from './lib/attestations';
+import { attestationBefore, checkpointLag, heightForDigest, latestAttestation } from './lib/attest';
 import { claimStatus } from './lib/status';
 import { runScript } from './lib/cli';
 
@@ -262,8 +263,10 @@ server.registerTool(
     title: "Audit Creditcoin's attestors",
     description:
       'Ask both Creditcoin networks (CC3 Testnet and Creditcoin Mainnet) what header hashes their ' +
-      'attestors signed for recent Ethereum blocks, then check each against independent Ethereum ' +
-      'endpoints. A MISMATCH would mean attestors signed a block Ethereum does not have.',
+      'attestors signed for recent Ethereum blocks, then check each three ways: against independent ' +
+      "Ethereum endpoints, against that network's own ChainInfo digest index, and against the other " +
+      'network. A MISMATCH would mean attestors signed a block Ethereum does not have; NOT ON CHAIN ' +
+      'would mean the indexer published an attestation the chain does not hold.',
     inputSchema: {},
   },
   async () => {
@@ -272,8 +275,16 @@ server.registerTool(
       ['CC3 Testnet', ATTESTATION_INDEXERS.testnet, CHAIN_KEY.mainnet],
       ['Creditcoin Mainnet', ATTESTATION_INDEXERS.mainnet, ATTESTATION_INDEXERS.mainnet.ethereumKey],
     ] as const) {
-      const { total, nodes } = await recentAttestations(indexer, chainKey, 4);
+      const network = new JsonRpcProvider(indexer.rpc, indexer.chainId, { staticNetwork: true });
+      const [{ total, nodes }, lag] = await Promise.all([
+        recentAttestations(indexer, chainKey, 4),
+        checkpointLag(network, chainKey),
+      ]);
       out.push(`${label}: ${total.toLocaleString()} attestations of Ethereum indexed (chain key ${chainKey})`);
+      out.push(
+        `  attested to ${lag.attestationHeight.toLocaleString()}, last checkpoint ` +
+          `${lag.checkpointHeight.toLocaleString()} (${lag.lag} source blocks behind)`,
+      );
       for (const a of nodes) {
         const answers = await Promise.all(
           sources(CHAIN_KEY.mainnet).map(async (e) => {
@@ -286,6 +297,11 @@ server.registerTool(
         );
         const seen = answers.filter((h): h is string => h !== null);
         const agree = seen.filter((h) => h === a.headerHash.toLowerCase()).length;
+        // The second leg: the chain's own digest index. Checking the header against Ethereum
+        // catches attestors signing a block Ethereum does not have, and cannot catch an indexer
+        // inventing a row Ethereum would happily agree with. A digest that resolves to the height
+        // it was reported at came from the chain.
+        const indexed = await heightForDigest(network, chainKey, a.digest);
         out.push(
           `  block ${a.headerNumber}: ${
             seen.length === 0
@@ -293,13 +309,50 @@ server.registerTool(
               : agree === seen.length
                 ? `matches ${agree}/${seen.length}`
                 : `MISMATCH ${agree}/${seen.length}`
-          }`,
+          } · digest ${indexed.exists ? (indexed.height === a.headerNumber ? 'on chain' : `WRONG HEIGHT ${indexed.height}`) : 'NOT ON CHAIN'}`,
         );
       }
     }
+    out.push(await crossNetworkLine());
     return { content: [{ type: 'text', text: out.join('\n') }] };
   },
 );
+
+/// The two networks compared at a height both have reached.
+///
+/// They do not run in lockstep — measured 2026-09-07, the testnet frontier ran 30 Ethereum blocks
+/// ahead of the mainnet's — so the comparison is taken at the lower frontier, and
+/// `find_highest_attested_before` is exclusive, hence the `+ 1`. Comparing at either network's own
+/// frontier asks the other about a digest it has not indexed yet, which reads as a disagreement and
+/// is only a lag.
+async function crossNetworkLine(): Promise<string> {
+  const t = ATTESTATION_INDEXERS.testnet;
+  const m = ATTESTATION_INDEXERS.mainnet;
+  try {
+    const netT = new JsonRpcProvider(t.rpc, t.chainId, { staticNetwork: true });
+    const netM = new JsonRpcProvider(m.rpc, m.chainId, { staticNetwork: true });
+    const [latestT, latestM] = await Promise.all([
+      latestAttestation(netT, CHAIN_KEY.mainnet),
+      latestAttestation(netM, m.ethereumKey),
+    ]);
+    const common = Math.min(latestT.height, latestM.height) + 1;
+    const [pointT, pointM, keysT, keysM] = await Promise.all([
+      attestationBefore(netT, CHAIN_KEY.mainnet, common),
+      attestationBefore(netM, m.ethereumKey, common),
+      attestorKeys(t, CHAIN_KEY.mainnet).catch(() => [] as string[]),
+      attestorKeys(m, m.ethereumKey).catch(() => [] as string[]),
+    ]);
+    const shared = keysT.filter((k) => keysM.includes(k)).length;
+    const same = pointT.height === pointM.height && pointT.digest.toLowerCase() === pointM.digest.toLowerCase();
+    return (
+      `both networks at Ethereum block ${pointT.height.toLocaleString()}: ` +
+      `${same ? 'identical digest' : `DIGESTS DIFFER (${pointT.digest.slice(0, 12)}… vs ${pointM.digest.slice(0, 12)}…)`}, ` +
+      `${keysT.length} vs ${keysM.length} registered attestor keys, ${shared} shared`
+    );
+  } catch (e) {
+    return `the two networks could not be compared: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
 
 async function main(): Promise<void> {
   await server.connect(new StdioServerTransport());

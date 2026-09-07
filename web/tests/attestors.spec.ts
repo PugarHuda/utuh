@@ -4,9 +4,15 @@ import { expect, test } from '@playwright/test';
 ///
 /// Every other test on this page checks that Utuh read Creditcoin correctly. This one checks that
 /// Creditcoin read Ethereum correctly, which nothing else here does and nothing in the protocol
-/// offers: the ChainInfo precompile reports how far a chain is attested and will not say with what
-/// hash, so on the precompile alone the attestors cannot be contradicted. The indexer publishes the
-/// hash, and the page compares it against the independent endpoints the watcher already sweeps.
+/// offers on its own: the ChainInfo precompile reports how far a chain is attested and hands back
+/// the attestation's digest rather than the header the attestors signed, so on the precompile alone
+/// the attestors cannot be contradicted about Ethereum. The indexer publishes the header hash, and
+/// the page compares it against the independent endpoints the watcher already sweeps.
+///
+/// The digest is not useless, though — it is the second check. Every row's digest goes back to the
+/// precompile's own digest index on that network, which answers with the height it belongs to. A
+/// row the indexer invented has nowhere to resolve, and that is the hole the Ethereum comparison
+/// cannot see.
 ///
 /// A row that read MISMATCH would mean the attestors signed a header Ethereum does not have. That
 /// is a larger failure than anything else this repository can detect, and it would be found from a
@@ -45,6 +51,9 @@ test('every recent attestation on both Creditcoin networks matches the header Et
       // a pass — a sweep nothing answered settles nothing here for the same reason it settles
       // nothing in the watcher.
       expect(r[3], `${network} attestation ${r[0]} — ${r.join(' | ')}`).toMatch(/^matches (\d+)\/\1$/);
+      // The digest index has to place the row at exactly the height it was reported at. Anything
+      // else — NOT ON CHAIN, a different height, an unreadable precompile — is a failed audit.
+      expect(r[4], `${network} attestation ${r[0]} in Creditcoin's own digest index`).toBe(`at ${r[0]}`);
     }
   }
 
@@ -72,5 +81,14 @@ test('every recent attestation on both Creditcoin networks matches the header Et
   const notes = page.locator('#attestors-body p.note');
   await expect(notes.first()).toContainText(/attestations indexed/);
   await expect(notes.first()).toContainText(/under chain key/);
+  await expect(notes.first()).toContainText(/last checkpoint at/);
   await expect(page.locator('#attestors-body h3')).toHaveCount(2);
+
+  // The closing line is the strongest claim on the page and the cheapest to check: two networks,
+  // two attestor sets with nothing in common, one identical digest for the same Ethereum block.
+  // It renders as `bad` when the digests disagree or the sets overlap, so the class is the assert.
+  const cross = page.locator('#attestors-body > p').last();
+  await expect(cross).toContainText(/signed Ethereum block .* into the same digest/);
+  await expect(cross).toContainText(/0 shared/);
+  await expect(cross).toHaveClass(/note/);
 });

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.PugarHuda/utuh-mcp",
+  "description": "Hold the watcher role on Creditcoin's Attestcoin Protocol: sweep bonded completeness claims against Ethereum across independent endpoints, refute one that omits an in-scope event for half its bond, and audit what Creditcoin's attestors signed against Ethereum itself. No account, no server, no key to look.",
+  "title": "Utuh watcher",
+  "version": "0.2.1",
+  "repository": {
+    "url": "https://github.com/PugarHuda/utuh",
+    "source": "github"
+  },
+  "websiteUrl": "https://utuh.vercel.app/",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "utuh-mcp",
+      "version": "0.2.1",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "PRIVATE_KEY",
+          "description": "A funded Creditcoin CC3 Testnet key, needed only by refute_claim — which also demands confirm: true. Every other tool reads the chain and spends nothing.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
