@@ -61,8 +61,9 @@ market is gated on a counterparty, not on this.
 ## The runbook
 
 ```sh
-# 1. The tripwire, before anything else. This must FAIL with the testnet table.
-CC3_RPC=https://rpc.cc3-mainnet.creditcoin.network npm run probe
+# 1. The tripwire, before anything else. This must FAIL with the testnet table —
+#    `doctor` is the script that runs verifyChainKeys; `probe` does not.
+CC3_RPC=https://rpc.cc3-mainnet.creditcoin.network npm run doctor
 
 # 2. Add the mainnet profile to offchain/lib/networks.ts (chain id 102030, key 1 → Ethereum,
 #    no PROVER_URL, Blockscout at creditcoin.blockscout.com) and make step 1 pass.
