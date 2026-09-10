@@ -455,6 +455,19 @@ async function renderRegistry(): Promise<void> {
       return;
     }
 
+    // A claim id belongs to one registry, and a link that carries an id without naming which one
+    // is guessing. The default guess is Sepolia, and it is wrong for every claim about real Aave
+    // history — including the URL burned into the demo video, which said `?claim=56` and opened a
+    // registry that has never had fifty-six claims. Rather than show an empty page to someone who
+    // typed what they saw, look on the other registry before giving up. This cannot loop: the
+    // redirect names the deployment, and a URL that names one is taken at its word.
+    if (linkedId !== undefined && linkedId > page.total && !new URLSearchParams(location.search).has('deployment')) {
+      const url = new URL(location.href);
+      url.searchParams.set('deployment', 'mainnet');
+      location.replace(url.toString());
+      return;
+    }
+
     const select = $('claim-select') as HTMLSelectElement;
     const chosen = select.value || (linkedId !== undefined && !linkedApplied ? String(linkedId) : '');
     linkedApplied = true;

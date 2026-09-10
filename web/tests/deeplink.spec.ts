@@ -58,3 +58,20 @@ test('picking a claim writes it into the address bar; switching deployments drop
   await page.waitForURL((u) => !u.searchParams.has('deployment'));
   expect(new URL(page.url()).searchParams.has('claim')).toBe(false);
 });
+
+/// The URL the demo video shows on screen is `?claim=56`, with no deployment named, and claim 56
+/// is on the mainnet-sourced registry. Somebody who pauses the video and types what they see must
+/// land on that claim rather than on an empty Sepolia list — and a bare id that *does* exist on
+/// the default registry must stay there, because both registries have a claim 5 and only one of
+/// them is the one every document links to.
+test('a claim id that this registry does not have is looked for on the other one', async ({ page }) => {
+  await page.goto('/?claim=56');
+  await expect(page.locator('#deployment')).toHaveValue('mainnet');
+  await expect(page.locator('#claim-select')).toHaveValue('56');
+});
+
+test('a claim id the default registry does have is not sent elsewhere', async ({ page }) => {
+  await page.goto('/?claim=5');
+  await expect(page.locator('#deployment')).toHaveValue('sepolia');
+  await expect(page.locator('#claim-select')).toHaveValue('5');
+});
