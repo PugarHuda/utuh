@@ -575,7 +575,7 @@
       </p>
       <p>
         So the ceiling is bytes, not events. A thousand-event claim is a hundred batches and about
-        thirty blocks' worth of gas. Challenging it is still one proof and a binary search.
+        thirty blocks' worth of gas. Challenging it is still one proof and one witness.
       </p>
     </div>
   </section>
@@ -1162,10 +1162,10 @@ function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repa
         <li>
           <b>Large claims are expensive to build.</b> Not because of storage, but because every
           proven transaction is carried, decoded and hashed at roughly twice its calldata gas. A ten-thousand-event claim is thirty
-          blocks' worth of gas. Keys live in a storage array so refutation stays a binary search the
-          chain runs itself, with no witness a claimant could withhold; past the point where that
-          array is affordable, it becomes an incremental Merkle root and the refuter supplies an
-          adjacency proof of the two members bracketing the gap.
+          blocks' worth of gas. The members themselves are an incremental Merkle root — 32 words and
+          a count per claim whatever its size — and the refuter supplies an adjacency proof of the
+          two members bracketing the gap, built from the <code>EventAppended</code> log that has
+          always carried every key. Nothing about the witness is in the claimant's hands.
         </li>
         <li>
           <b>Read-side only.</b> Writability is still in third-party audit and not on testnet, so a

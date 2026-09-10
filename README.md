@@ -222,9 +222,9 @@ The practical ceiling is therefore set by bytes:
   a 10,000-event claim: 1000 batches, ~2451.6M gas, 32.7 full blocks
 ```
 
-The asymmetry is still the point — challenging is one proof and a binary search, whatever the claim
-holds — but a claim of ten thousand events is thirty blocks' worth of gas, and that is the number
-that caps this rather than any argument about storage.
+The asymmetry is still the point — challenging is one proof and one adjacency witness, whatever
+the claim holds — but a claim of ten thousand events is thirty blocks' worth of gas to *build*, and
+that is the number that caps this rather than any argument about storage.
 
 ### The subtle part
 
@@ -482,14 +482,14 @@ usually does rather than a thing to rely on: the Sepolia ledger had not arrived 
 | `SettlementLedger` (Sepolia) | [`0xC8C9053C4E2c0590df684c12e5f2610EFeC9575B`](https://eth-sepolia.blockscout.com/address/0xC8C9053C4E2c0590df684c12e5f2610EFeC9575B?tab=contract)        |
 
 Everything below is readable at those addresses rather than taken on trust — `claim(id)`,
-`memberCount(id)`, `keyAt(id, i)`, `enforceableLoss(id)`, `line(1)`, `underwrittenThrough(subject)`
+`memberCount(id)`, `claimRoot(id)`, `enforceableLoss(id)`, `line(1)`, `underwrittenThrough(subject)`
 and `settledThrough(subject)` all answer to anyone, and the console at `npm run web` shows them
 without a terminal.
 
 | Read                                | Answer                                                                                                                                        |
 | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `claim(1)`                          | Finalized, 3 members, aggregate 0.003 ETH of proven volume                                                                                    |
-| `keyAt(1, 0..2)`                    | Sepolia blocks 11575883, 11575885, 11575886                                                                                                   |
+| `claimRoot(1)`, `EventAppended(1)`  | the root over three keys, and the three keys — Sepolia blocks 11575883, 11575885, 11575886 — read from the log between `openedAt` and `sealedAt` |
 | `claim(2)`                          | Finalized, 0 members — the clean claim, and there is nothing to show                                                                          |
 | `claim(3)`                          | Refuted, `enforceableLoss` collapsed to 0                                                                                                     |
 | `claim(4)`                          | Finalized, repayment of 0.000525 ETH                                                                                                          |
@@ -1524,12 +1524,18 @@ they happen, recorded by the network rather than by us.
 
 ## Known limits
 
-- Claim members are held as a storage array so refutation is a binary search the chain runs
-  itself, with no witness a claimant could withhold. What caps a claim is not that array, though —
-  measured, the cost follows the _bytes of the transactions being proven_ at about twice their
-  calldata gas, and a ten-thousand-event claim is forty blocks' worth. Beyond the point where
-  that is affordable, the array becomes an incremental Merkle root and the refuter supplies an
-  adjacency proof of the two members bracketing the gap.
+- **Claim members are a root, not an array, and the refuter carries the witness.** Members used
+  to be a storage array so that refutation was a binary search the chain ran itself, with no
+  witness a claimant could withhold; that cost a slot per member and put a ceiling on claim size.
+  They are now an incremental Merkle tree — 32 words and a count per claim whatever its size — and
+  a refutation carries, beside the proof that the omitted event happened, the two members that
+  bracket its key (`IncrementalMerkle.sol`, `offchain/lib/members.ts`). The witness is not
+  withheld by anyone, because every key was always emitted in `EventAppended`, and the read that
+  rebuilds it refuses to return keys that do not fold to `claimRoot`. What it costs is about 83k
+  more gas per refutation, most of it the two proofs in calldata. What still caps a claim is the
+  cost of _building_ it — measured, the bytes of the transactions being proven at about twice
+  their calldata gas, so a ten-thousand-event claim is forty blocks' worth to build and one
+  transaction to break.
 - Writability is still in third-party audit and not on testnet, so Utuh is read-side only. A
   default is recorded on Creditcoin; enforcing consequences back on Ethereum waits for outbound
   messaging.

@@ -69,9 +69,10 @@ make it impossible. That distinction is load-bearing and must never be overstate
   10 queries, seal, challenge window, finalize, refute, abandon, withdraw.
 - `UtuhCredit` — underwrites a line from proven repayment history (Aave `Repay` on mainnet), with a
   policy of volume unit, minimum history, staleness bound, repayment bps and repay window.
-- Refutation is one proof plus a binary search over a stored member array; it does not scale with
-  claim size. Building a claim does: measured, ~1.5x the call's own calldata gas, so a
-  ten-thousand-event claim is roughly forty full blocks of gas.
+- Refutation is one proof plus one adjacency witness against a Merkle root; it does not scale
+  with claim size, and neither does the registry's storage — 32 words and a count per claim.
+  Building a claim does: measured, ~1.5x the call's own calldata gas, so a ten-thousand-event
+  claim is roughly forty full blocks of gas.
 - Contracts are deployed and verified on CC3; the ledger has a Sepolia twin.
 - Terminology is fixed and must not be softened: claim, scope, member, bond, challenge window,
   refute, finalize, abandon, standing, line, draw, settle.
