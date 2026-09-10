@@ -1643,6 +1643,25 @@ the same question` — as a third verdict beside ok and FAIL: useful to the unio
   refuting their own claim from a second address, which is the same front-running that made
   `enforceableLoss` necessary. Funding a public good is not a problem this layer can solve, and a
   token mechanism that pretends otherwise would be worse than the honest gap.
+
+- **The watcher of last resort is the party with money in it.** The limit above is about paying
+  strangers and it stands. What it leaves out is the one participant who does not have to be paid.
+  `UtuhCredit.openLine` reaches a claim only through `UtuhRegistry.isUsable`, which returns true
+  for `Status.Finalized` and nothing else — the challenge window must have closed before anything
+  is lent against it. So that window *is* the lender's diligence window, and the money a false
+  clean claim takes is the lender's own. A lender who does not sweep is trusting strangers to have
+  swept, for a bounty this section has just finished calling unreliable. Sweeping costs one union
+  pass and, when it finds something, one proof; being wrong costs the line. Half the bond is then
+  a rebate on diligence that had to happen anyway rather than a wage that has to clear — which is
+  the whole reason the console needs no backend and `npx utuh-mcp` exists at all: the lender's
+  watching should cost a browser tab or an agent, not a team.
+
+  This makes watching rational for lenders. It does not make it funded, and the difference is
+  worth stating rather than blurring: a claim nobody intends to lend against still finalizes with
+  nobody looking. For credit that is the right shape, because the claims that matter are exactly
+  the ones somebody is about to underwrite. For a general-purpose fact registry built on this
+  layer it would not be, and such a registry would have to find its own reason for someone to
+  watch. That is the boundary of what the bond buys.
 - Binding an address costs the borrower one source-chain transaction. That is a real onboarding
   step, and there is no way around it that does not reintroduce the hole it closes. `npm run credit`
   therefore stops at `SubjectNotControlled` when pointed at a stranger's history — the refusal is

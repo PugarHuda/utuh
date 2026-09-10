@@ -18,7 +18,10 @@ Three roles meet at the same console, and none of them is a consumer.
 - **Claimants / borrowers** open a claim over a block range, append proven events, post a bond,
   wait out a challenge window, and draw a credit line against the history that survived.
 - **Lenders and integrators** read a claim's standing before extending anything, or wire the
-  registry into their own contract.
+  registry into their own contract. They are also the watcher of last resort, and the only role
+  that needs no bounty to hold it: a line opens on a finalized claim, so the challenge window is
+  the lender's diligence window and the loss from a false clean claim is the lender's. Half the
+  bond is a rebate on work they had to do, not a wage.
 
 *(Inferred from README, docs/INTEGRATING.md and the console's own panes; not confirmed in
 interview.)*
