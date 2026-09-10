@@ -6,6 +6,8 @@ import {EvmV1Decoder} from "@gluwa/usc-contracts/contracts/decoding/EvmV1Decoder
 import {UtuhRegistry} from "../src/UtuhRegistry.sol";
 import {UtuhCredit} from "../src/UtuhCredit.sol";
 import {EventScope} from "../src/lib/EventScope.sol";
+import {IncrementalMerkle} from "../src/lib/IncrementalMerkle.sol";
+import {Adjacency} from "./support/Adjacency.sol";
 import {IBlockProver} from "../src/interfaces/IBlockProver.sol";
 import {IChainInfo} from "../src/interfaces/IChainInfo.sol";
 
@@ -127,10 +129,10 @@ contract LifecycleTest is Test {
         assertEq(registry.claim(claimId).aggregate, 3 * settledAmount, "aggregate is the sum of the logs");
         assertEq(uint8(registry.claim(claimId).status), uint8(UtuhRegistry.Status.Sealed));
 
-        // Keys are strictly ascending, and chronological order is numeric order.
-        assertLt(registry.keyAt(claimId, 0), registry.keyAt(claimId, 1));
-        assertLt(registry.keyAt(claimId, 1), registry.keyAt(claimId, 2));
-        assertEq(registry.keyAt(claimId, 0), EventScope.key(at[0], TX_INDEX, 0));
+        // The registry no longer keeps the keys; it keeps a root over them. The keys this test
+        // appended, rebuilt the slow way, must give that root — and they are ascending because the
+        // append path refuses anything else (see test_appendingOutOfOrderIsRefused).
+        assertEq(registry.claimRoot(claimId), Adjacency.root(_keysOf(at)), "root over the appended keys");
 
         _finalize(claimId);
         assertEq(uint8(registry.claim(claimId).status), uint8(UtuhRegistry.Status.Finalized));
@@ -155,7 +157,7 @@ contract LifecycleTest is Test {
 
         uint256 before = WATCHER.balance;
         vm.prank(WATCHER);
-        registry.refute(claimId, _proofAt(all[2], 0), _continuity());
+        registry.refute(claimId, _proofAt(all[2], 0), _continuity(), _witness(kept, all[2]));
 
         assertEq(uint8(registry.claim(claimId).status), uint8(UtuhRegistry.Status.Refuted));
         assertEq(WATCHER.balance - before, BOND / 2, "the refuter took half");
@@ -169,9 +171,11 @@ contract LifecycleTest is Test {
         uint256 claimId = _sealedClaim(_volumeScope(), VOL_FROM, VOL_TO, at);
 
         uint256 key = EventScope.key(at[1], TX_INDEX, 0);
-        vm.expectRevert(abi.encodeWithSelector(UtuhRegistry.EventAlreadyInSet.selector, key));
+        // The best witness a refuter can build for a member names the member's own position, and
+        // the contract must see through it.
+        vm.expectRevert(abi.encodeWithSelector(UtuhRegistry.AbsenceNotShown.selector, key));
         vm.prank(WATCHER);
-        registry.refute(claimId, _proofAt(at[1], 0), _continuity());
+        registry.refute(claimId, _proofAt(at[1], 0), _continuity(), _witness(at, at[1]));
     }
 
     /// @notice Once the window has closed the claim is settled, whatever anyone can prove.
@@ -188,7 +192,7 @@ contract LifecycleTest is Test {
             abi.encodeWithSelector(UtuhRegistry.ChallengeWindowClosed.selector, uint64(block.number), until)
         );
         vm.prank(WATCHER);
-        registry.refute(claimId, _proofAt(all[2], 0), _continuity());
+        registry.refute(claimId, _proofAt(all[2], 0), _continuity(), _witness(kept, all[2]));
     }
 
     /// @notice An event outside the claimed range says nothing about the claim.
@@ -198,7 +202,7 @@ contract LifecycleTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(UtuhRegistry.BlockOutOfRange.selector, VOL_TO + 1, VOL_FROM, VOL_TO));
         vm.prank(WATCHER);
-        registry.refute(claimId, _proofAt(VOL_TO + 1, 0), _continuity());
+        registry.refute(claimId, _proofAt(VOL_TO + 1, 0), _continuity(), _witness(at, VOL_TO + 1));
     }
 
     /// @notice Members must arrive in ascending key order, which is what makes membership decidable.
@@ -690,6 +694,19 @@ contract LifecycleTest is Test {
         return credit.expectedScope(_adverseSpec(), payer);
     }
 
+    /// @dev The keys the test appended for these heights, in the order the registry holds them.
+    function _keysOf(uint64[] memory at) internal pure returns (uint256[] memory keys) {
+        keys = new uint256[](at.length);
+        for (uint256 i = 0; i < at.length; i++) {
+            keys[i] = EventScope.key(at[i], TX_INDEX, 0);
+        }
+    }
+
+    /// @dev The witness a refuter would carry: the two members bracketing `height`'s key.
+    function _witness(uint64[] memory at, uint64 height) internal pure returns (IncrementalMerkle.Adjacency memory) {
+        return Adjacency.build(_keysOf(at), EventScope.key(height, TX_INDEX, 0));
+    }
+
     function _heights(uint256 n) internal pure returns (uint64[] memory at) {
         at = new uint64[](n);
         for (uint256 i = 0; i < n; i++) {
@@ -890,7 +907,7 @@ contract LifecycleTest is Test {
         vm.mockCall(PROVER, abi.encodeWithSelector(VERIFY_ONE), abi.encode(false));
         vm.prank(WATCHER);
         vm.expectRevert(UtuhRegistry.ProofRejected.selector);
-        registry.refute(claimId, p, _continuity());
+        registry.refute(claimId, p, _continuity(), _witness(_heights(2), VOL_FROM + 30));
         _mockProver();
     }
 

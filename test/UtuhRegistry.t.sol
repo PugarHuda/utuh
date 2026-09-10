@@ -5,6 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {UtuhRegistry} from "../src/UtuhRegistry.sol";
 import {IBlockProver} from "../src/interfaces/IBlockProver.sol";
 import {EventScope} from "../src/lib/EventScope.sol";
+import {IncrementalMerkle} from "../src/lib/IncrementalMerkle.sol";
+import {Adjacency} from "./support/Adjacency.sol";
 
 /// @notice The registry guard layer: everything that decides an answer before a precompile is
 ///         consulted.
@@ -136,7 +138,8 @@ contract UtuhRegistryGuardTest is Test {
                 UtuhRegistry.WrongStatus.selector, UtuhRegistry.Status.Sealed, UtuhRegistry.Status.None
             )
         );
-        registry.refute(UNKNOWN, _proof(), _continuity());
+        IncrementalMerkle.Adjacency memory none;
+        registry.refute(UNKNOWN, _proof(), _continuity(), none);
     }
 
     /// @notice A read of an id that does not exist has to answer rather than revert, because the
@@ -147,7 +150,9 @@ contract UtuhRegistryGuardTest is Test {
         assertEq(c.claimant, address(0));
         assertEq(c.bond, 0);
         assertEq(registry.memberCount(UNKNOWN), 0, "an unknown claim had members");
-        assertFalse(registry.contains(UNKNOWN, 1), "an unknown claim contained something");
+        assertEq(
+            registry.claimRoot(UNKNOWN), Adjacency.root(new uint256[](0)), "an unknown claim had a root over something"
+        );
         assertEq(registry.challengeUntil(UNKNOWN), 0, "an unknown claim had a deadline");
     }
 

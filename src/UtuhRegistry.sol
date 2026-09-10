@@ -5,6 +5,7 @@ import {EvmV1Decoder} from "@gluwa/usc-contracts/contracts/decoding/EvmV1Decoder
 import {IBlockProver, BlockProverLib} from "./interfaces/IBlockProver.sol";
 import {IChainInfo, ChainInfoLib} from "./interfaces/IChainInfo.sol";
 import {EventScope} from "./lib/EventScope.sol";
+import {IncrementalMerkle} from "./lib/IncrementalMerkle.sol";
 
 /// @title UtuhRegistry — a completeness layer for the Attestcoin Protocol
 /// @author Utuh
@@ -38,6 +39,8 @@ import {EventScope} from "./lib/EventScope.sol";
 /// verifies exactly one. A claim spanning ten thousand events is settled by a single proof, or
 /// by none at all.
 contract UtuhRegistry {
+    using IncrementalMerkle for IncrementalMerkle.Tree;
+
     using EventScope for EventScope.Scope;
 
     IBlockProver public immutable PROVER;
@@ -113,7 +116,10 @@ contract UtuhRegistry {
     ///      ponytail: one SSTORE per event caps practical claims in the low thousands. If sets
     ///      ever outgrow that, replace the array with an incremental Merkle root and have the
     ///      refuter supply an adjacency proof of the two members bracketing the gap.
-    mapping(uint256 => uint256[]) private _keys;
+    /// @dev Members as an incremental Merkle tree rather than an array: 32 words and a count per
+    ///      claim whatever its size. Every key is emitted in {EventAppended}, so the leaves are
+    ///      public and anyone can build the adjacency proof {refute} needs from the log.
+    mapping(uint256 => IncrementalMerkle.Tree) private _trees;
 
     /// @notice Bond value slashed and permanently locked in this contract.
     uint256 public burned;
@@ -160,7 +166,9 @@ contract UtuhRegistry {
     error KeysOutOfOrder(uint256 lastKey, uint256 key);
     error ChallengeWindowClosed(uint64 nowBlock, uint64 until);
     error ChallengeWindowOpen(uint64 nowBlock, uint64 until);
-    error EventAlreadyInSet(uint256 key);
+    /// @dev The refuter's adjacency did not show the key missing: it is a member, or the witness
+    ///      named the wrong neighbours. Either way nothing is slashed.
+    error AbsenceNotShown(uint256 key);
     error TransferFailed();
     error NothingToWithdraw();
 
@@ -279,13 +287,13 @@ contract UtuhRegistry {
         uint64 txIndex = PROVER.calculateTxIndex(IBlockProver.MerkleProof({root: p.merkleRoot, siblings: p.siblings}));
         uint256 k = EventScope.key(p.blockHeight, txIndex, p.logIndex);
 
-        if (_keys[claimId].length > 0 && k <= c.lastKey) revert KeysOutOfOrder(c.lastKey, k);
+        if (_trees[claimId].count > 0 && k <= c.lastKey) revert KeysOutOfOrder(c.lastKey, k);
 
         uint256 v = c.scope.value(log);
 
         c.lastKey = k;
         c.aggregate += v;
-        _keys[claimId].push(k);
+        _trees[claimId].append(bytes32(k));
 
         emit EventAppended(claimId, k, EventScope.leaf(k, log), v);
     }
@@ -302,7 +310,7 @@ contract UtuhRegistry {
         c.status = Status.Sealed;
         c.sealedAt = uint64(block.number);
 
-        emit ClaimSealed(claimId, _keys[claimId].length, c.aggregate, c.sealedAt + c.challengeWindow);
+        emit ClaimSealed(claimId, _trees[claimId].count, c.aggregate, c.sealedAt + c.challengeWindow);
     }
 
     /// @notice Withdraw an unpublished claim and recover its bond.
@@ -334,7 +342,15 @@ contract UtuhRegistry {
     ///      into the EVM at all, and the one interaction that could, `_pay`, is last and comes
     ///      after every effect.
     // slither-disable-next-line reentrancy-no-eth,reentrancy-benign,reentrancy-events
-    function refute(uint256 claimId, EventProof calldata p, IBlockProver.ContinuityProof calldata continuity) external {
+    /// @param adj The two members bracketing `p`'s key — the witness that the key is missing.
+    ///        Built from the {EventAppended} log by anyone; see {claimRoot}. Ignored for an empty
+    ///        claim, which holds nothing and needs no witness.
+    function refute(
+        uint256 claimId,
+        EventProof calldata p,
+        IBlockProver.ContinuityProof calldata continuity,
+        IncrementalMerkle.Adjacency calldata adj
+    ) external {
         Claim storage c = _claims[claimId];
         if (c.status != Status.Sealed) revert WrongStatus(Status.Sealed, c.status);
 
@@ -355,7 +371,7 @@ contract UtuhRegistry {
         // no way to avoid.
         c.scope.value(log);
 
-        if (_contains(claimId, k)) revert EventAlreadyInSet(k);
+        if (!_trees[claimId].absent(k, adj)) revert AbsenceNotShown(k);
 
         uint256 bond = c.bond;
         uint256 reward = (bond * REFUTER_SHARE_BPS) / 10_000;
@@ -386,7 +402,7 @@ contract UtuhRegistry {
         c.status = Status.Finalized;
         withdrawable[c.claimant] += bond;
 
-        emit ClaimFinalized(claimId, c.aggregate, _keys[claimId].length);
+        emit ClaimFinalized(claimId, c.aggregate, _trees[claimId].count);
     }
 
     /// @notice Collect refunds credited by {finalize}.
@@ -454,20 +470,6 @@ contract UtuhRegistry {
     // ------------------------------------------------------------------
 
     /// @dev Binary search over the ascending key array written by {appendBatch}.
-    function _contains(uint256 claimId, uint256 k) private view returns (bool) {
-        uint256[] storage ks = _keys[claimId];
-        uint256 lo = 0;
-        uint256 hi = ks.length;
-        while (lo < hi) {
-            uint256 mid = (lo + hi) >> 1;
-            uint256 v = ks[mid];
-            if (v == k) return true;
-            if (v < k) lo = mid + 1;
-            else hi = mid;
-        }
-        return false;
-    }
-
     // ------------------------------------------------------------------
     // Consumer views
     // ------------------------------------------------------------------
@@ -502,15 +504,12 @@ contract UtuhRegistry {
     }
 
     function memberCount(uint256 claimId) external view returns (uint256) {
-        return _keys[claimId].length;
+        return _trees[claimId].count;
     }
 
-    function keyAt(uint256 claimId, uint256 index) external view returns (uint256) {
-        return _keys[claimId][index];
-    }
-
-    function contains(uint256 claimId, uint256 k) external view returns (bool) {
-        return _contains(claimId, k);
+    /// @notice The root over a claim's members, for building the adjacency proof {refute} takes.
+    function claimRoot(uint256 claimId) external view returns (bytes32) {
+        return _trees[claimId].root();
     }
 
     function challengeUntil(uint256 claimId) external view returns (uint64) {

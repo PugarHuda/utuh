@@ -7,6 +7,8 @@ import {UtuhRegistry} from "../src/UtuhRegistry.sol";
 import {EventScope} from "../src/lib/EventScope.sol";
 import {IBlockProver} from "../src/interfaces/IBlockProver.sol";
 import {IChainInfo} from "../src/interfaces/IChainInfo.sol";
+import {IncrementalMerkle} from "../src/lib/IncrementalMerkle.sol";
+import {Adjacency} from "./support/Adjacency.sol";
 
 /// @notice Every wei the registry holds is accounted for, whatever anyone does in whatever order.
 ///
@@ -94,14 +96,17 @@ contract RegistryInvariantTest is Test {
         }
     }
 
-    /// @notice Members are strictly ascending, always — the property refutation's binary search rests on.
+    /// @notice The root is the root over exactly the keys that went in, in the order they went in —
+    ///         and those are strictly ascending, which is what makes an adjacency proof an absence proof.
     function invariant_membersStayOrdered() public view {
         uint256 n = registry.nextClaimId();
         for (uint256 id = 1; id < n; id++) {
-            uint256 count = registry.memberCount(id);
-            for (uint256 i = 1; i < count; i++) {
-                assertLt(registry.keyAt(id, i - 1), registry.keyAt(id, i), "members out of order");
+            uint256[] memory keys = handler.keysOf(id);
+            assertEq(registry.memberCount(id), keys.length, "count drifted from what was accepted");
+            for (uint256 i = 1; i < keys.length; i++) {
+                assertLt(keys[i - 1], keys[i], "members out of order");
             }
+            assertEq(registry.claimRoot(id), Adjacency.root(keys), "root is not the root over the accepted keys");
         }
     }
 
@@ -121,6 +126,9 @@ contract RegistryHandler {
     bytes internal settlement;
     uint64 internal nextHeight = 1_000_000;
     uint256 public burnedSeen;
+    /// @dev Every key a claim accepted, in order — what a watcher would have read from the
+    ///      `EventAppended` log. The registry itself no longer keeps them.
+    mapping(uint256 => uint256[]) internal accepted;
 
     uint64 internal constant FROM = 1_000_000;
     uint64 internal constant TO = 1_200_000;
@@ -134,6 +142,19 @@ contract RegistryHandler {
             actors.push(a);
             vm_.deal(a, 1000 ether);
         }
+    }
+
+    function keysOf(uint256 id) external view returns (uint256[] memory) {
+        return accepted[id];
+    }
+
+    /// @dev The key the registry will file for a proof at `height`: the mocked prover answers
+    ///      `calculateTxIndex` with one value for every proof, and this asks it rather than
+    ///      assuming which.
+    function _keyAt(uint64 height) internal view returns (uint256) {
+        IBlockProver.MerkleProof memory mp;
+        uint64 txIndex = IBlockProver(0x0000000000000000000000000000000000000FD2).calculateTxIndex(mp);
+        return EventScope.key(height, txIndex, 0);
     }
 
     function actorCount() external view returns (uint256) {
@@ -194,7 +215,11 @@ contract RegistryHandler {
             ps[i] = _proofAt(nextHeight);
         }
         VM.prank(_actor(who));
-        try REGISTRY.appendBatch(id, ps, _continuity()) {} catch {}
+        try REGISTRY.appendBatch(id, ps, _continuity()) {
+            for (uint256 i = 0; i < n; i++) {
+                accepted[id].push(_keyAt(ps[i].blockHeight));
+            }
+        } catch {}
     }
 
     function seal(uint256 who, uint256 claimSeed) external {
@@ -216,7 +241,8 @@ contract RegistryHandler {
         nextHeight += 1;
         uint256 before = REGISTRY.burned();
         VM.prank(_actor(who));
-        try REGISTRY.refute(id, _proofAt(nextHeight), _continuity()) {
+        IncrementalMerkle.Adjacency memory adj = Adjacency.build(accepted[id], _keyAt(nextHeight));
+        try REGISTRY.refute(id, _proofAt(nextHeight), _continuity(), adj) {
             burnedSeen = REGISTRY.burned();
         } catch {
             if (REGISTRY.burned() < before) revert("burned decreased");
