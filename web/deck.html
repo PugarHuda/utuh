@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Utuh — deck</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+    />
+
+    <style>
+      /* The deck shares the whitepaper's palette so the two documents read as one project. It is
+         print-first: every slide is exactly one 1280x720 page, and `npm run web:pdf` renders it. */
+      :root {
+        --ground: #ffffff;
+        --surface: #ffffff;
+        --sunken: #f1f3f6;
+        --ink: #101318;
+        --ink-soft: #3c444f;
+        --ink-faint: #6b7482;
+        --rule: #c9ced6;
+        --accent: #8a5008;
+        --accent-soft: #f2e7d6;
+        --proof: #17444f;
+        --proof-soft: #e4edf0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      @page {
+        size: 1280px 720px;
+        margin: 0;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--sunken);
+      }
+
+      body {
+        font-family: 'IBM Plex Sans', system-ui, sans-serif;
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .slide {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        padding: 72px 88px 64px;
+        background: var(--ground);
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+        overflow: hidden;
+        page-break-after: always;
+        break-after: page;
+      }
+      .slide:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+
+      /* On screen the deck is a scrolling stack, so the page edges have to be visible. */
+      @media screen {
+        body {
+          padding: 32px 0;
+        }
+        .slide {
+          margin: 0 auto 28px;
+          box-shadow: 0 1px 2px rgba(16, 19, 24, 0.08), 0 12px 32px rgba(16, 19, 24, 0.1);
+        }
+      }
+
+      .eyebrow {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+      }
+
+      h1 {
+        font-family: 'Newsreader', Georgia, serif;
+        font-weight: 500;
+        font-size: 76px;
+        line-height: 1.02;
+        letter-spacing: -0.02em;
+        margin: 0;
+        max-width: 22ch;
+      }
+
+      h2 {
+        font-family: 'Newsreader', Georgia, serif;
+        font-weight: 500;
+        font-size: 44px;
+        line-height: 1.1;
+        letter-spacing: -0.015em;
+        margin: 0;
+        max-width: 26ch;
+      }
+
+      p {
+        margin: 0;
+        font-size: 21px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 68ch;
+      }
+
+      p.lead {
+        font-size: 26px;
+        line-height: 1.42;
+        color: var(--ink);
+        max-width: 52ch;
+      }
+
+      strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      em {
+        font-style: italic;
+      }
+
+      code,
+      .mono {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.92em;
+      }
+
+      .fill {
+        flex: 1;
+        min-height: 0;
+      }
+
+      .foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        border-top: 1px solid var(--rule);
+        padding-top: 14px;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 12.5px;
+        color: var(--ink-faint);
+        letter-spacing: 0.03em;
+      }
+
+      .cols {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+        align-items: start;
+      }
+      .cols.wide-left {
+        grid-template-columns: 1.25fr 1fr;
+      }
+      .cols.wide-right {
+        grid-template-columns: 1fr 1.35fr;
+      }
+
+      .card {
+        background: var(--sunken);
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        padding: 22px 24px;
+      }
+      .card h3 {
+        margin: 0 0 8px;
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+      }
+      .card p {
+        font-size: 18.5px;
+        line-height: 1.45;
+      }
+
+      .rule-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .rule-list li {
+        display: grid;
+        grid-template-columns: 34px 1fr;
+        gap: 16px;
+        font-size: 20px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+      }
+      .rule-list .n {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 14px;
+        color: var(--accent);
+        padding-top: 5px;
+        letter-spacing: 0.06em;
+      }
+
+      pre {
+        margin: 0;
+        font-variant-ligatures: none;
+        background: var(--sunken);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--accent);
+        border-radius: 2px;
+        padding: 18px 22px;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 16px;
+        line-height: 1.55;
+        color: var(--ink);
+        white-space: pre-wrap;
+      }
+      pre .c {
+        color: var(--ink-faint);
+      }
+
+      .shot {
+        width: 100%;
+        border: 1px solid var(--rule);
+        border-radius: 2px;
+        display: block;
+      }
+      .shot-crop {
+        border: 1px solid var(--rule);
+        border-radius: 2px;
+        overflow: hidden;
+        height: 336px;
+      }
+      .shot-crop img {
+        width: 100%;
+        display: block;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+      }
+      .stat {
+        background: var(--ground);
+        padding: 20px 22px;
+      }
+      .stat .v {
+        font-family: 'Newsreader', Georgia, serif;
+        font-size: 40px;
+        line-height: 1;
+        color: var(--ink);
+      }
+      .stat .k {
+        margin-top: 8px;
+        font-size: 14px;
+        line-height: 1.35;
+        color: var(--ink-faint);
+      }
+
+      .pill {
+        display: inline-block;
+        background: var(--proof-soft);
+        color: var(--proof);
+        border-radius: 2px;
+        padding: 3px 9px;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 14px;
+        letter-spacing: 0.02em;
+      }
+      .pill.warn {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .quote {
+        font-family: 'Newsreader', Georgia, serif;
+        font-size: 30px;
+        line-height: 1.32;
+        color: var(--ink);
+        border-left: 3px solid var(--accent);
+        padding-left: 24px;
+        max-width: 40ch;
+      }
+
+      .big {
+        font-family: 'Newsreader', Georgia, serif;
+        font-size: 54px;
+        line-height: 1.12;
+        letter-spacing: -0.015em;
+        color: var(--ink);
+        max-width: 24ch;
+      }
+
+      .links {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 15px;
+        white-space: nowrap;
+        line-height: 2;
+        color: var(--ink-soft);
+      }
+      .links b {
+        color: var(--ink-faint);
+        font-weight: 400;
+        display: inline-block;
+        width: 132px;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- 1 ................................................................. -->
+    <section class="slide">
+      <div class="eyebrow">BUIDL CTC 2026 Fall · Creditcoin &amp; Credit Labs · Attestcoin Protocol</div>
+      <div class="fill" style="display: flex; flex-direction: column; justify-content: center; gap: 28px">
+        <h1>A valid proof cannot speak about what was never submitted.</h1>
+        <p class="lead">
+          Utuh is a completeness layer for the Attestcoin Protocol, and the undercollateralized credit line it
+          exists to serve.
+        </p>
+      </div>
+      <div class="foot">
+        <span>utuh.vercel.app</span>
+        <span>github.com/PugarHuda/utuh</span>
+      </div>
+    </section>
+
+    <!-- 2 ................................................................. -->
+    <section class="slide">
+      <div class="eyebrow">The gap</div>
+      <h2>Attestcoin proves a transaction happened. It cannot prove a set of them is complete.</h2>
+      <div class="cols fill" style="align-items: center">
+        <p>
+          Whoever submits the proofs chooses which proofs to submit — and every one of them verifies. A registry
+          built on inclusion proofs can tell you what it holds. It cannot tell you that what it holds is
+          <em>all of it</em>.
+        </p>
+        <div class="card">
+          <h3>The sentence credit needs</h3>
+          <p style="font-size: 23px; color: var(--ink)">“This borrower has <strong>never</strong> been liquidated.”</p>
+          <p style="margin-top: 12px">
+            A statement about events that do not exist. No number of inclusion proofs reaches it, and the borrower
+            is not going to submit the one that would.
+          </p>
+        </div>
+      </div>
+      <div class="foot"><span>01 / the problem</span><span>Utuh</span></div>
+    </section>
+
+    <!-- 3 ................................................................. -->
+    <section class="slide">
+      <div class="eyebrow">Not hypothetical</div>
+      <h2 style="max-width: 34ch; font-size: 40px">
+        Creditcoin's own reference loan flow settles its one adverse outcome with a key.
+      </h2>
+      <div class="cols wide-left fill" style="align-items: center">
+        <div style="display: flex; flex-direction: column; gap: 18px">
+          <pre><span class="c">// gluwa/attestcoin-protocol-examples @ 6668487ad07f
+// loan/contracts/sol/ASCLoanManager.sol</span>
+
+function _noteLoanRepayment(bytes memory tx_) internal
+    <span class="c">// ← proven through 0x0FD2</span>
+
+function markLoanAsExpired(uint256 loanId)
+    external <strong>onlyOwner</strong>
+    <span class="c">// ← an administrator decides</span></pre>
+          <p style="font-size: 18px">
+            Every <em>positive</em> fact is cryptographic. The one negative fact — a borrower who did not repay —
+            is an owner call, because default is the absence of a transaction and there was nothing else to settle
+            it with.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Why this is the right example</h3>
+          <p>
+            It is not a flaw in a tutorial. It is the protocol's shape showing through, in the most neutral code
+            available — the reference every builder in this ecosystem starts from.
+          </p>
+          <p style="margin-top: 14px">
+            <span class="pill">docs/COMPLETENESS.md</span> is the same reading as three questions anyone can run
+            against their own contract.
+          </p>
+        </div>
+      </div>
+      <div class="foot"><span>02 / the hole, in code neither of us wrote</span><span>Utuh</span></div>
+    </section>
+
+    <!-- 4 ................................................................. -->
+    <section class="slide">
+      <div class="eyebrow">The mechanism</div>
+      <h2>Verified on the way in. Bonded on the way out. Broken by one proof.</h2>
+      <ul class="rule-list fill" style="justify-content: center">
+        <li>
+          <span class="n">01</span>
+          <span
+            >Every member of a claim is verified by the Block Prover before it is stored, so a claim
+            <strong>can never be padded</strong>.</span
+          >
+        </li>
+        <li>
+          <span class="n">02</span>
+          <span
+            >What it can be is <strong>short</strong>. So the claimant posts a bond against the assertion that
+            nothing was left out.</span
+          >
+        </li>
+        <li>
+          <span class="n">03</span>
+          <span
+            >Anyone who proves <strong>one in-scope event the claim omits</strong> voids it and takes half the
+            bond. The registry never verifies a whole set — one proof settles a claim, or none does — so a claim
+            spanning thousands of events stays cheap.</span
+          >
+        </li>
+      </ul>
+      <div class="quote">Presence stays cryptographic. Absence becomes economic.</div>
+      <div class="foot"><span>03 / how</span><span>Utuh</span></div>
+    </section>
+
+    <!-- 5 ................................................................. -->
+    <section class="slide">
+      <div class="eyebrow">Live, not a mockup</div>
+      <h2>A claim sealed one event short, broken from a browser with no backend.</h2>
+      <div class="cols wide-right fill" style="align-items: center">
+        <div style="display: flex; flex-direction: column; gap: 20px">
+          <p style="font-size: 19px">
+            The console sweeps Ethereum across independent endpoints, takes the union rather than a vote, checks
+            every event against the claim on-chain, and sends the refutation itself. No server, no key to look, no
+            indexer. Four files.
+          </p>
+          <div class="links">
+            <div><b>short claim</b> utuh.vercel.app/?claim=5</div>
+            <div><b>false clean</b> ?deployment=mainnet&amp;claim=20</div>
+          </div>
+          <p style="font-size: 17px; color: var(--ink-faint)">
+            Both open on arrival, refuted. Asserted hourly against the published build, so a dead link is red
+            rather than quiet.
+          </p>
+        </div>
+        <div class="shot-crop"><img src="static/shots/watch.png" alt="the console mid-sweep, reporting a claim incomplete" /></div>
+      </div>
+      <div class="foot"><span>04 / evidence</span><span>Utuh</span></div>
+    </section>
+
+    <!-- 6 ................................................................. -->
+    <section class="slide">
+      <div class="eyebrow">The application</div>
+      <h2>Undercollateralized CTC credit, underwritten on real Ethereum history.</h2>
+      <div class="cols wide-right fill" style="align-items: center">
+        <div style="display: flex; flex-direction: column; gap: 18px">
+          <p style="font-size: 19px">
+            Proven repayment volume, plus a bonded claim that the borrower was never liquidated. Nothing bridges:
+            the history stays on Ethereum, the credit is issued on Creditcoin, repayment happens back on Ethereum,
+            and only proof crosses.
+          </p>
+          <p style="font-size: 19px">
+            Reading a history is not owning it — the borrower binds their address with one transaction whose
+            calldata only their key could produce, and the Block Prover reads the sender out of verified bytes.
+          </p>
+          <p><span class="pill">Ethereum mainnet, chainKey 3</span> <span class="pill">not Sepolia</span></p>
+        </div>
+        <div class="shot-crop"><img src="static/shots/borrow.png" alt="the Borrow pane connected to a wallet" /></div>
+      </div>
+      <div class="foot"><span>05 / what it is for</span><span>Utuh</span></div>
+    </section>
+
+    <!-- 7 ................................................................. -->
+    <section class="slide">
+      <div class="eyebrow">The ceiling</div>
+      <h2>What lends is the guarantee, not the volume.</h2>
+      <div class="cols fill" style="align-items: center">
+        <div style="display: flex; flex-direction: column; gap: 22px">
+          <div class="stats" style="grid-template-columns: 1fr 1fr">
+            <div class="stat">
+              <div class="v">849 CTC</div>
+              <div class="k">what proven volume alone would justify</div>
+            </div>
+            <div class="stat">
+              <div class="v" style="color: var(--accent)">10 CTC</div>
+              <div class="k">what the line actually opens at</div>
+            </div>
+          </div>
+          <p style="font-size: 19px">
+            The limit is <code>enforceableLoss</code> × the bond multiple, not the history. A claim is only worth
+            what someone could have taken by breaking it — so a large history behind a small bond underwrites a
+            small line, and says so.
+          </p>
+        </div>
+        <div class="card">
+          <h3>And then it refuses</h3>
+          <p>
+            Pointed at a stranger's history, <code>npm run credit</code> stops at
+            <code>SubjectNotControlled</code> and opens nothing. The refusal is the demonstration: everything up
+            to it was read off a public chain by somebody who does not own that address.
+          </p>
+        </div>
+      </div>
+      <div class="foot"><span>06 / honest underwriting</span><span>Utuh</span></div>
+    </section>
+
+    <!-- 8 ................................................................. -->
+    <section class="slide">
+      <div class="eyebrow">Depth of protocol use</div>
+      <h2>All sixteen entry points — and what each of them is for.</h2>
+      <div class="cols fill" style="align-items: start; gap: 34px">
+        <div class="card">
+          <h3>Block Prover · 0x0FD2 · five</h3>
+          <p>
+            Both <code>verifyAndEmit</code> overloads — the batch form for appending, the single form for a
+            refutation, which only ever needs one. <code>calculateTxIndex</code> for the ordering key, taken from
+            the proof rather than from the caller. The decoder for scope matching against verified bytes, and the
+            <code>view</code> twin over <code>eth_call</code>, which is how the whole path was mapped with an
+            empty wallet.
+          </p>
+        </div>
+        <div class="card">
+          <h3>ChainInfo · 0x0FD3 · eleven</h3>
+          <p>
+            The attestation gate that makes challenge windows sound, the frontier that bounds staleness, the
+            genesis that bounds a range, the bounds that say whether a height is provable <em>yet</em>, and the
+            digest inversion that lets a browser check the indexer against the chain itself — a third leg on the
+            oracle audit that nothing else here could have supplied.
+          </p>
+        </div>
+      </div>
+      <p style="font-size: 18px; color: var(--ink-faint)">
+        A count is the weak half of the argument. Seven of the eleven were added when a stocktake found them
+        unused, and each took a real job — none of it is a call made to be counted.
+      </p>
+      <div class="foot"><span>07 / alignment</span><span>Utuh</span></div>
+    </section>
+
+    <!-- 9 ................................................................. -->
+    <section class="slide">
+      <div class="eyebrow">The fair objection</div>
+      <h2>A bond only deters if somebody looks. One participant does not need paying to.</h2>
+      <div class="cols fill" style="align-items: center">
+        <div style="display: flex; flex-direction: column; gap: 20px">
+          <pre>UtuhCredit.openLine
+  → UtuhRegistry.isUsable(claimId, exposure)
+      → status == <strong>Finalized</strong>
+         <span class="c">// the challenge window has closed</span></pre>
+          <p style="font-size: 19px">
+            So that window <em>is</em> the lender's diligence window, and the money a false clean claim takes is
+            the lender's own. Half the bond is a rebate on work they had to do — not a wage that has to clear.
+          </p>
+        </div>
+        <div class="card">
+          <h3>And the honest boundary</h3>
+          <p>
+            This makes watching rational for lenders. It does not make it funded as a public good: a claim nobody
+            intends to lend against still finalizes with nobody looking. For credit that is the right shape. For a
+            general-purpose fact registry it would not be.
+          </p>
+          <p style="margin-top: 14px">
+            Which is why the console needs no backend, and why <code>npx utuh-mcp</code> puts the same role behind
+            an agent. Watching should cost a tab, not a team.
+          </p>
+        </div>
+      </div>
+      <div class="foot"><span>08 / who watches, and why</span><span>Utuh</span></div>
+    </section>
+
+    <!-- 10 ................................................................ -->
+    <section class="slide">
+      <div class="eyebrow">Where the money is</div>
+      <h2>One choke point, and nothing charged yet.</h2>
+      <div class="cols fill" style="align-items: center">
+        <div style="display: flex; flex-direction: column; gap: 20px">
+          <p class="lead">
+            <code>openLine</code> is where a lender turns two bonded claims into a limit — the only place a number
+            exists that could not have existed without this layer.
+          </p>
+          <p>
+            That is where a production lender pays, in basis points on the limit opened. Watchers are paid by the
+            mechanism rather than out of revenue, from bonds that lying claimants posted. Borrowers pay nothing to
+            be measured: the history is already theirs and already public.
+          </p>
+        </div>
+        <div class="card">
+          <h3>What it does not need</h3>
+          <p>
+            A token. Any bounty large enough to matter is recoverable by a claimant refuting their own claim from
+            a second address — the same front-running that made <code>enforceableLoss</code> necessary. A token
+            layered on that would be worse than the honest gap.
+          </p>
+          <p style="margin-top: 14px">
+            A fee on a testnet demo is theatre, so there isn't one. The seam is named instead.
+          </p>
+        </div>
+      </div>
+      <div class="foot"><span>09 / value capture</span><span>Utuh</span></div>
+    </section>
+
+    <!-- 11 ................................................................ -->
+    <section class="slide">
+      <div class="eyebrow">What is real, and what is not</div>
+      <h2>The limits, before anyone has to find them.</h2>
+      <div class="cols fill" style="align-items: start; gap: 30px">
+        <div style="display: flex; flex-direction: column; gap: 18px">
+          <div class="card">
+            <h3>Economic, not cryptographic</h3>
+            <p>A bond makes lying expensive. It does not make it impossible. That distinction is load-bearing.</p>
+          </div>
+          <div class="card">
+            <h3>Read-side only, for now</h3>
+            <p>
+              Attestcoin writability is in third-party audit and not on testnet. A default is recorded on
+              Creditcoin; enforcing it back on Ethereum waits. The seam is reserved in the design.
+            </p>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 18px">
+          <div class="card">
+            <h3>Claim size has a ceiling</h3>
+            <p>
+              Members are a storage array, so refutation is a binary search the chain runs itself with no witness
+              a claimant can withhold. Past ~10,000 events that stops being affordable; the replacement — an
+              incremental Merkle root with an adjacency proof — is specified, not researched.
+            </p>
+          </div>
+          <div class="card">
+            <h3>There is one of us</h3>
+            <p>The bus factor is one. What limits it is that every claim here is checkable without asking anyone.</p>
+          </div>
+        </div>
+      </div>
+      <div class="foot"><span>10 / known limits</span><span>Utuh</span></div>
+    </section>
+
+    <!-- 12 ................................................................ -->
+    <section class="slide">
+      <div class="eyebrow">Measured, not narrated</div>
+      <h2>All of it is on a public chain, and none of it was written by us.</h2>
+      <div class="stats">
+        <div class="stat">
+          <div class="v">189</div>
+          <div class="k">events proven into claims, through the Block Prover</div>
+        </div>
+        <div class="stat">
+          <div class="v">82</div>
+          <div class="k">claims sealed on the two published registries</div>
+        </div>
+        <div class="stat">
+          <div class="v" style="color: var(--accent)">33</div>
+          <div class="k">broken by somebody who found the gap</div>
+        </div>
+        <div class="stat">
+          <div class="v">33 CTC</div>
+          <div class="k">bond actually slashed, not modelled</div>
+        </div>
+      </div>
+      <div class="cols fill" style="align-items: center; gap: 40px">
+        <p style="font-size: 19px">
+          159 Foundry tests, 121 guards asserted against the live chain, symbolic proofs over every input rather
+          than 256 samples, Slither at zero findings across 97 detectors. 359 transactions and 148M gas into
+          deployed contracts, every one verified on Blockscout and matched on Sourcify. CI re-proves the two
+          proof builders agree byte-for-byte daily and smokes the published console hourly.
+        </p>
+        <div class="links">
+          <div><b>console</b> utuh.vercel.app</div>
+          <div><b>code</b> github.com/PugarHuda/utuh</div>
+          <div><b>watcher</b> npx utuh-mcp</div>
+          <div><b>oracle</b> dashboard.cc3-testnet.creditcoin.network</div>
+        </div>
+      </div>
+      <div class="foot">
+        <span>11 / read it back yourself</span><span>Creditcoin CC3 Testnet · chain id 102031</span>
+      </div>
+    </section>
+  </body>
+</html>

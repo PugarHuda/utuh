@@ -1191,7 +1191,7 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-155 tests, 9 of them fuzzed and 5 of them invariants over random sequences. Everything below runs with `forge test`, no key and no network.
+159 tests, 9 of them fuzzed and 5 of them invariants over random sequences. Everything below runs with `forge test`, no key and no network.
 
 Most of them cover the part that runs in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
@@ -1329,9 +1329,9 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 155 tests, `tsc --noEmit`, and Slither.
-Slither reports **0 findings**, which is only worth stating alongside what it was allowed to look
-for.
+`npm run check` is what CI runs: `forge fmt --check`, the 159 tests, `tsc --noEmit`, and Slither.
+Slither reports **0 findings** across 10 contracts and 97 detectors, which is only worth stating
+alongside what it was allowed to look for.
 
 Five detectors are off in `slither.config.json`, and none of them are off because they were
 inconvenient:
@@ -1369,6 +1369,14 @@ reports and the same reasoning. The sources were not touched to satisfy it, on p
 published contract is a full match on Sourcify against this exact tree, and a comment changes the
 metadata hash. CI is pinned to 1.8.0 now, because a toolchain that moves under the repository is a
 review that happens on its own schedule.
+
+Halmos is the third opinion and the only one that is not sampling. `npm run symbolic` proves the
+three properties of the ordering key over *every* input rather than 256 of them — that the height
+comes back out of a key, that two distinct positions cannot collide into one, and that key order
+is chronological order — and `npm run symbolic:deep` does the same for the money roundings. Three
+passed, no counterexamples, in about a second; the deep suite takes minutes, so CI runs it daily
+rather than on every push. The one rounding the solver could not decide is written down as
+undecided in `CreditRounding.symbolic.t.sol` rather than quietly dropped.
 
 solc also suggests two functions could be `pure`. They could not: both read through a `storage`
 pointer parameter, which the mutability checker does not track. Accepting the suggestion compiles
