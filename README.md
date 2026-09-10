@@ -842,6 +842,10 @@ docs/
   README.ko.md              a Korean summary, marked as a summary — this file stays canonical
   ROADMAP.md                shipped / specified / gated / refused, and for each one the thing
                             you would observe from outside if it happened
+  AUDIT.md                  what an external reviewer needs on day one: scope, trust model, the
+                            invariants, where to look first, what is already known
+  MAINNET.md                the runbook for chain 102030 — what is the same, the three things
+                            that differ, and the tripwire that fails if the table is wrong
 test/
   EventScope.t.sol          the matcher, ordering key, metrics and leaf identity
   Consumer.t.sol            a thirty-line consumer that is not Utuh, compiled and tested, so the

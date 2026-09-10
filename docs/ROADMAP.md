@@ -73,7 +73,8 @@ keys, which is checked from the browser in two calls. Nothing in the design is t
 is missing is a deployment and the CTC to run it.
 
 _How you would know:_ addresses on chain 102030, verified, with the same claims flow running
-against them.
+against them. The runbook is [MAINNET.md](MAINNET.md): measured 2026-09-10, three things differ
+— Ethereum is chain key 1 there, there is no hosted Proof Builder, and the CTC is real.
 
 ### 3. An external audit
 
@@ -84,7 +85,8 @@ invariant suite over random sequences are the floor, not the ceiling. The CertiK
 to this hackathon's prizes are the start of it.
 
 _How you would know:_ a published report with findings and responses, including the findings that
-were not fixed and why.
+were not fixed and why. The half a project can produce alone is done: [AUDIT.md](AUDIT.md) —
+scope, trust model, invariants, where to look first, and what is already known.
 
 ### 4. The claim-building path stops being the slow half — **shipped 2026-09-10**
 
