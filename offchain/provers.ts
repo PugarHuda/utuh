@@ -13,7 +13,7 @@ import { runScript } from './lib/cli';
 /// attested transaction, proves it through the hosted Proof Builder and then through the local
 /// builder with the hosted one pointed at a dead port, and prints both.
 ///
-/// The timing is the part worth knowing. The local builder re-fetches every sibling transaction
+/// The timing is the part worth knowing. The local builder used to re-fetch every sibling transaction
 /// in the block and every block in the continuity range, so it is correct and roughly two orders
 /// of magnitude slower. That is fine for a claimant and it is the thing a refuter has to size a
 /// challenge window against.

@@ -45,6 +45,15 @@ const WAIT_ATTESTED_MS = Number(process.env.WAIT_ATTESTED_MS ?? 900_000);
 /// single-source assumption the rest of this refuses to make. Ask them all; first real answer wins.
 class AnyOfBlockProvider implements proofProvider.raw.blockProvider.BlockProvider {
   private inner: proofProvider.raw.blockProvider.SimpleBlockProvider[];
+  /// Every transaction of every block fetched so far, by hash.
+  ///
+  /// The SDK's `RawProofBuilder` asks for a block *with* its transactions, gets them, and then
+  /// asks for each of those transactions again by hash, one at a time, with a sleep between —
+  /// which is the whole reason the local path took tens of seconds against one for the hosted
+  /// service. The block it already fetched carried every one of them. So they are kept, and a
+  /// later ask by hash is answered from here before any endpoint is bothered. Nothing about the
+  /// proof changes; only how many round trips it took to build.
+  private txs = new Map<string, NonNullable<Awaited<ReturnType<proofProvider.raw.blockProvider.SimpleBlockProvider['getTransaction']>>>>();
 
   constructor(providers: JsonRpcProvider[]) {
     this.inner = providers.map((p) => new proofProvider.raw.blockProvider.SimpleBlockProvider(p));
@@ -73,12 +82,16 @@ class AnyOfBlockProvider implements proofProvider.raw.blockProvider.BlockProvide
     return n;
   }
 
-  getTransaction(hash: string) {
+  async getTransaction(hash: string) {
+    const known = this.txs.get(hash.toLowerCase());
+    if (known) return known;
     return this.first('getTransaction', (p) => p.getTransaction(hash));
   }
 
-  getBlockWithReceipts(blockNumber: number) {
-    return this.first('getBlockWithReceipts', (p) => p.getBlockWithReceipts(blockNumber));
+  async getBlockWithReceipts(blockNumber: number) {
+    const block = await this.first('getBlockWithReceipts', (p) => p.getBlockWithReceipts(blockNumber));
+    if (block) for (const tx of block.transactions) this.txs.set(tx.formatted.hash.toLowerCase(), tx);
+    return block;
   }
 }
 

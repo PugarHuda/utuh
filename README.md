@@ -1536,12 +1536,17 @@ they happen, recorded by the network rather than by us.
   of them is lying — only that one of them is. It does not affect what a claim records, because
   that comes from bytes the Block Prover verified, but it is a signal an operator has to act on
   themselves.
-- **The independent proof path is slow enough to matter.** Building a proof locally costs tens of
-  seconds against roughly one for the hosted service, because it re-fetches every sibling
-  transaction in the block and every block in the continuity range. It is correct, and it is what
-  makes refutation independent of a hosted service at all, but a challenge window near the 20-block
-  floor leaves a refuter on that path with almost no margin. Measure it for your own endpoints with
-  `npm run provers` before choosing a window.
+- **The independent proof path used to be slow enough to matter, and is now as fast as the
+  endpoint.** Building a proof locally cost tens of seconds against roughly one for the hosted
+  service, because the SDK's builder fetched the block with all its transactions and then asked
+  for every one of those transactions again, by hash, one at a time, with a sleep between. The
+  block it had already fetched carried all of them, so the block provider in `offchain/lib/proofs.ts`
+  now keeps them and answers the second ask from memory: 127 round trips became zero. Measured
+  2026-09-10 on Sepolia via publicnode — 1.2s local against 3.4s hosted on a 127-transaction block
+  before the change, 0.8s against 0.9s on an 81-transaction one after; the proofs are byte-identical
+  either way. What remains is the endpoint's own latency on one block-with-receipts call and the
+  continuity blocks, which is the floor. Still measure it for your own endpoints with
+  `npm run provers` before choosing a window: a slow endpoint is slow on that one call too.
 - A claimant watching the mempool can front-run an incoming refutation with their own, keeping half
   the bond and denying the watcher their reward. This is priced rather than prevented: the
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —

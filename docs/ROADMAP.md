@@ -86,15 +86,16 @@ to this hackathon's prizes are the start of it.
 _How you would know:_ a published report with findings and responses, including the findings that
 were not fixed and why.
 
-### 4. The claim-building path stops being the slow half
+### 4. The claim-building path stops being the slow half — **shipped 2026-09-10**
 
-Building a proof locally costs tens of seconds against roughly one for the hosted service, because
-`RawProofBuilder` re-fetches every sibling transaction in the block one at a time. It is correct,
-and it is what makes refutation independent of a hosted service at all — but a challenge window
-near the 20-block floor leaves a refuter on that path with almost no margin.
+Building a proof locally cost tens of seconds against roughly one for the hosted service, because
+`RawProofBuilder` re-fetched every sibling transaction in the block one at a time after already
+having fetched the block that contained them. The block provider now keeps what the block carried
+and answers the second ask from memory; 127 round trips became zero, and the proofs are
+byte-identical.
 
-_How you would know:_ `npm run provers` reporting the local path within a small multiple of the
-hosted one, on the same endpoints.
+_How you would know:_ `npm run provers` — 0.8s local against 0.9s hosted on the day it landed, on
+the same endpoint, same block. Moved here from "specified" because the observable arrived.
 
 ---
 
