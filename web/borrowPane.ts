@@ -97,6 +97,19 @@ export async function renderBorrow(ctx: BorrowContext, say: (line: string) => vo
           'Ethereum address, building the two claims, and opening the line — against the same ' +
           'contracts the scripts use.',
       ),
+      // Somebody arriving to look, rather than to borrow, should be told the price before they
+      // connect: this flow wants gas on two chains and sits through a real challenge window. The
+      // Watch pane is the same argument in two minutes and costs nothing, so say which is which
+      // instead of letting a curious visitor discover it a wallet prompt at a time.
+      el(
+        'p',
+        'note',
+        'Looking costs nothing and needs no wallet — the claims, bonds, lines and the whole tally ' +
+          'above are read straight off Creditcoin. Borrowing is the long way round: CTC for gas ' +
+          'here, Sepolia ether there, and a challenge window that is real time rather than a ' +
+          'spinner. If you came to see whether any of this works, the Watch pane sweeps Ethereum ' +
+          'and breaks a claim in about two minutes, with a wallet you never have to fund.',
+      ),
     );
     return;
   }

@@ -29,7 +29,7 @@ Building something else on Creditcoin that needs a sentence about events that di
 The registry is usable on its own — see **[docs/INTEGRATING.md](docs/INTEGRATING.md)**. Not sure
 whether what you have already built has this gap in it?
 **[docs/COMPLETENESS.md](docs/COMPLETENESS.md)** is three questions and a worked example from
-Creditcoin's own reference loan flow.
+Creditcoin's own reference loan flow. 한국어 요약: **[docs/README.ko.md](docs/README.ko.md)**.
 
 ---
 
@@ -838,6 +838,7 @@ docs/
   COMPLETENESS.md           three questions that find this gap in a contract, worked against
                             Creditcoin's own reference loan flow rather than against anyone's
                             hackathon entry
+  README.ko.md              a Korean summary, marked as a summary — this file stays canonical
 test/
   EventScope.t.sol          the matcher, ordering key, metrics and leaf identity
   Consumer.t.sol            a thirty-line consumer that is not Utuh, compiled and tested, so the
