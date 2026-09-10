@@ -29,7 +29,8 @@ Building something else on Creditcoin that needs a sentence about events that di
 The registry is usable on its own — see **[docs/INTEGRATING.md](docs/INTEGRATING.md)**. Not sure
 whether what you have already built has this gap in it?
 **[docs/COMPLETENESS.md](docs/COMPLETENESS.md)** is three questions and a worked example from
-Creditcoin's own reference loan flow. 한국어 요약: **[docs/README.ko.md](docs/README.ko.md)**.
+Creditcoin's own reference loan flow. Where this goes next, and what is gated on whom:
+**[docs/ROADMAP.md](docs/ROADMAP.md)**. 한국어 요약: **[docs/README.ko.md](docs/README.ko.md)**.
 
 ---
 
@@ -839,6 +840,8 @@ docs/
                             Creditcoin's own reference loan flow rather than against anyone's
                             hackathon entry
   README.ko.md              a Korean summary, marked as a summary — this file stays canonical
+  ROADMAP.md                shipped / specified / gated / refused, and for each one the thing
+                            you would observe from outside if it happened
 test/
   EventScope.t.sol          the matcher, ordering key, metrics and leaf identity
   Consumer.t.sol            a thirty-line consumer that is not Utuh, compiled and tested, so the

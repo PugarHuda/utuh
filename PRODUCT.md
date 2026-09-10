@@ -42,9 +42,10 @@ history nobody could refute.
 The sentence every on-chain credit system needs — *this borrower has never been liquidated* — is a
 statement about events that do not exist, and an inclusion proof can only speak about events that
 do. Utuh is the layer that makes absence assertable, then builds undercollateralized credit on it.
-A neighbouring project cannot truthfully copy this by adding another score: sixteen of the
-thirty-nine entries in this hackathon compute a score over facts the chain already shows, and all
-of them inherit the hole.
+A neighbouring project cannot truthfully copy this by adding another score: **twenty of the
+eighty-one** entries in this hackathon compute a score, passport or reputation over facts the
+chain already shows — a conservative keyword count taken 2026-09-10, and the fifteen entries added
+in the two days before it were almost all of that kind. Every one of them inherits the hole.
 
 Completeness here is **economic, not cryptographic**. A bond makes lying expensive; it does not
 make it impossible. That distinction is load-bearing and must never be overstated in copy.
