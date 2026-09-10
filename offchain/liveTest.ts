@@ -29,13 +29,14 @@ import {
 import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
 import { scopeFromCredit, plainSpec, sameScope } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
-import { answersTheQuestion, valueOf, type Scope } from './lib/scope';
+import { answersTheQuestion, valueOf, type Scope, eventKey } from './lib/scope';
 import { supportedChains, verifyChainKeys } from './lib/chain';
 import { Prover, isAbsence } from './lib/proofs';
 import { calldataGas, modelledGas, isChainRejection, isTransportFailure, isPayloadTooLarge } from './lib/gasLimit';
 import { waitForBlock } from './lib/chain';
 import { claimStatus } from './lib/status';
 import { runScript } from './lib/cli';
+import { adjacencyFor, memberKeys } from './lib/members';
 
 /// The half of the registry that unit tests cannot reach.
 ///
@@ -500,13 +501,28 @@ async function main() {
   // ------------------------------------------------------------------
   console.log('\nrefuting');
   const one = await prover.proveOne(omitted);
-  await expectRevert('refuting with a member already in the set', 'EventAlreadyInSet', () =>
-    registry.refute.staticCall(claimId, proofs[0], continuity),
+  // The members, read back from the claim's own log and checked against its root — the read
+  // throws if the endpoint dropped one, which is the assertion that matters most here.
+  const keys = await memberKeys(registry, claimId);
+  check('the log read folds to the root the registry holds', keys.length === proofs.length);
+  // The best witness anyone can build for a member names the member's own position; the
+  // registry has to see through it.
+  const memberWitness = {
+    index: 0n,
+    lower: keys[0]!,
+    lowerProof: adjacencyFor(keys, keys[0]! + 1n)!.lowerProof,
+    upper: 0n,
+    upperProof: adjacencyFor(keys, keys[0]! + 1n)!.lowerProof,
+  };
+  await expectRevert('refuting with a member already in the set', 'AbsenceNotShown', () =>
+    registry.refute.staticCall(claimId, proofs[0], continuity, memberWitness),
   );
+  const adj = adjacencyFor(keys, eventKey(omitted));
+  check('there is an honest witness for the omitted event', adj !== null);
 
   const burnedBefore: bigint = await registry.burned();
   await expectOk('the real refutation', async () => {
-    await (await registry.refute(claimId, one.proof, one.continuity)).wait();
+    await (await registry.refute(claimId, one.proof, one.continuity, adj)).wait();
   });
   const burnedAfter: bigint = await registry.burned();
 

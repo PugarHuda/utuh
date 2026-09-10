@@ -4,6 +4,7 @@ import { sources, withDeadline, SOURCE_TIMEOUT_MS, CHAIN_KEY, SOURCE_CHAIN_ID } 
 import { Prover, planBatches } from './proofs';
 import { sendChecked, isChainRejection, isTransportFailure } from './gasLimit';
 import { attested, verifyChainKeys } from './chain';
+import { adjacencyFor, memberKeys } from './members';
 
 export interface BuildOptions {
   bond: bigint;
@@ -274,9 +275,11 @@ export async function findOmission(
   claimId: bigint,
   events: ScopedEvent[],
 ): Promise<ScopedEvent | null> {
+  // The registry no longer answers "is this key a member"; it holds a root, and the members are
+  // a log read. One read, then every candidate is a set lookup rather than an RPC call.
+  const members = new Set((await memberKeys(registry, claimId)).map(String));
   for (const e of events) {
-    const present: boolean = await registry.contains(claimId, eventKey(e));
-    if (!present) return e;
+    if (!members.has(String(eventKey(e)))) return e;
   }
   return null;
 }
@@ -289,8 +292,11 @@ export async function refuteClaim(
   log: (message: string) => void = () => {},
 ): Promise<{ reward: bigint; key: bigint }> {
   const { proof, continuity } = await prover.proveOne(omission);
+  // The witness: the two members bracketing the omitted key, built from the claim's own log.
+  const adj = adjacencyFor(await memberKeys(registry, claimId), eventKey(omission));
+  if (!adj) throw new Error(`claim ${claimId} already holds ${eventKey(omission)} — nothing to refute`);
   // The one call in this repo that must go through even when the node will not estimate it.
-  const tx = await sendChecked(registry, 'refute', [claimId, proof, continuity], { members: 0, log });
+  const tx = await sendChecked(registry, 'refute', [claimId, proof, continuity, adj], { members: 0, log });
   const receipt = await tx.wait();
 
   for (const rawLog of receipt.logs) {

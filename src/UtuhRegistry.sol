@@ -89,6 +89,7 @@ contract UtuhRegistry {
         Status status;
         uint64 fromBlock; // inclusive, source chain
         uint64 toBlock; // inclusive, source chain
+        uint64 openedAt; // Creditcoin block the claim was opened at — where its EventAppended log starts
         uint64 sealedAt; // Creditcoin block at which the window opened
         uint64 challengeWindow; // in Creditcoin blocks
         uint256 bond; // escrowed now; zeroed once refunded or slashed
@@ -214,6 +215,9 @@ contract UtuhRegistry {
         Claim storage c = _claims[claimId];
         c.claimant = msg.sender;
         c.status = Status.Open;
+        // The registry no longer keeps the members, only a root over them; whoever needs the keys
+        // reads `EventAppended` for this claim, and this is the block that read starts from.
+        c.openedAt = uint64(block.number);
         c.fromBlock = fromBlock;
         c.toBlock = toBlock;
         c.challengeWindow = challengeWindow;

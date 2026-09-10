@@ -2,6 +2,7 @@ import { Contract, type Signer } from 'ethers';
 import { eventKey, scanScopeUnion, type Scope, type ScopedEvent } from '../offchain/lib/scope';
 import { toScope } from '../offchain/lib/specs';
 import { fetchSingleProof } from '../offchain/lib/proofApi';
+import { adjacencyFor, memberKeys } from '../offchain/lib/members';
 import { confirmEndpoints } from '../offchain/lib/attest';
 import { cc3, sourceEndpoints } from './chain';
 import { SWEEP_CHUNK, requireChainKey } from '../offchain/lib/networks';
@@ -132,13 +133,23 @@ export async function refute(
     logIndex: gap.logIndexInTx,
   };
 
+  // The witness the registry needs beside the proof: the two members that bracket the omitted
+  // key, read from the claim's own log and checked against its root before anything is signed.
+  log('reading the claim’s members from its log…');
+  const keys = await memberKeys(registry, claimId);
+  const adj = adjacencyFor(keys, eventKey(gap));
+  if (!adj) throw new Error(`claim ${claimId} already holds this event — nothing to refute`);
+  log(
+    `${keys.length} member(s); the key falls ${adj.index === 0n && eventKey(gap) < adj.lower ? 'below the first' : adj.upper === 0n ? 'above the last' : `between #${adj.index} and #${adj.index + 1n}`}`,
+  );
+
   const writable = registry.connect(signer) as Contract;
   // eth_call first. A refutation that would revert is worth finding out about before it costs gas,
   // and the revert reason is the useful half of the answer.
-  await writable.refute.staticCall(claimId, event, proof.continuityProof);
+  await writable.refute.staticCall(claimId, event, proof.continuityProof, adj);
   log('the registry accepts it — sending');
 
-  const tx = await writable.refute(claimId, event, proof.continuityProof);
+  const tx = await writable.refute(claimId, event, proof.continuityProof, adj);
   log(`sent ${tx.hash}`);
   await tx.wait();
   return { hash: tx.hash, key: eventKey(gap) };

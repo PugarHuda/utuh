@@ -32,6 +32,7 @@ import { attestorCount, attestorKeys, recentAttestations } from '../offchain/lib
 import { CC3_CHAIN_ID, CHAIN_KEY } from '../offchain/lib/networks';
 import { attestationBefore, checkpointLag, heightForDigest, latestAttestation } from '../offchain/lib/attest';
 import { JsonRpcProvider } from 'ethers';
+import { memberKeys } from '../offchain/lib/members';
 
 /// The Utuh console.
 ///
@@ -1046,8 +1047,11 @@ async function renderClaimDetail(): Promise<void> {
 
     const shown = Number(count > 50n ? 50n : count);
     const rows: (string | HTMLElement)[][] = [];
+    // The registry holds a root, not the keys; the keys are its EventAppended log, and the read
+    // refuses to return them unless they fold to that root.
+    const keys = count > 0n ? await memberKeys(wired.registry, id) : [];
     for (let i = 0; i < shown; i++) {
-      const k = (await wired.registry.keyAt(id, i)) as bigint;
+      const k = keys[i]!;
       const block = Number(k >> 96n);
       const tx = Number((k >> 32n) & 0xffffffffn);
       const log = Number(k & 0xffffffffn);
