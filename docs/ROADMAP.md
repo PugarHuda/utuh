@@ -52,18 +52,29 @@ audit would be the least honest page in the repository.
 
 ## Specified — engineering, not research
 
-### 1. Claim size stops being the ceiling
+### 1. Claim size stops being the ceiling — **built, on branch `merkle-claims`, not deployed**
 
-Members are a storage array, so refutation is a binary search the chain runs itself with no witness
-a claimant could withhold. That property is worth keeping. What it costs is that the price of a
-claim follows the bytes of the transactions being proven, and past roughly ten thousand events that
-stops being affordable.
+Members are a storage array on the published registries, so refutation is a binary search the
+chain runs itself with no witness a claimant could withhold. That property was worth keeping, and
+it cost a slot per member.
 
-The replacement is written down rather than hoped for: the array becomes an **incremental Merkle
-root**, and the refuter supplies an **adjacency proof** of the two members bracketing the gap. The
-refutation stays one proof and one settlement; what changes is who carries the witness.
+The replacement exists as of 2026-09-10, on a branch: `IncrementalMerkle.sol`, a depth-32
+append-only tree in the deposit contract's shape — 32 words and a count per claim whatever its
+size — with the refuter supplying an **adjacency proof** of the two members bracketing the gap,
+built off chain from the `EventAppended` log that has always carried every key. Fuzzed against a
+reference that keeps every leaf; the invariant suite rebuilds each claim's root from the keys it
+saw accepted; a vector the TypeScript computed is pinned into Foundry so the three
+implementations have to agree. 165 tests. A real refutation costs about 83k gas more, most of it
+the two proofs in calldata; an append is within a percent.
+
+It is not on master and not deployed, deliberately: it changes storage, a redeploy renumbers
+every claim, and the submission, the film and the deck all point at claims by number. It merges
+the day after judging closes. What remains after the merge is a deployment and the live suites
+run against it — the console and the MCP server on that branch read `claimRoot` and `openedAt`,
+which the published registries do not have.
 
 _How you would know:_ a claim with six figures of members, sealed and refuted, on a public chain.
+Until then: `git checkout merkle-claims && forge test`.
 
 ### 2. Mainnet
 
