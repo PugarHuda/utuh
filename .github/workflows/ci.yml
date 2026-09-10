@@ -292,3 +292,8 @@ jobs:
 
       - name: what the registry has cost
         run: npm run gas
+      # Every sentence the submission quotes a number in, measured again. A sentence that was
+      # true on the day it was written is the most common kind of lie, and this is the one job
+      # whose only purpose is to notice.
+      - name: every submission claim, measured again
+        run: npm run judge

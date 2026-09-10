@@ -941,7 +941,7 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 155 forge tests, five of them invariants
+npm run test                # 159 forge tests, five of them invariants
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -949,6 +949,7 @@ npm run typecheck           # tsc, ten strictness flags past `strict`
 npm run deadcode            # knip: unused files, exports, dependencies
 npm run symbolic            # halmos proofs of the ordering key (needs `pip install halmos`)
 npm run symbolic:deep       # the rounding proofs; minutes, so CI runs these daily not per push
+npm run judge               # every claim the submission makes, measured again — no key, exits 1 on any that fails
 npm run provers             # prove one transaction hosted and locally, and compare
 npm run gas                 # what the registry has really cost, fitted from its own receipts
 npm run slither             # static analysis; the config says which detectors are off and why
