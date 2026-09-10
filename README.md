@@ -18,8 +18,18 @@ utuh.vercel.app](https://utuh.vercel.app/)** — it reads the chain from your ow
 browser, lets anyone sweep Ethereum and break an incomplete claim, and lets a borrower be
 underwritten end to end without cloning anything. `npm run web` runs the same page locally.
 
+Two claims, live, one click each — the console renders both from Creditcoin as the page draws:
+a claim **[sealed one event short and broken from a browser](https://utuh.vercel.app/?claim=5)**,
+and a false _"never liquidated"_ claim over 216,000 blocks of Ethereum mainnet
+**[refuted by one liquidation proof](https://utuh.vercel.app/?deployment=mainnet&claim=20)**.
+Every verification behind them is on Creditcoin's own oracle dashboard, which nobody here can
+write to: [transaction-verifications](https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications).
+
 Building something else on Creditcoin that needs a sentence about events that did _not_ happen?
-The registry is usable on its own — see **[docs/INTEGRATING.md](docs/INTEGRATING.md)**.
+The registry is usable on its own — see **[docs/INTEGRATING.md](docs/INTEGRATING.md)**. Not sure
+whether what you have already built has this gap in it?
+**[docs/COMPLETENESS.md](docs/COMPLETENESS.md)** is three questions and a worked example from
+Creditcoin's own reference loan flow.
 
 ---
 
@@ -825,6 +835,9 @@ src/
 docs/
   INTEGRATING.md            using UtuhRegistry from someone else's contract — the registry is
                             infrastructure, UtuhCredit is one application of it
+  COMPLETENESS.md           three questions that find this gap in a contract, worked against
+                            Creditcoin's own reference loan flow rather than against anyone's
+                            hackathon entry
 test/
   EventScope.t.sol          the matcher, ordering key, metrics and leaf identity
   Consumer.t.sol            a thirty-line consumer that is not Utuh, compiled and tested, so the

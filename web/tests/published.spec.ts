@@ -124,3 +124,19 @@ test('the canonical console and its mirror are serving the same build', async ({
       `without failing the workflow. Differences: ${differences.join('; ')}`,
   ).toEqual([]);
 });
+
+/// The two URLs the README, `docs/COMPLETENESS.md` and the submission hand a reader as the fastest
+/// way to see the argument. They point at specific claims by id, so they can rot in a way the rest
+/// of the console cannot: a redeployed registry renumbers everything, and the link would then open
+/// a healthy claim while the sentence beside it says somebody broke this one. That is the failure
+/// worth catching hourly — a dead link is obvious, a link that quietly means something else is not.
+for (const [what, path, id] of [
+  ['a claim sealed one event short', './?claim=5', '5'],
+  ['a false clean claim over 216,000 mainnet blocks', './?deployment=mainnet&claim=20', '20'],
+] as const) {
+  test(`the published link to ${what} still opens it, refuted`, async ({ page }) => {
+    await page.goto(path);
+    await expect(page.locator('#claim-select')).toHaveValue(id, { timeout: 60_000 });
+    await expect(page.locator('body')).toContainText(/Refuted/i, { timeout: 60_000 });
+  });
+}
