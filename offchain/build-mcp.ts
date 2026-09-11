@@ -103,7 +103,82 @@ it — a real slashed bond, during its own smoke test.
 `,
   );
 
-  console.log(`dist-mcp/ written — utuh-mcp@${version}`);
+  // The same server as an MCP Bundle. `.mcpb` is the format Claude Desktop installs with one
+  // click and the one Smithery accepts for a stdio server — npm is not a route into either. The
+  // bundle is the bundled script plus a manifest; nothing is built twice.
+  const bundle = join(DIST, 'mcpb');
+  mkdirSync(join(bundle, 'server'), { recursive: true });
+  copyFileSync(join(DIST, 'utuh-mcp.cjs'), join(bundle, 'server', 'utuh-mcp.cjs'));
+  writeFileSync(
+    join(bundle, 'manifest.json'),
+    JSON.stringify(
+      {
+        manifest_version: '0.3',
+        name: 'utuh-mcp',
+        display_name: 'Utuh watcher',
+        version,
+        description:
+          'Sweep bonded completeness claims on Creditcoin against Ethereum, and refute one that omits an event.',
+        long_description:
+          'Utuh bonds the claim that a set of source-chain events is complete; anyone who proves one omitted ' +
+          'event takes half the bond. This server is the "anyone". Four tools read and spend nothing; ' +
+          'refute_claim sends a real transaction and refuses without confirm: true.',
+        author: { name: 'Pugar Huda Mantoro', url: 'https://github.com/PugarHuda' },
+        repository: { type: 'git', url: 'https://github.com/PugarHuda/utuh' },
+        homepage: 'https://utuh.vercel.app/',
+        license: 'MIT',
+        keywords: ['creditcoin', 'attestcoin', 'ethereum', 'watcher', 'completeness', 'credit'],
+        server: {
+          type: 'node',
+          entry_point: 'server/utuh-mcp.cjs',
+          mcp_config: {
+            command: 'node',
+            args: ['${__dirname}/server/utuh-mcp.cjs'],
+            env: { PRIVATE_KEY: '${user_config.private_key}' },
+          },
+        },
+        user_config: {
+          private_key: {
+            type: 'string',
+            title: 'Creditcoin CC3 Testnet private key (optional)',
+            description:
+              'Needed only by refute_claim, which also demands confirm: true. Every other tool reads the chain and spends nothing. Leave empty to hold the role read-only.',
+            sensitive: true,
+            required: false,
+          },
+        },
+        tools: [
+          { name: 'tally', description: 'What both registries have done, read live from Creditcoin' },
+          { name: 'list_claims', description: 'Every claim with status, bond and remaining challenge window' },
+          {
+            name: 'sweep_claim',
+            description: 'Sweep Ethereum across independent endpoints and check a claim for omitted events',
+          },
+          {
+            name: 'refute_claim',
+            description: 'Prove one omitted event and take half the bond — sends a transaction, needs confirm',
+          },
+          { name: 'audit_attestors', description: "Check what Creditcoin's attestors signed, three ways" },
+        ],
+        prompts: [
+          {
+            name: 'hold_the_watcher_role',
+            description: 'The watcher job: sweep every open claim, report gaps, spend nothing',
+            text: 'Hold the Utuh watcher role. List every claim still inside its challenge window on both deployments, sweep each one, and report any claim whose sweep shows an in-scope event it does not contain, with the claim id, the omitted event, and how many independent endpoints vouched for it. Do not call refute_claim unless the operator explicitly confirms; it sends a real transaction.',
+          },
+        ],
+        compatibility: {
+          claude_desktop: '>=0.10.0',
+          platforms: ['darwin', 'win32', 'linux'],
+          runtimes: { node: '>=20.0.0' },
+        },
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+
+  console.log(`dist-mcp/ written — utuh-mcp@${version}, plus dist-mcp/mcpb/ for \`mcpb pack\``);
 }
 
 void main();
