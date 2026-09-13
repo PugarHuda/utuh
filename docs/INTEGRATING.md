@@ -148,6 +148,28 @@ the one the data pins down least. `npm run gas` refits it from the registry's ow
 
 ---
 
+## Who has this gap today
+
+Eight contracts on this hackathon's board, read at the commit named on 2026-09-13, that compute a
+score, a tier or a cap from adverse-event counters which only move when somebody submits the
+proof. Each is a prospective consumer of `isUsable`, not a competitor, and none is an accusation:
+every one of them is correct about what it proves.
+
+| Repository, commit | The line that assumes the set is complete |
+| --- | --- |
+| `OoJae/crosscredit` @ `8366b1a` | `contracts/src/creditcoin/ScoreLib.sol:175` — `spotless = profile.late == 0 && profile.liquidations == 0`, Platinum tier gated on it; the counters move at `CreditRegistry.sol:591` and `:691`, each only on a submitted proof |
+| `seekdaseek/nomen` @ `6950c36` | `contracts/Nomen.sol:153` — `if (r.borrows > 0 && r.liquidations == 0) v += 50`; `++r.liquidations` at `:283`, reached only through permissionless `record()` |
+| `henessay/truthgate` @ `7f9fd3a` | `contracts/src/cc3/CreditCore.sol:611` — liquidation penalty accumulated in `_scoreLiquidations`; `markLoanAsExpired` is `onlyOwner` at `:856` |
+| `HoangDucBach/miro` @ `6be210b` | `contracts/creditcoin/src/CreditPassport.sol:251` — `p.negativeEvents++`; score is `positive − negativeEvents × NEGATIVE_PENALTY` at `:279-280` |
+| `Ted1166/attestcoin-credit-passport` @ `e275766` | `contracts/contracts/CreditScoreRegistry.sol:152` — `recordVerifiedRepayment` is `onlyRole(OPERATOR_ROLE)`; score at `:250` has no adverse term at all |
+| `Kohap/credit-passport` @ `2bbe48e` | `packages/contracts-creditcoin/src/CreditScore.sol:40-41` — every admitted loan adds 30 or 50; `CreditPassportASC.sol:123` admits closed loans only |
+| `SamarthSrivastavaa/clearbook` @ `a306d77` | `contracts/src/Clearbook.sol:307-312` — `markDelinquent` means "no repayment claimed by maturity", which its README concedes it "cannot prevent, so it measures" |
+| `gluwa/attestcoin-protocol-examples` @ `6668487` | `loan/contracts/sol/ASCLoanManager.sol` — `_noteLoanRepayment` proves presence; `markLoanAsExpired` is `onlyOwner` ([COMPLETENESS.md](COMPLETENESS.md)) |
+
+Three more carry the softer, positive-only version of the same shape (`DruxAMB/creditpass`,
+`Spagero763/standing`, `Nasiru0001/attestlend-passport`). These repositories move; the commit is
+the claim.
+
 ## Who this is for
 
 Anything that wants a sentence about events that did not happen:

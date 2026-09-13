@@ -26,6 +26,16 @@ and a false _"never liquidated"_ claim over 216,000 blocks of Ethereum mainnet
 Every verification behind them is on Creditcoin's own oracle dashboard, which nobody here can
 write to: [transaction-verifications](https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications).
 
+Two things a reader with a clone and no key can check first. `npm run judge` re-measures every
+number this repository and the submission quote — the contracts and their verification, the tally,
+both linked claims, the explorer counters, npm, the MCP Registry, the published build, the sixteen
+protocol entry points, the test and commit counts — and exits non-zero on any that no longer
+holds; 22 of 22 held on 2026-09-13. And a bond here stands behind a specific line, not behind
+nothing: `UtuhCredit.openLine` reaches a claim only through `UtuhRegistry.isUsable(claimId,
+exposure)`, the finalized claim is spent by the line it opens, `underwrittenThrough` consumes the
+history range, and the limit is capped at ten times the enforceable loss. Exposure is gated by the
+bond and consumed by the draw.
+
 Building something else on Creditcoin that needs a sentence about events that did _not_ happen?
 The registry is usable on its own — see **[docs/INTEGRATING.md](docs/INTEGRATING.md)**. Not sure
 whether what you have already built has this gap in it?
@@ -62,8 +72,9 @@ same as closing it, and an inclusion proof gives none of them a way to.
 
 ## What this uses of Creditcoin's, and what it deliberately does not
 
-`npm run doctor` ends by making a live request to every Creditcoin-owned surface this depends on,
-so the list below is checkable rather than asserted. Today's run:
+`npm run doctor` (it reads `.env` for `PRIVATE_KEY` to report the balance, and signs nothing) ends
+by making a live request to every Creditcoin-owned surface this depends on, so the list below is
+checkable rather than asserted. A run on 2026-09-10:
 
 ```
 Creditcoin ecosystem surfaces
@@ -234,8 +245,8 @@ The practical ceiling is therefore set by bytes:
 ```
 
 The asymmetry is still the point — challenging is one proof and a binary search, whatever the claim
-holds — but a claim of ten thousand events is thirty blocks' worth of gas, and that is the number
-that caps this rather than any argument about storage.
+holds — but a claim of ten thousand events is about thirty-three full blocks of gas, and that is
+the number that caps this rather than any argument about storage.
 
 Re-run on 2026-09-13 with the default `GAS_LOOKBACK` of 100,000 CC3 blocks — the mainnet
 registry's last 85 transactions, 23 of them appends — the fit reads 317,593 fixed, 1.40× the
@@ -285,7 +296,8 @@ attested   sepolia  chainKey 1  height 11530210
 attested   mainnet  chainKey 3  height 25797540
 ```
 
-The mainnet frontier tracks within roughly a hundred blocks of the real chain head. So contracts
+The mainnet frontier tracks a few dozen blocks behind the real chain head — 34 measured on
+2026-09-13, about 70 and about 100 on earlier days. So contracts
 on a free testnet can be underwritten on real Aave positions, real USDC flows, and real borrowers,
 with no capital at risk and nothing simulated.
 
@@ -785,9 +797,12 @@ page boots, reads the live chain, and asks its host for nothing but `index.html`
 `style.css` and the font they use. A GitHub Actions workflow builds it from each commit's own artifacts, so the ABI the
 page carries is the ABI the contracts were compiled with.
 
-Three more files are written beside those and never requested by the page, because they are for
-other readers. `.well-known/security.txt` is RFC 9116, for a researcher who found the deployment
-rather than the repository. `whitepaper.pdf` is the document. And `llms.txt` is the
+More files are written beside those and never requested by the page, because they are for other
+readers. `.well-known/security.txt` is RFC 9116, for a researcher who found the deployment rather
+than the repository. `whitepaper.pdf` and `deck.pdf` are the documents. `robots.txt` and
+`sitemap.xml` are for a crawler. `.well-known/agent-registration.json` is the agent card ERC-8004
+expects at that path, describing the watcher role; nothing is registered on-chain for it. And
+`llms.txt` is the
 [convention](https://llmstxt.org) an agent reads on arrival — Creditcoin's own Attestcoin docs
 publish one, which is where this project found it. That last one is not a summary of the page: the
 page is for a person, and an agent landing here needs three things in the order it needs them —
@@ -1494,6 +1509,15 @@ on ChainInfo — and each is there because something needed it, which is the onl
 Seven of the ChainInfo eleven were added late, when a stocktake found them unused; what they bought
 is below, and none of it is a call made to be counted.
 
+Grep `src/` and you find six of the sixteen: both `verifyAndEmit` overloads, `calculateTxIndex`,
+`is_height_attested`, `get_attestation_genesis_height` and `get_latest_attestation_height_and_hash`
+— the ones a contract has to ask on-chain, at the lines the table in
+[docs/AUDIT.md](docs/AUDIT.md) and the submission name. The other ten are asked off-chain, by the
+scripts, the daemon, the MCP server and the browser, through the SDK's own precompile clients: the
+`view` prover over `eth_call`, `RawProofBuilder`, and the eight ChainInfo methods that decide where
+a claim may end, when a height becomes provable, and whether an indexer's row is real. Nothing
+on-chain needs them; everything that builds or checks a claim does.
+
 ### What Creditcoin itself says about the source chain
 
 Three things were being assumed that the network will answer, and the answers are undocumented
@@ -1571,7 +1595,9 @@ Sepolia log there is where the full-flow run's settlements and its repayment sho
 they happen, recorded by the network rather than by us.
 
 The same indexer counts it. Its `transactionVerifieds` table is every `TransactionVerified` event
-`0x0FD2` has ever emitted, and on 2026-09-13 it held 139,795 rows for CC3 Testnet; 224 of them were
+`0x0FD2` has ever emitted, and on 2026-09-13 it held 139,838 rows for CC3 Testnet — 132,507 for
+chain key 3 and 7,331 for key 1, the three read in one request because the table grows while you
+ask; 224 of them were
 verified for Utuh's contracts — 202 through the mainnet-sourced registry, 20 through the
 Sepolia-sourced one, 2 through its credit contract, none through the mainnet-sourced credit,
 which `npm run credit` never writes to. Method: Blockscout's `/api/v2/addresses/{addr}/transactions?filter=to`
@@ -1583,7 +1609,7 @@ indexer. Spot check: `appendBatch` `0x5ccfb529…25fb25` has three rows there, a
 - Claim members are held as a storage array so refutation is a binary search the chain runs
   itself, with no witness a claimant could withhold. What caps a claim is not that array, though —
   measured, the cost follows the _bytes of the transactions being proven_ at about twice their
-  calldata gas, and a ten-thousand-event claim is forty blocks' worth. The replacement — an
+  calldata gas, and a ten-thousand-event claim is about thirty-three full blocks. The replacement — an
   incremental Merkle root per claim, with the refuter supplying an adjacency proof of the two
   members bracketing the gap — is built and tested on branch `merkle-claims` and is **not** on
   master or deployed, because it changes storage and a redeploy renumbers every claim this file

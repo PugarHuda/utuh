@@ -74,10 +74,11 @@ run against it — the console and the MCP server on that branch read `claimRoot
 which the published registries do not have.
 
 _How you would know:_ a claim with six figures of members, sealed and refuted, on a public chain.
-Until then: `git checkout merkle-claims && forge test`, or `.github/workflows/merkle.yml` on
-master, which checks the branch out and runs its build and tests on forge 1.8.0 weekly and on
-dispatch — its run history is
-<https://github.com/PugarHuda/utuh/actions/workflows/merkle.yml>.
+Until then: `git checkout merkle-claims && forge test`, or let CI do it — workflow
+`merkle-claims`, job `contracts on merkle-claims` (`.github/workflows/merkle.yml`), checks the
+branch out and runs its 165 tests on forge 1.8.0 on every push to master, weekly, and on
+dispatch (a workflow file only runs from the ref that carries it, so not on pushes to the branch
+itself). Run history: <https://github.com/PugarHuda/utuh/actions/workflows/merkle.yml>.
 
 ### 2. Mainnet
 

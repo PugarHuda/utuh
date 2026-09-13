@@ -62,7 +62,8 @@ make it impossible. That distinction is load-bearing and must never be overstate
   serves bytes and holds nothing.
 - Read paths work with an empty wallet; only claiming, refuting and borrowing need a key and CTC.
 - Waits are real and long: challenge windows are measured in Creditcoin blocks, attestation lags
-  the source head by ~32 blocks, and a sweep of a wide range takes visible time.
+  the source head by a few dozen blocks (34 on 2026-09-13), and a sweep of a wide range takes
+  visible time.
 - Writability (outbound messages to Ethereum) is not live on testnet, so the product is read-side
   only by necessity.
 
@@ -74,7 +75,7 @@ make it impossible. That distinction is load-bearing and must never be overstate
   policy of volume unit, minimum history, staleness bound, repayment bps and repay window.
 - Refutation is one proof plus a binary search over a stored member array; it does not scale with
   claim size. Building a claim does: measured, ~1.5x the call's own calldata gas, so a
-  ten-thousand-event claim is roughly forty full blocks of gas.
+  ten-thousand-event claim is about thirty-three full blocks of gas.
 - Contracts are deployed and verified on CC3; the ledger has a Sepolia twin.
 - Terminology is fixed and must not be softened: claim, scope, member, bond, challenge window,
   refute, finalize, abandon, standing, line, draw, settle.
