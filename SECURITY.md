@@ -24,6 +24,8 @@ will get an answer within a week, and credit in the fix.
 ## What is already known
 
 `README.md` has a *Known limits* section. The front-running of refutations, the economic (not
-cryptographic) nature of completeness, and the dependence on source-chain endpoints being honest
-about which logs exist are described there and are design limits rather than bugs. Anything that
-makes one of them worse than described is a bug.
+cryptographic) nature of completeness, the dependence on source-chain endpoints being honest
+about which logs exist, and the fact that one finalized claim can back a line at every lender at
+once (the registry does not reserve a claim for the lender relying on it) are described there and
+are design limits rather than bugs. `docs/AUDIT.md` lists the rest, each with the test that pins
+it. Anything that makes one of them worse than described is a bug.

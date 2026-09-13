@@ -81,6 +81,15 @@ On top of the protocol itself — both precompiles, both `verifyAndEmit` overloa
 `@gluwa/usc-contracts` and `@gluwa/usc-sdk`, the hosted Proof Builder under both of its hostnames,
 and `RawProofBuilder` as the path that needs no hosted service at all.
 
+The pins are deliberate. Gluwa published `@gluwa/asc-contracts` 0.2.1 on 2026-08-31 under the new
+ASC name, and the reference examples import from it; this tree stays on `@gluwa/usc-contracts`
+0.1.2 and `@gluwa/usc-sdk` 0.18.0 (there is no newer SDK and no `asc-sdk`). 0.1.2's
+`EvmV1Decoder` functions are `public`, which is why the decoder links as a deployed library at
+`0x5cab…df3F`; 0.2.1 made them `internal` and dropped the type-specific decoders Utuh never calls.
+The four it does call keep identical signatures in 0.2.1, and changing the pin changes bytecode
+and breaks the Blockscout and Sourcify match of the live deployment, so the rename lands on the
+`merkle-claims` branch, which redeploys anyway.
+
 Two of those lines are worth reading twice. Every append and every refutation goes through
 `verifyAndEmit` rather than its `view` twin, so **Creditcoin's own oracle dashboard is the record**
 — the network logged this project's work, not the other way round. And the **Creditcoin Mainnet**
@@ -402,6 +411,9 @@ unmarked. The guard was resting on a transaction nobody was obliged to send.
 `activeLineOf[subject]` removes the dependency. A subject has one line at a time; an overdue line is
 still `Active`, so it blocks by itself, and `markDefault` goes back to being bookkeeping. Each guard
 then has exactly one job — the slot says _you have a line open_, the count says _you failed one_.
+One consequence of bookkeeping is worth knowing: `draw` checks the limit and the slot, not the
+deadline, so an overdue line nobody has marked can still be drawn up to its limit. Exposure stays
+bounded by the limit, which is what the cap is for.
 
 The rule needs an exit, or it is a trap. An undrawn line cannot be settled (nothing was borrowed)
 and cannot be defaulted (`markDefault` refuses a `drawn` of zero, correctly — no money went out, so
@@ -862,6 +874,12 @@ test/
                             claim that the registry is reusable is checked rather than asserted
   RegistryInvariant.t.sol   four actors, random sequences, and the books have to balance after
                             every move — every wei escrowed, credited or burned, nothing else
+  CreditInvariant.t.sol     the same for the lender's money: balance equals `available`, funding
+                            minus withdrawals equals what is available plus what is out, one
+                            active line per subject, watermarks only advance
+  Audit.t.sol               every refusal that had no test, and the questions a reviewer asks
+                            first — reentrancy on each CTC path, exact window boundaries, one
+                            claim pair underwriting a line at every lender
   UtuhCredit.t.sol          deployment floors, control binding, scope identity, terms, liquidity
   Lifecycle.t.sol           the whole loop locally — claim, refute, finalize, underwrite, draw,
                             settle, default, cure — on real Sepolia transaction bytes, with only
@@ -955,8 +973,8 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 159 forge tests, five of them invariants (the run summary says 155:
-                            # forge folds the five invariants into one line; `forge test --list` counts 159)
+npm run test                # 193 forge tests, twelve of them invariants (`forge test --list` counts
+                            # 203 functions, one per invariant; the summary counts each invariant contract once)
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -1211,9 +1229,9 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-159 tests, 9 of them fuzzed and 5 of them invariants over random sequences. Everything below runs with
-`forge test`, no key and no network. (`forge test --list` counts 159; the run summary prints 155
-because forge reports the five invariants of one suite as a single test.)
+193 tests, 10 of them fuzzed and 12 of them invariants over random sequences. Everything below runs
+with `forge test`, no key and no network. (`forge test --list` counts 203 functions; the run summary
+prints 193 because forge reports each invariant contract as a single test.)
 
 Most of them cover the part that runs in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
@@ -1246,9 +1264,15 @@ never more; members stay strictly ascending; burned only grows. The first of tho
 the registry cannot afford to break — a bond that leaks is a deterrent that quietly stopped
 deterring — and it is now checked three thousand times a run rather than once per hand-written
 path. Its gas is random and is excluded from the snapshot for the same reason the fuzz tests are.
+`test/CreditInvariant.t.sol` does the same to the credit contract with seven more: its balance is
+exactly `available`; `funded − withdrawn == available + Σ drawn`; `drawn <= limit` on every line;
+one `Active` line per subject at most, and `activeLineOf` names it; `defaultsOf` equals the count
+of `Defaulted` lines; a drawn line has a deadline and owes something while an undrawn one has
+neither; and the two watermarks only advance.
 
 CI also refuses a push that drops line coverage under 90% or branch coverage under 70%; they read
-99.54% and 75.96% today, and the table below is those numbers.
+99.77% and 98.08% on 2026-09-13, and the table below is those numbers. The floors stay where they
+are as regression guards, not as a description of the coverage.
 
 The branch floor was added the day it was needed. Lines had been the only gate, and lines are easy
 to satisfy: 97.69% of them were covered while barely half the *decisions* had ever been taken, and
@@ -1297,29 +1321,36 @@ demonstration failing on a chain.
 The live scripts still run and still matter: `npm run e2e`, `npm run credit` and `npm run livetest`
 either pass on the real chain or they do not pass at all.
 
-Of the 52 errors these contracts can revert with, 21 are named by a unit test, 8 by the live suite,
-and 2 by another script in the loop. The remaining 21 are named nowhere. Most are behind `openLine`,
-which is behind `proveControl`, which is behind `0x0FD2`: reaching them means a real line on a real
-chain, so the live suite reaches what it can — a settled line refuses a draw, a second settlement
-and a default, and an unopened line refuses a draw — and the rest are reached only by the full
-loop's happy path.
+Of the 58 errors declared under `src/`, 57 are named by a unit test as of 2026-09-13 — on 09-08 it
+was 21 of 52, with 21 named nowhere, because most sit behind `openLine`, which is behind
+`proveControl`, which is behind `0x0FD2`. The Lifecycle fixture is what made them reachable on a
+laptop; `test/Audit.t.sol` is what reached them. The live suite still asserts what it can on the
+real chain — a settled line refuses a draw, a second settlement and a default; an unopened line
+refuses a draw.
 
-One of the 52 is not reachable at all: `EventScope.TopicOutOfRange` is declared and never thrown.
+The 58th is not reachable at all: `EventScope.TopicOutOfRange` is declared and never thrown.
 The range check it was written for lives in `UtuhCredit._requireTopic`, which reverts
 `BadSubjectTopic` and names the offending value. It stays declared rather than being deleted,
 because removing it changes 61 characters of the solc metadata CBOR — the executable code is
 identical, measured — and the contracts already verified on Blockscout were built from a source
 tree that has this line in it.
 
-`forge coverage` now reads:
+`forge coverage --no-match-test invariant --no-match-coverage "test|script" --report summary` — the
+CI command, forge 1.8.0 — read this on 2026-09-13 (the two interface files are omitted: they declare
+the precompile ABIs and hold no logic):
 
 | File                              | Lines            | Branches       | Functions       |
 | --------------------------------- | ---------------- | -------------- | --------------- |
-| `src/UtuhCredit.sol`              | 99.58% (237/238) | 67.80% (40/59) | 100.00% (35/35) |
-| `src/UtuhRegistry.sol`            | 99.36% (156/157) | 82.86% (29/35) | 100.00% (21/21) |
+| `src/UtuhCredit.sol`              | 99.58% (237/238) | 96.61% (57/59) | 100.00% (35/35) |
+| `src/UtuhRegistry.sol`            | 100.00% (157/157) | 100.00% (35/35) | 100.00% (21/21) |
 | `src/lib/EventScope.sol`          | 100.00% (25/25)  | 100.00% (7/7)  | 100.00% (6/6)   |
 | `src/source/SettlementLedger.sol` | 100.00% (8/8)    | 100.00% (3/3)  | 100.00% (2/2)   |
-| **Total**                         | **99.54%**       | **75.96%**     | **100.00%**     |
+| **Total**                         | **99.77%**       | **98.08%**     | **100.00%**     |
+
+Before the 2026-09-13 audit pass the same command read 99.54% of lines and 75.96% of branches, with
+`UtuhCredit` at 67.80% and `UtuhRegistry` at 82.86%. `test/Audit.t.sol` closed the gap: every
+refusal in `openLine`, `draw`, `settle`, `cure`, `closeLine`, `markDefault`, `appendBatch` and
+`refute` now has a test that makes it fire.
 
 It read 9.6%, then 47%, then 96%, and the sentence that followed the first of those — that everything
 reachable without a precompile was covered — was not true when it was written. Branches were 58%,
@@ -1332,8 +1363,9 @@ including both arms where the Block Prover says no — the answer the entire des
 The one that needed more than a test was `TransactionFailedOnSource`. Inclusion is not success, and
 saying so needs bytes that fail: `test/fixtures` now carries a real Ethereum mainnet transaction
 that reverted, block 25,926,178 index 96, fetched from the same hosted Proof Builder a claimant
-uses. What is still uncovered is mostly arithmetic arms and the transfer-refused path, which needs
-a payee that rejects ether and a credited balance to refuse.
+uses. What is still uncovered is one line: `revert ClaimAlreadySpent` in `_applyRepayment`, which
+cannot be reached because the `settledThrough` watermark refuses any spent repayment claim first —
+defence in depth, and `test_aCuredRepaymentClaimCannotBeSpentAgain` documents that it is.
 
 `npm run puretest` is the half of that suite which needs neither: 46 assertions about classifiers,
 the payload reader, the gas model, and the difference between a prover saying "absent" and a prover
@@ -1351,7 +1383,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 159 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 193 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings** across 10 contracts and 97 detectors, which is only worth stating
 alongside what it was allowed to look for.
 
@@ -1395,10 +1427,13 @@ review that happens on its own schedule.
 Halmos is the third opinion and the only one that is not sampling. `npm run symbolic` proves the
 three properties of the ordering key over *every* input rather than 256 of them — that the height
 comes back out of a key, that two distinct positions cannot collide into one, and that key order
-is chronological order — and `npm run symbolic:deep` does the same for the money roundings. Three
-passed, no counterexamples, in about a second; the deep suite takes minutes, so CI runs it daily
-rather than on every push. The one rounding the solver could not decide is written down as
-undecided in `CreditRounding.symbolic.t.sol` rather than quietly dropped.
+is chronological order — and `npm run symbolic:deep` does the same for the money roundings. All
+five checks pass with no counterexample: the three key properties in under a second, the two
+rounding proofs in about five minutes (`check_backingIsNeverShortOfTheLimit` alone took 303 s on
+2026-09-13), which is why CI runs the deep suite daily rather than on every push. The one rounding
+property the solver could not decide — that `backingFor` never overshoots by more than a unit — is
+written down as undecided in `CreditRounding.symbolic.t.sol` and left to the fuzzer, rather than
+quietly dropped.
 
 solc also suggests two functions could be `pure`. They could not: both read through a `storage`
 pointer parameter, which the mutability checker does not track. Accepting the suggestion compiles
@@ -1534,6 +1569,14 @@ twin, Utuh's use of the oracle is visible from outside this repository: Creditco
 lists each verification against its source-chain height and the Creditcoin block it landed in. The
 Sepolia log there is where the full-flow run's settlements and its repayment show up, minutes after
 they happen, recorded by the network rather than by us.
+
+The same indexer counts it. Its `transactionVerifieds` table is every `TransactionVerified` event
+`0x0FD2` has ever emitted, and on 2026-09-13 it held 139,795 rows for CC3 Testnet; 224 of them were
+verified for Utuh's contracts — 202 through the mainnet-sourced registry, 20 through the
+Sepolia-sourced one, 2 through its credit contract, none through the mainnet-sourced credit,
+which `npm run credit` never writes to. Method: Blockscout's `/api/v2/addresses/{addr}/transactions?filter=to`
+for the hashes, then `transactionVerifieds(filter:{txHash:{in:[…]}}){totalCount}` on the GraphQL
+indexer. Spot check: `appendBatch` `0x5ccfb529…25fb25` has three rows there, and three members.
 
 ## Known limits
 
@@ -1712,6 +1755,19 @@ the same question` — as a third verdict beside ok and FAIL: useful to the unio
   the ones somebody is about to underwrite. For a general-purpose fact registry built on this
   layer it would not be, and such a registry would have to find its own reason for someone to
   watch. That is the boundary of what the bond buys.
+- **A finalized claim is not reserved by the lender that relies on it.** The registry's `isUsable`
+  is stateless, and `claimSpent` and `underwrittenThrough` belong to one `UtuhCredit` deployment,
+  so the same volume-and-clean pair opens a full line at every lender that accepts it. Each
+  lender's cap holds for its own line — `BOND_MULTIPLE` times the enforceable loss — but the
+  burned half of the bond is one amount, so aggregate exposure across N lenders on one bond is
+  N times the cap while a liar loses the burn once. A registry-level reservation closes it and is
+  an ABI change, so it is on the roadmap rather than in the deployed registries; a test pins the
+  behaviour so nobody rediscovers it (`test_oneClaimPairUnderwritesALineAtEveryLender`).
+- **The lender's repayment window is not checked against the registry's challenge floor.** A
+  repayment claim needs at least `MIN_CHALLENGE_WINDOW` blocks after sealing before it can be
+  finalized, so a lender that deploys with `repayWindowBlocks` below that floor plus the time to
+  build a claim has a line nobody can repay in time. It is the lender's own choice and is readable
+  on-chain before any draw; the published policy is 5760 blocks against a floor of 25.
 - Binding an address costs the borrower one source-chain transaction. That is a real onboarding
   step, and there is no way around it that does not reintroduce the hole it closes. `npm run credit`
   therefore stops at `SubjectNotControlled` when pointed at a stranger's history — the refusal is

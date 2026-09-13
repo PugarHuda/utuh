@@ -174,6 +174,35 @@ claimant who sweeps with a single RPC is betting their bond on that node having 
 log, and a missed event is not a smaller claim — it is an incomplete one, and being slashed for it
 looks exactly like lying.
 
+## Installing it
+
+Checked end to end on 2026-09-13 with forge 1.8.0, from an empty directory:
+
+```sh
+forge init gate && cd gate
+forge install PugarHuda/utuh --no-git
+npm i @gluwa/usc-contracts@0.1.2
+```
+
+`remappings.txt`:
+
+```
+utuh/=lib/utuh/src/
+@gluwa/usc-contracts/=node_modules/@gluwa/usc-contracts/
+forge-std/=lib/forge-std/src/
+```
+
+`foundry.toml` needs `solc = "0.8.28"`, `optimizer = true`, `optimizer_runs = 200`, `via_ir = false`
+— the settings the deployed contracts were built with. A twelve-line consumer that imports
+`utuh/UtuhRegistry.sol` and calls `claim`, `memberCount` and `isUsable` then compiles to 1,488
+bytes of bytecode with no link references: your contract never touches `EvmV1Decoder`, so it does
+not need the deployed library. solc prints a stack-depth *note* on `_extractLog` while compiling
+the registry; it is a lint, not an error.
+
+The pin is `0.1.2` on purpose. Gluwa's newer `@gluwa/asc-contracts` 0.2.1 made the decoder's
+functions `internal`, and the published registries link the `public` 0.1.2 decoder as a library;
+the interfaces your contract reads are the same in both.
+
 ## Addresses
 
 CC3 Testnet, chain id 102031. The deployed registries are listed in the
