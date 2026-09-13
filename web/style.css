@@ -1,21 +1,18 @@
-/* Utuh console — the contact sheet.
+/* Utuh — the working paper.
  *
- * A proof sheet prints every frame the roll holds, in order, each one numbered along the film's
- * edge. You read it to find what is *not* there: the frame that was never printed leaves a numbered
- * gap, and the gap is the finding. That is this product's whole mechanism made visual, so the page
- * is built as a strip — a perforated film edge running down the side, each pane a frame carrying
- * its own rebate number, and the one accent on the sheet is the chinagraph pencil an editor marks
- * frames with.
+ * Auditing is the one discipline with a formal name for what this product does. An auditor tests
+ * *existence* by vouching: pick an entry in the ledger, find the source document. They test
+ * *completeness* by tracing the other way: pick a source event, find it in the ledger. An
+ * inclusion proof vouches. Utuh traces. So the page is the auditor's working paper — the ruled
+ * schedule on eye-ease green stock, typed figures, two pencils (blue for a tick, red for an
+ * exception), a footed total under a double rule, a sign-off block, and a legend that says what
+ * every mark means. The finding on a working paper is the row that did not tick. Here, that row is
+ * the event a claim left out.
  *
- * Operate mode: one family, a fixed rem scale, restrained colour, density where the data wants it.
- * The world lives in the strip, the numbering, the edge printing and the mark — never in ornament
- * over the data.
+ * Landing is Persuade, console is Operate; one world, one file. Light is the authored default:
+ * the paper is read at a desk. Dark is the same schedule under a banker's green-shaded lamp.
  */
 
-/* Archivo, variable on both axes. Self-hosted rather than linked, because a page whose argument is
- * that it needs no server should not open a connection to a font CDN to render its own name. The
- * width axis is what earns the file: 68% is the condensed voice of film-edge printing, 100% is the
- * workhorse the interface is set in, and both come out of one 88 KB download. */
 @font-face {
   font-family: 'Archivo';
   src: url('./fonts/archivo.woff2') format('woff2-variations');
@@ -26,59 +23,66 @@
 }
 
 :root {
-  /* The scene is a darkroom, not a category. Contact sheets are read under a loupe on a lit
-     surface with the room down, and this page's own reader is a watcher scanning block ranges at
-     night. So the ground is a warm gelatin black and the frames are the lit part. */
-  --ground: #100e0c;
-  --sheet: #17140f;
-  --frame: #201c17;
-  --raise: #272219;
-  --rebate: #342d24;
-  --ink: #efe8dc;
-  --dim: #a2968a;
-  --accent: #ff6a2c;
-  --accent-quiet: #b8471a;
-  --good: #8fbf6f;
-  --bad: #ff5f52;
-  /* What sits ON the accent. In the dark scene the ground itself is the right ink for it; in the
-     light one the paper is only 3.8:1 against the chinagraph, so text there goes near-white. */
-  --on-accent: var(--ground);
+  /* Eye-ease green ledger stock. Not cream: accountants chose this green because figures are read
+     on it for hours, and it is the one paper colour the audience already associates with a
+     schedule of numbers that has to foot. */
+  --paper: #dfe7d5;
+  --sheet: #ebf0e3;
+  --well: #d1dbc6;
+  --rule: #b3c4ab;
+  --rule-strong: #5f7a5e;
+  --margin: #c43a2b;
+  --ink: #16201a;
+  --ink-soft: #445244;
+  --red: #b52d1d;
+  --red-soft: #e9c7c1;
+  --blue: #234f9e;
+  --blue-soft: #cbd7ec;
+  --on-blue: #f4f7ee;
+  --on-red: #f8efec;
+  --good: #2f6b3a;
+  --bad: var(--red);
 
   --face: 'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --data: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --data: ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
 
-  /* Fixed rem steps at ~1.16, per Operate. Nothing here is fluid: the page is read at a desk. */
   --t-edge: 0.688rem;
   --t-small: 0.813rem;
   --t-data: 0.844rem;
   --t-body: 0.938rem;
-  --t-lead: 1.063rem;
-  --t-frame: 1.188rem;
-  --t-title: 2rem;
+  --t-lead: 1.125rem;
+  --t-h2: 1.25rem;
+  --t-h1: 1.5rem;
+  --t-display: clamp(2.25rem, 1.4rem + 2.8vw, 4rem);
 
-  --rail: 2.75rem;
+  --measure: 66ch;
   --gap: 1.5rem;
-  --radius: 3px;
+  --pad: 1.25rem;
+  --radius: 2px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
-  color-scheme: dark light;
+  color-scheme: light dark;
 }
 
-@media (prefers-color-scheme: light) {
+@media (prefers-color-scheme: dark) {
   :root {
-    /* The same sheet on a light box rather than in the dark: paper warms, ink stays photographic,
-       and the chinagraph darkens enough to hold 4.5:1 on the frame it marks. */
-    --ground: #ddd7cc;
-    --sheet: #ebe6db;
-    --frame: #f7f4ed;
-    --raise: #fffdf8;
-    --rebate: #cdc4b4;
-    --ink: #17130f;
-    --dim: #635a4e;
-    --accent: #bc3f08;
-    --accent-quiet: #98330a;
-    --good: #3f6b28;
-    --bad: #b3271b;
-    --on-accent: #fffdf8;
+    /* The same paper under a banker's lamp: the ground goes to bottle-black with the green still
+       in it, the ruling dims, the two pencils brighten enough to hold 4.5:1 on the page. */
+    --paper: #0f1512;
+    --sheet: #151d18;
+    --well: #0a0f0c;
+    --rule: #28372d;
+    --rule-strong: #6e8a72;
+    --margin: #e25a49;
+    --ink: #e6ede3;
+    --ink-soft: #a3b4a5;
+    --red: #ff7a68;
+    --red-soft: #3d1d18;
+    --blue: #8fb3ff;
+    --blue-soft: #1a2a48;
+    --on-blue: #0f1512;
+    --on-red: #0f1512;
+    --good: #8fca8f;
   }
 }
 
@@ -87,13 +91,15 @@
 }
 
 html {
-  background: var(--ground);
+  background: var(--paper);
+  scrollbar-color: var(--rule-strong) transparent;
+  scrollbar-width: thin;
 }
 
 body {
   margin: 0;
-  padding: 0 1.5rem 5rem;
-  background: var(--ground);
+  padding: 0 1.5rem 4rem;
+  background: var(--paper);
   color: var(--ink);
   font-family: var(--face);
   font-size: var(--t-body);
@@ -102,16 +108,9 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* The surfaces nobody draws still belong to the design. A page that leaves the caret, the
-   selection and the scrollbar at their browser defaults was assembled rather than built. */
 ::selection {
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
-:root {
-  scrollbar-color: var(--rebate) transparent;
-  scrollbar-width: thin;
+  background: var(--blue);
+  color: var(--on-blue);
 }
 
 ::-webkit-scrollbar {
@@ -124,37 +123,70 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--rebate);
+  background: var(--rule-strong);
   border-radius: 999px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-quiet);
-}
-
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--blue);
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: var(--radius);
 }
 
 input,
 select,
 textarea {
-  caret-color: var(--accent);
+  caret-color: var(--blue);
 }
 
-/* Edge printing: the manufacturer's mark down the side of a film strip. Condensed, uppercase,
-   widely tracked, small. Every label on this page that is a marking rather than a sentence. */
-.edge,
+a {
+  color: var(--blue);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+code {
+  font-family: var(--data);
+  font-size: 0.92em;
+}
+
+/* Pre-printed form labels: what the stationer printed on the schedule before anyone wrote on it.
+   Semi-condensed, small caps, tracked. A marking, never a sentence. */
+.print,
 th,
-.chip,
-legend {
-  font-stretch: 68%;
+legend,
+.chip {
+  font-stretch: 84%;
   text-transform: uppercase;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.1em;
   font-size: var(--t-edge);
   font-weight: 600;
+  color: var(--ink-soft);
+}
+
+/* The two pencils. Marks are drawn, never typed. */
+.mark {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+  margin-right: 0.35em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tick {
+  color: var(--blue);
+}
+
+.exc {
+  color: var(--red);
 }
 
 .skip a {
@@ -162,8 +194,8 @@ legend {
   left: -200vw;
   top: 0.5rem;
   padding: 0.45rem 0.9rem;
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--blue);
+  color: var(--on-blue);
   border-radius: var(--radius);
   font-weight: 600;
   z-index: 20;
@@ -174,50 +206,61 @@ legend {
   left: 1.5rem;
 }
 
-/* ---------------------------------------------------------------- the sheet's head */
+/* ---------------------------------------------------------------- page head */
 
-header {
+.head {
   max-width: 1180px;
   margin: 0 auto;
-  padding: 2.5rem 0 1.25rem;
+  padding: 1.25rem 0 0.9rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem;
-  align-items: flex-end;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--rebate);
+  border-bottom: 1px solid var(--rule-strong);
 }
 
-h1 {
-  margin: 0;
-  font-size: var(--t-title);
+.wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  color: var(--ink);
+  text-decoration: none;
   font-weight: 700;
-  font-stretch: 84%;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  font-stretch: 90%;
+  font-size: var(--t-h1);
+  letter-spacing: 0.01em;
   line-height: 1;
 }
 
-/* The roll's own edge marking, set beside the name the way a film brand sits beside its frame
-   count. It says what the word means, which is the one piece of poetry the product was given. */
-h1::after {
-  content: '· whole, intact, nothing missing';
-  display: block;
-  margin-top: 0.5rem;
+.wordmark small {
   font-size: var(--t-edge);
-  font-stretch: 68%;
   font-weight: 500;
-  letter-spacing: 0.13em;
-  color: var(--dim);
+  font-stretch: 84%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
 }
 
-.sub {
-  margin: 0.75rem 0 0;
-  max-width: 62ch;
-  color: var(--dim);
-  font-size: var(--t-lead);
-  line-height: 1.5;
-  text-wrap: pretty;
+.head nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.1rem;
+  align-items: center;
+  font-size: var(--t-small);
+}
+
+.head nav a {
+  color: var(--ink);
+  text-decoration: none;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid transparent;
+  transition: border-color 160ms var(--ease);
+}
+
+.head nav a:hover,
+.head nav a[aria-current] {
+  border-bottom-color: var(--blue);
 }
 
 .chip-row {
@@ -228,10 +271,9 @@ h1::after {
 }
 
 .chip {
-  border: 1px solid var(--rebate);
+  border: 1px solid var(--rule);
   border-radius: var(--radius);
   padding: 0.3rem 0.6rem;
-  color: var(--dim);
   background: var(--sheet);
 }
 
@@ -239,106 +281,109 @@ h1::after {
   color: var(--ink);
   font-stretch: 100%;
   letter-spacing: 0;
+  text-transform: none;
   font-size: var(--t-data);
   font-family: var(--data);
+  font-weight: 500;
   margin-left: 0.4rem;
 }
 
-/* ---------------------------------------------------------------- the strip */
+/* The console's own header row: the schedule's identification block. */
+.ident {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 1.25rem 0 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem 2rem;
+  align-items: end;
+}
+
+.ident h1 {
+  margin: 0;
+  font-size: var(--t-h1);
+  font-weight: 700;
+  font-stretch: 92%;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.ident .sub {
+  margin: 0.5rem 0 0;
+  max-width: var(--measure);
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+/* ---------------------------------------------------------------- the schedules */
 
 main {
   max-width: 1180px;
   margin: 0 auto;
   padding-top: var(--gap);
   display: grid;
-  grid-template-columns: var(--rail) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--gap);
   position: relative;
-}
-
-/* The perforated film edge. Holes are punched out of the rebate strip in the ground's own colour,
-   so the rail reads as material with something taken out of it rather than as a dotted border.
-   Positioned rather than placed in the grid: `grid-row: 1 / -1` counts lines of the *explicit*
-   grid, and these rows are implicit, so a grid-placed rail collapses to the height of one frame. */
-main::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: var(--gap);
-  bottom: 0;
-  width: var(--rail);
-  border-radius: var(--radius);
-  background:
-    repeating-linear-gradient(to bottom, transparent 0 9px, var(--ground) 9px 25px, transparent 25px 34px) no-repeat,
-    var(--rebate);
-  background-size:
-    14px 100%,
-    100% 100%;
-  background-position:
-    center top,
-    0 0;
+  /* The ledger's red margin rule runs the height of the paper, one device pixel, left of the
+     figures. Everything written sits to its right; the working-paper references sit on it. */
+  padding-left: 1.25rem;
+  border-left: 1px solid var(--margin);
 }
 
 section {
-  grid-column: 2;
   position: relative;
-  background: var(--frame);
-  border: 1px solid var(--rebate);
+  background: var(--sheet);
+  border: 1px solid var(--rule);
   border-radius: var(--radius);
-  padding: 1.25rem 1.4rem 1.4rem;
+  padding: var(--pad) 1.4rem 1.4rem;
   min-width: 0;
-  transition:
-    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    background-color 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: border-color 180ms var(--ease);
 }
 
-/* The rebate number for this frame, printed on the film edge beside it. On a contact sheet this
-   is how you know which frame is missing — the numbering is the mechanism, not decoration. */
-section::before {
-  content: attr(data-frame);
-  position: absolute;
-  top: 1.3rem;
-  /* Back out both the rail and the grid gap, so the number prints on the film edge itself rather
-     than bulging off its inner side. */
-  left: calc(-1 * (var(--rail) + var(--gap)));
-  width: var(--rail);
-  text-align: center;
-  font-stretch: 68%;
-  font-size: var(--t-edge);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--dim);
-  background: var(--ground);
-  padding: 0.35rem 0;
-  transition: color 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* The authored moment, and the only one: putting a frame in play marks its number in chinagraph,
-   the way an editor rings the frame they are going to print. */
-section:hover,
 section:focus-within {
-  border-color: var(--accent-quiet);
-  background: var(--raise);
+  border-color: var(--rule-strong);
 }
 
-section:hover::before,
-section:focus-within::before {
-  color: var(--accent);
+/* The working-paper reference. Every schedule in an audit file carries one so the legend and the
+   cross-references can name it — the sequence is information, not decoration. Set on the red
+   margin rule, where a preparer writes it. */
+section[data-frame]::before {
+  content: 'W/P ' attr(data-frame);
+  position: absolute;
+  top: -1px;
+  left: calc(-1.25rem - 1px);
+  transform: translateX(-100%);
+  padding: 0.35rem 0.5rem 0.3rem;
+  font-size: var(--t-edge);
+  font-weight: 600;
+  font-stretch: 84%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--margin);
+  white-space: nowrap;
 }
 
 h2 {
-  margin: 0 0 0.5rem;
-  font-size: var(--t-frame);
+  margin: 0 0 0.35rem;
+  font-size: var(--t-h2);
   font-weight: 700;
-  font-stretch: 88%;
-  letter-spacing: 0.005em;
+  font-stretch: 92%;
+  line-height: 1.2;
   text-wrap: balance;
 }
 
+h3 {
+  margin: 1.25rem 0 0.4rem;
+  font-size: var(--t-body);
+  font-weight: 700;
+  font-stretch: 92%;
+}
+
 .note {
-  color: var(--dim);
+  color: var(--ink-soft);
   margin: 0.35rem 0 1rem;
-  max-width: 74ch;
+  max-width: var(--measure);
   text-wrap: pretty;
 }
 
@@ -353,30 +398,41 @@ h2 {
   min-width: 0;
 }
 
-/* ---------------------------------------------------------------- data */
+/* ---------------------------------------------------------------- the columns */
 
 table {
   border-collapse: collapse;
   width: 100%;
   font-size: var(--t-data);
+  font-family: var(--data);
 }
 
 th,
 td {
   text-align: left;
-  padding: 0.5rem 0.9rem 0.5rem 0;
-  border-bottom: 1px solid var(--rebate);
+  padding: 0.45rem 0.8rem;
+  border-bottom: 1px solid var(--rule);
+  border-right: 1px solid var(--rule);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  vertical-align: top;
+}
+
+th:first-child,
+td:first-child {
+  padding-left: 0.35rem;
+}
+
+th:last-child,
+td:last-child {
+  border-right: none;
+  padding-right: 0.35rem;
 }
 
 th {
-  color: var(--dim);
-  border-bottom-color: var(--dim);
-}
-
-tbody tr:last-child td {
-  border-bottom: none;
+  font-family: var(--face);
+  border-bottom: 1px solid var(--rule-strong);
+  vertical-align: bottom;
 }
 
 tbody tr {
@@ -384,41 +440,98 @@ tbody tr {
 }
 
 tbody tr:hover {
-  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  background: color-mix(in oklab, var(--blue) 7%, transparent);
 }
 
-/* A refuted claim is the struck frame: the one the editor crossed out because it did not hold.
-   The rule is drawn through the row rather than the row being merely tinted, because the point of
-   a contact sheet is that a rejected frame stays on the sheet, visibly rejected. */
+/* The exception. A row the tracing did not tick is struck in red pencil and stays on the
+   schedule — an auditor never erases a finding. The id is left legible so the cross-reference
+   still works. */
 tbody tr.struck td {
-  color: var(--dim);
+  color: var(--ink-soft);
   text-decoration: line-through;
-  text-decoration-color: var(--bad);
+  text-decoration-color: var(--red);
   text-decoration-thickness: 1.5px;
 }
 
 tbody tr.struck td:first-child {
-  color: var(--bad);
+  color: var(--red);
   text-decoration: none;
   font-weight: 700;
 }
 
 a.addr {
-  color: var(--accent);
+  color: var(--blue);
   text-decoration: none;
   font-family: var(--data);
-  text-underline-offset: 3px;
-  text-decoration-thickness: 1px;
 }
 
 a.addr:hover {
   text-decoration: underline;
 }
 
-code {
+/* ---------------------------------------------------------------- footed totals */
+
+.tally {
+  /* Definite width on purpose: an auto-fit grid sized to fit-content by auto margins takes every
+     column it can name and overflows a phone by five hundred pixels. */
+  width: 100%;
+  max-width: 1180px;
+  margin: var(--gap) auto 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0 var(--gap);
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: 3px double var(--ink);
+}
+
+.tally .t {
+  padding: 0.7rem 0 0.8rem;
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 0.1rem;
+}
+
+.tally .t b {
   font-family: var(--data);
-  font-size: 0.92em;
+  font-weight: 500;
+  font-size: 1.75rem;
+  line-height: 1.1;
   color: var(--ink);
+}
+
+.tally .t span {
+  font-size: var(--t-small);
+  color: var(--ink-soft);
+  line-height: 1.35;
+}
+
+.tally .struck-num b {
+  color: var(--red);
+}
+
+.tally[data-ready='false'] .t b {
+  color: var(--ink-soft);
+}
+
+.invitation {
+  max-width: 1180px;
+  margin: 0.9rem auto 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.55rem 0.8rem;
+}
+
+.invitation .note {
+  color: var(--ink-soft);
+  font-size: var(--t-small);
+  max-width: 62ch;
+  margin: 0;
+}
+
+.invitation a.act {
+  text-decoration: none;
+  display: inline-block;
 }
 
 /* ---------------------------------------------------------------- controls */
@@ -428,6 +541,7 @@ code {
   gap: 0.6rem;
   flex-wrap: wrap;
   margin-bottom: 1rem;
+  align-items: center;
 }
 
 select,
@@ -436,11 +550,12 @@ button.act,
 a.act {
   font-family: var(--face);
   font-size: var(--t-small);
-  border: 1px solid var(--rebate);
+  border: 1px solid var(--rule-strong);
   background: var(--sheet);
   color: var(--ink);
   border-radius: var(--radius);
   padding: 0.45rem 0.85rem;
+  line-height: 1.3;
   transition:
     border-color 150ms ease-out,
     color 150ms ease-out,
@@ -459,46 +574,64 @@ input {
   font-family: var(--data);
 }
 
+/* The rubber stamp: a bordered uppercase block in one pencil's ink. Blue is an action; red is a
+   finding, and only the refutation and the default-marker wear it. */
 button.act,
 a.act {
-  font-stretch: 78%;
+  font-stretch: 88%;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.08em;
   font-weight: 700;
+  border: 1.5px solid var(--blue);
+  color: var(--blue);
+  background: transparent;
+  text-decoration: none;
 }
 
 button.act:hover:not(:disabled),
-a.act:hover,
+a.act:hover {
+  background: var(--blue-soft);
+}
+
+button.act:active:not(:disabled),
+a.act:active {
+  background: var(--blue);
+  color: var(--on-blue);
+}
+
+button.act.primary,
+a.act.primary {
+  background: var(--blue);
+  color: var(--on-blue);
+}
+
+button.act.primary:hover:not(:disabled),
+a.act.primary:hover {
+  background: color-mix(in oklab, var(--blue) 85%, var(--ink));
+}
+
 select:hover,
 input:hover {
-  border-color: var(--accent);
-}
-
-button.act:hover:not(:disabled) {
-  color: var(--accent);
-  background: var(--raise);
-}
-
-button.act:active:not(:disabled) {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: var(--accent);
+  border-color: var(--blue);
 }
 
 button.act:disabled {
-  opacity: 0.45;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
+button.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+
 button.danger:hover:not(:disabled) {
-  border-color: var(--bad);
-  color: var(--bad);
+  background: var(--red-soft);
 }
 
 button.danger:active:not(:disabled) {
-  background: var(--bad);
-  color: var(--on-accent);
-  border-color: var(--bad);
+  background: var(--red);
+  color: var(--on-red);
 }
 
 .actions {
@@ -506,16 +639,17 @@ button.danger:active:not(:disabled) {
   gap: 0.5rem;
   flex-wrap: wrap;
   margin-top: 1rem;
+  align-items: center;
 }
 
-/* ---------------------------------------------------------------- log */
+/* ---------------------------------------------------------------- the log */
 
 .log {
   margin-top: 1rem;
   max-height: 22rem;
   overflow-y: auto;
-  background: var(--ground);
-  border: 1px solid var(--rebate);
+  background: var(--well);
+  border: 1px solid var(--rule);
   border-radius: var(--radius);
   padding: 0.75rem 0.9rem;
   font-family: var(--data);
@@ -525,12 +659,8 @@ button.danger:active:not(:disabled) {
   overflow-wrap: anywhere;
 }
 
-.log:empty::before,
-#borrow-log:empty::before {
-  color: var(--dim);
-}
-
 .log:empty::before {
+  color: var(--ink-soft);
   content: 'nothing swept yet';
 }
 
@@ -545,11 +675,11 @@ button.danger:active:not(:disabled) {
 /* ---------------------------------------------------------------- borrow steps */
 
 .step {
-  border: 1px solid var(--rebate);
+  border: 1px solid var(--rule);
   border-radius: var(--radius);
   padding: 0.85rem 1rem;
   margin-bottom: 0.75rem;
-  background: var(--sheet);
+  background: var(--paper);
 }
 
 .step.done {
@@ -560,14 +690,14 @@ button.danger:active:not(:disabled) {
   margin: 0 0 0.4rem;
   font-size: var(--t-body);
   font-weight: 700;
-  font-stretch: 88%;
+  font-stretch: 92%;
 }
 
 .calldata {
   margin: 0.5rem 0;
   padding: 0.6rem 0.8rem;
-  background: var(--ground);
-  border: 1px solid var(--rebate);
+  background: var(--well);
+  border: 1px solid var(--rule);
   border-radius: var(--radius);
   font-family: var(--data);
   font-size: var(--t-data);
@@ -596,10 +726,10 @@ button.danger:active:not(:disabled) {
 }
 
 #boot-error:not(:empty) {
-  border: 1px solid var(--bad);
+  border: 1px solid var(--red);
   border-radius: var(--radius);
   padding: 0.75rem 1rem;
-  background: color-mix(in oklab, var(--bad) 12%, var(--frame));
+  background: var(--red-soft);
   color: var(--ink);
 }
 
@@ -607,50 +737,491 @@ footer {
   max-width: 1180px;
   margin: 2.5rem auto 0;
   padding-top: 1.25rem;
-  border-top: 1px solid var(--rebate);
-  color: var(--dim);
+  border-top: 1px solid var(--rule-strong);
+  color: var(--ink-soft);
   font-size: var(--t-small);
-  max-inline-size: 78ch;
+}
+
+footer p {
+  max-width: 78ch;
+  margin: 0 0 0.5rem;
+}
+
+/* ================================================================ landing */
+
+.landing main {
+  max-width: 1240px;
+  border-left: none;
+  padding-left: 0;
+  gap: 0;
+}
+
+.landing .head {
+  max-width: 1240px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 6fr);
+  gap: 2rem 3.5rem;
+  align-items: start;
+  padding: 3rem 0 2.5rem;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: var(--t-display);
+  line-height: 1.02;
+  font-weight: 600;
+  font-stretch: 90%;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  max-width: 18ch;
+}
+
+.hero h1 em {
+  font-style: normal;
+  color: var(--red);
+}
+
+.hero .lead {
+  margin: 1.4rem 0 0;
+  font-size: var(--t-lead);
+  line-height: 1.5;
+  max-width: 58ch;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
+.hero .lead + .lead {
+  margin-top: 0.8rem;
+  color: var(--ink-soft);
+  font-size: var(--t-body);
+}
+
+.hero .actions {
+  margin-top: 1.6rem;
+  gap: 0.75rem 1.25rem;
+}
+
+.hero .actions a:not(.act) {
+  font-size: var(--t-small);
+}
+
+/* A schedule: one claim as the auditor would lay it out. Header block, ruled body, legend. */
+.schedule {
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.schedule header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem 1rem;
+  padding: 0.85rem 1rem 0.7rem;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.schedule header h2,
+.schedule header h3 {
+  margin: 0;
+  font-size: var(--t-body);
+  font-weight: 700;
+  font-stretch: 92%;
+  line-height: 1.3;
+}
+
+.schedule header .ref {
+  font-family: var(--data);
+  font-size: var(--t-data);
+  color: var(--ink-soft);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.schedule header .print {
+  grid-column: 1 / -1;
+  font-weight: 500;
+}
+
+.schedule .row {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: 0 1rem;
+  padding: 0.35rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--t-data);
+  font-family: var(--data);
+}
+
+.schedule .row dt {
+  font-family: var(--face);
+  color: var(--ink-soft);
+  font-size: var(--t-small);
+}
+
+.schedule .row dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.schedule dl {
+  margin: 0;
+}
+
+/* The range strip: the claim's block range drawn to scale on a ruled axis, every member a blue
+   tick, the omitted event a red circle in the gap. Rendered from the chain, never drawn by hand. */
+.strip {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 0.75rem 1rem 0.25rem;
+}
+
+.strip .axis {
+  stroke: var(--rule-strong);
+  stroke-width: 1;
+}
+
+.strip .grid {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+.strip .member {
+  stroke: var(--blue);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.strip .omitted {
+  stroke: var(--red);
+  stroke-width: 2;
+  fill: none;
+}
+
+.strip text {
+  font-family: var(--data);
+  font-size: 10px;
+  fill: var(--ink-soft);
+}
+
+.strip text.red {
+  fill: var(--red);
+  font-family: var(--face);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.schedule .finding {
+  margin: 0;
+  padding: 0.7rem 1rem 0.8rem;
+  border-top: 1px solid var(--rule);
+  font-size: var(--t-small);
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
+.schedule .finding b {
+  color: var(--red);
+}
+
+.schedule .finding a:not(.act) {
+  font-family: var(--data);
+  font-size: var(--t-data);
+}
+
+.schedule .finding a.act {
+  margin-top: 0.4rem;
+}
+
+.schedule .pending {
+  padding: 1rem;
+  color: var(--ink-soft);
+  font-size: var(--t-small);
+}
+
+.schedule .pending.bad {
+  color: var(--red);
+}
+
+/* Section rhythm on the landing. More space above a heading than below it. */
+.landing section.plain {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--rule-strong);
+  border-radius: 0;
+  padding: 2.25rem 0 2.5rem;
+}
+
+.landing section.plain h2 {
+  font-size: 1.5rem;
+  margin: 0 0 0.35rem;
+}
+
+.landing section.plain > .note {
+  margin-bottom: 1.6rem;
+}
+
+.two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+
+/* The audit programme: three steps, numbered because the order is the mechanism. */
+.programme {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0 var(--gap);
+  border-top: 1px solid var(--rule);
+}
+
+.programme li {
+  counter-increment: step;
+  padding: 1rem 0 1.25rem;
+  border-bottom: 1px solid var(--rule);
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  gap: 0.5rem 0.75rem;
+}
+
+.programme li::before {
+  content: counter(step) '.';
+  font-family: var(--data);
+  font-size: var(--t-lead);
+  color: var(--ink-soft);
+  line-height: 1.3;
+}
+
+.programme h3 {
+  margin: 0;
+  font-size: var(--t-lead);
+  line-height: 1.3;
+}
+
+.programme p {
+  grid-column: 2;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: var(--t-small);
+  text-wrap: pretty;
+}
+
+.programme p b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* The sign-off block. Three initials boxes on a working paper; three roles at this console. */
+.signoff {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.signoff > div {
+  padding: 0.9rem 1rem 1.1rem;
+  border-right: 1px solid var(--rule);
+  display: grid;
+  gap: 0.35rem;
+  align-content: start;
+}
+
+.signoff > div:last-child {
+  border-right: none;
+}
+
+.signoff h3 {
+  margin: 0;
+  font-size: var(--t-lead);
+  line-height: 1.25;
+}
+
+.signoff p {
+  margin: 0;
+  font-size: var(--t-small);
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.signoff p a {
+  color: var(--blue);
+}
+
+.signoff .print {
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--rule);
+  font-weight: 500;
+}
+
+.snippet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.5rem 0 0;
+}
+
+.snippet pre {
+  margin: 0;
+  padding: 0.55rem 0.85rem;
+  background: var(--well);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-family: var(--data);
+  font-size: var(--t-data);
+  color: var(--ink);
+}
+
+.snippet .print {
+  font-weight: 500;
+}
+
+/* The legend of marks. A working paper that leaves a tick undefined is a working paper nobody
+   else can review, so every mark on this page is explained once, here. */
+.legend {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 0.5rem var(--gap);
+  font-size: var(--t-small);
+  color: var(--ink-soft);
+}
+
+.legend div {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.legend dt {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.legend dd {
+  margin: 0;
+}
+
+.legend .mark {
+  width: 1.1em;
+  height: 1.1em;
+  margin: 0;
+}
+
+.landing .addresses {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 0.25rem var(--gap);
+  font-size: var(--t-small);
+}
+
+.landing .addresses div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.landing .addresses .print {
+  font-weight: 500;
+}
+
+.landing footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.landing footer nav a {
+  color: var(--ink);
+}
+
+/* One authored moment: the exception is drawn, not shown. A red pencil circles the omitted event
+   once the chain has answered — from an already-visible default, so a reader without motion sees
+   the finished mark. */
+@media (prefers-reduced-motion: no-preference) {
+  .strip .omitted.drawn {
+    stroke-dasharray: 60;
+    stroke-dashoffset: 60;
+    animation: pencil 700ms var(--ease) 250ms forwards;
+  }
+}
+
+@keyframes pencil {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 /* ---------------------------------------------------------------- narrow */
 
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: 2rem;
+  }
+}
+
 @media (max-width: 720px) {
   body {
-    padding: 0 1rem 4rem;
+    padding: 0 1rem 3rem;
   }
 
   main {
+    padding-left: 0;
+    border-left: none;
+  }
+
+  /* No margin to write on, so the working-paper reference moves into the schedule's corner. */
+  section[data-frame]::before {
+    left: auto;
+    right: 0;
+    transform: none;
+    padding: 0.2rem 0.6rem;
+    border-left: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    color: var(--margin);
+  }
+
+  section[data-frame] {
+    padding-top: 1.75rem;
+  }
+
+  .ident {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  /* No room for a rail beside the strip, so the perforation runs along the top of each frame and
-     the rebate number sits in the frame's own corner. Still edge printing; a different edge. */
-  main::before {
-    display: none;
+  .schedule header {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  section {
-    /* The frames sit in the only column there is. Without this they keep the two-column layout's
-       `grid-column: 2`, which conjures an implicit second column, indents every frame by a rail
-       that is no longer drawn, and pushes the strip off the right edge of the phone. */
-    grid-column: 1;
-    padding-top: 1.6rem;
+  .schedule header .ref {
+    text-align: left;
   }
 
-  section::before {
-    top: 0;
-    left: auto;
-    right: 0;
-    width: auto;
-    padding: 0.2rem 0.7rem;
-    background: var(--rebate);
-    color: var(--ink);
-    border-radius: 0 var(--radius) 0 var(--radius);
+  .schedule .row {
+    grid-template-columns: 6.5rem minmax(0, 1fr);
   }
 
-  header {
-    padding-top: 1.75rem;
+  .hero h1 {
+    max-width: none;
   }
 }
 
@@ -661,75 +1232,4 @@ footer {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
-}
-
-/* The four numbers, above the fold, before anyone reads a word.
-   The contact sheet reads left to right in exposure order, so these do too: what was proven, what
-   was published, what was crossed out, what it cost. The struck one carries the chinagraph, because
-   on a contact sheet the crossed-out frame is the one the eye goes to — and here it is the number
-   no other project on this protocol can report at all. */
-.tally {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 1px;
-  background: var(--rebate);
-  border: 1px solid var(--rebate);
-  border-radius: var(--radius);
-  margin: 0 auto var(--gap);
-  max-width: 1180px;
-  overflow: hidden;
-}
-
-.tally .t {
-  background: var(--sheet);
-  padding: 0.75rem 0.9rem 0.85rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.tally .t b {
-  font-family: var(--data);
-  font-size: 1.7rem;
-  line-height: 1.05;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-}
-
-.tally .t span {
-  font-size: var(--t-small);
-  color: var(--dim);
-  line-height: 1.35;
-}
-
-.tally .struck-num b {
-  color: var(--accent);
-}
-
-/* Until the chain has answered, the numbers are placeholders and should not read as data. */
-.tally[data-ready='false'] .t b {
-  color: var(--dim);
-}
-
-/* The invitation sits between the tally and the strip: the numbers say what has happened here, and
-   this says the reader can make the next one happen. Set as a line rather than a card because it
-   is an aside to the tally, not a fifth number. */
-.invitation {
-  max-width: 1180px;
-  margin: calc(var(--gap) * -0.5) auto var(--gap);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.55rem 0.8rem;
-}
-
-.invitation .note {
-  color: var(--dim);
-  font-size: var(--t-small);
-  max-width: 62ch;
-}
-
-.invitation a.act {
-  text-decoration: none;
-  display: inline-block;
 }

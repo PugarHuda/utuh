@@ -13,14 +13,14 @@ async function total(page: import('@playwright/test').Page): Promise<number> {
 }
 
 test('?claim=N opens that claim on arrival, even one older than the first page', async ({ page }) => {
-  await page.goto('/?deployment=mainnet');
+  await page.goto('/app/?deployment=mainnet');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   const all = await total(page);
   test.skip(all === 0, 'no claims');
   const firstPage = await page.locator('[data-testid=claims-table] tbody tr').count();
 
   // The oldest claim: on a registry with more than one page, it is not on screen until asked for.
-  await page.goto('/?deployment=mainnet&claim=1');
+  await page.goto('/app/?deployment=mainnet&claim=1');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   await expect(page.locator('[data-testid=claim-select]')).toHaveValue('1', { timeout: 60_000 });
   await expect(page.locator('[data-testid=claim-detail]')).toContainText('claim 1', { timeout: 60_000 });
@@ -30,7 +30,7 @@ test('?claim=N opens that claim on arrival, even one older than the first page',
 });
 
 test('a claim id that does not exist is ignored, not an error', async ({ page }) => {
-  await page.goto('/?claim=999999');
+  await page.goto('/app/?claim=999999');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   await expect(page.locator('#registry-body .bad')).toHaveCount(0);
   const select = page.locator('[data-testid=claim-select]');
@@ -38,7 +38,7 @@ test('a claim id that does not exist is ignored, not an error', async ({ page })
 });
 
 test('picking a claim writes it into the address bar; switching deployments drops it', async ({ page }) => {
-  await page.goto('/?deployment=mainnet');
+  await page.goto('/app/?deployment=mainnet');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   const select = page.locator('[data-testid=claim-select]');
   const options = await select.locator('option').allInnerTexts();

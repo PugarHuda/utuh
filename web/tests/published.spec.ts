@@ -17,7 +17,7 @@ test('loads, reads the live chain, and is not stale', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
 
-  await page.goto('./');
+  await page.goto('./app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   await expect(page.locator('#chain-id')).toHaveText('102031');
 
@@ -37,7 +37,7 @@ test('loads, reads the live chain, and is not stale', async ({ page }) => {
 });
 
 test('the mainnet-sourced deployment reads from the published build too', async ({ page }) => {
-  await page.goto('./?deployment=mainnet');
+  await page.goto('./app/?deployment=mainnet');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   await expect(page.locator('[data-testid=deployment]')).toHaveValue('mainnet');
   const chains = await page.locator('[data-testid=claims-table] tbody tr td:nth-child(5)').allInnerTexts();
@@ -48,7 +48,7 @@ test('the mainnet-sourced deployment reads from the published build too', async 
 });
 
 test('the link preview is a real photograph of the page, and it is served', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./app/');
   const image = await page.locator('meta[property="og:image"]').getAttribute('content');
   // Absolute, and to the canonical host on purpose: a crawler that finds the mirror still has to
   // resolve one picture, and pointing it at PUBLISHED would make the mirror advertise its own.
@@ -77,7 +77,7 @@ test('asks its host for nothing but its own four files', async ({ page }) => {
     const u = new URL(r.url());
     if (u.host === host) asked.push(u.pathname.split('/').pop() || 'index.html');
   });
-  await page.goto('./');
+  await page.goto('./app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   expect([...new Set(asked)].sort()).toEqual(['archivo.woff2', 'index.html', 'main.js', 'style.css']);
 });
@@ -98,7 +98,7 @@ test('the canonical console and its mirror are serving the same build', async ({
   // file entirely while this reported both hosts identical. `.well-known/security.txt` is left out
   // because its `Expires` field is stamped at build time and differs between two builds of the same
   // commit, which is a difference about nothing.
-  const FILES = ['index.html', 'main.js', 'style.css', 'llms.txt', 'og.png', 'whitepaper.pdf'];
+  const FILES = ['index.html', 'app/index.html', 'main.js', 'style.css', 'llms.txt', 'og.png', 'whitepaper.pdf'];
   const MIRROR = 'https://pugarhuda.github.io/utuh/';
   if (new URL(PUBLISHED!).host === new URL(MIRROR).host) test.skip(true, 'PUBLISHED_URL is the mirror itself');
 

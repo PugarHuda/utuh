@@ -12,7 +12,7 @@ import { expect, test } from '@playwright/test';
 
 test('the tally reads both registries live, and refutations are among them', async ({ page }) => {
   test.setTimeout(200_000);
-  await page.goto('/');
+  await page.goto('/app/');
 
   const strip = page.locator('[data-testid=tally]');
   await expect(strip).toHaveAttribute('data-ready', 'true', { timeout: 170_000 });
@@ -54,7 +54,7 @@ test('a tally that cannot be read says so instead of showing zero', async ({ pag
   await page.route('**/rpc.cc3-testnet.creditcoin.network/**', killTally);
   await page.route('**/creditcoin-testnet.blockscout.com/api/eth-rpc**', killTally);
 
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 120_000 });
 
   const strip = page.locator('[data-testid=tally]');
@@ -66,7 +66,7 @@ test('a tally that cannot be read says so instead of showing zero', async ({ pag
 
 test('the page invites a stranger to break whichever claim is still open', async ({ page }) => {
   test.setTimeout(200_000);
-  await page.goto('/?deployment=mainnet');
+  await page.goto('/app/?deployment=mainnet');
   await expect(page.locator('[data-testid=tally]')).toHaveAttribute('data-ready', 'true', { timeout: 170_000 });
 
   const invitation = page.locator('[data-testid=invitation]');

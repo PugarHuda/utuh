@@ -2,9 +2,9 @@ import { expect, test } from '@playwright/test';
 
 /// The things a screenshot does not catch.
 ///
-/// axe-core audits the landing page for WCAG violations and `static.spec.ts` proves the published
+/// axe-core audits the console for WCAG violations and `static.spec.ts` proves the published
 /// build asks its host for nothing. Between those sits a class of defect neither sees: a rail that
-/// silently collapses to one frame because `grid-row: 1 / -1` counted the wrong grid, a refuted
+/// stops being drawn because a border was dropped, a refuted
 /// claim that stops being struck because a row class was dropped, a log that streams a sweep to a
 /// screen reader that is never told, a phone layout that works until a column is added.
 ///
@@ -13,32 +13,36 @@ import { expect, test } from '@playwright/test';
 /// defect in the test rather than the product: a sweep against dead endpoints reports in ten
 /// seconds and says it settles nothing, which the first version of that check was not reading.
 
-const ready = async (page: import('@playwright/test').Page, url = '/') => {
+const ready = async (page: import('@playwright/test').Page, url = '/app/') => {
   await page.goto(url);
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 };
 
-test('the strip is drawn: the face loads, the rail spans it, every frame is numbered', async ({ page }) => {
+test('the working paper is drawn: the face loads, the margin rule runs, every schedule is referenced', async ({
+  page,
+}) => {
   await ready(page);
   const font = await page.evaluate(() => document.fonts.check('16px Archivo'));
   expect(font, 'Archivo must be loaded').toBe(true);
 
-  // Every section carries a rebate number.
-  const frames = await page
+  // Every schedule carries a working-paper reference, and no two share one.
+  const refs = await page
     .locator('main section')
     .evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.frame ?? null));
-  expect(frames, 'every frame numbered').not.toContain(null);
-  expect(new Set(frames).size, 'numbers unique').toBe(frames.length);
+  expect(refs, 'every schedule referenced').not.toContain(null);
+  expect(new Set(refs).size, 'references unique').toBe(refs.length);
 
-  // The rail is drawn and spans more than one frame.
-  const rail = await page.evaluate(() => {
-    const m = document.querySelector('main');
-    if (!m) return null;
-    const cs = getComputedStyle(m, '::before');
-    return { h: parseFloat(cs.height), w: parseFloat(cs.width), content: cs.content };
+  // The red margin rule is the ledger's, one pixel, the height of the paper.
+  const rule = await page.locator('main').evaluate((m) => {
+    const cs = getComputedStyle(m);
+    return { width: cs.borderLeftWidth, color: cs.borderLeftColor, height: m.getBoundingClientRect().height };
   });
-  const mainH = await page.locator('main').evaluate((e) => e.getBoundingClientRect().height);
-  expect(rail!.h, 'rail spans the strip').toBeGreaterThan(mainH * 0.8);
+  expect(rule.width).toBe('1px');
+  expect(rule.height).toBeGreaterThan(1000);
+
+  // Status is a word with a drawn mark in front of it, never a glyph left to a font.
+  await page.locator('[data-testid=claims-table] tbody tr').first().waitFor({ timeout: 60_000 });
+  expect(await page.locator('[data-testid=claims-table] tbody td:nth-child(3) svg.mark').count()).toBeGreaterThan(0);
 });
 
 test('a refuted claim is struck through, and nothing else is', async ({ page }) => {

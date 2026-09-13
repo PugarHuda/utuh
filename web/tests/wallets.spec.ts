@@ -29,7 +29,7 @@ const DECOY = `(() => {
 test('two wallets announce themselves; the page names both and connects with the one picked', async ({ page }) => {
   await injectWallet(page, Wallet.createRandom().privateKey, { announce: 'Utuh Test Wallet', rejectSends: true });
   await page.addInitScript({ content: DECOY });
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
   // The legacy slot belongs to the decoy — what the page would have used without asking.
@@ -55,7 +55,7 @@ test('two wallets announce themselves; the page names both and connects with the
 test('the decoy, picked, fails in its own words and leaves the other wallet one click away', async ({ page }) => {
   await injectWallet(page, Wallet.createRandom().privateKey, { announce: 'Utuh Test Wallet', rejectSends: true });
   await page.addInitScript({ content: DECOY });
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
   await page.locator('#connect').click();
@@ -76,7 +76,7 @@ test('a wallet that only announces itself, and never touches window.ethereum, co
     noLegacy: true,
     rejectSends: true,
   });
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   expect(await page.evaluate(() => 'ethereum' in window)).toBe(false);
 

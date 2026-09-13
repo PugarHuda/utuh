@@ -15,7 +15,7 @@ async function boot(page: Page): Promise<string[]> {
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
   });
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   return errors;
 }

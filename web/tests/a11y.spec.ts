@@ -9,7 +9,7 @@ import { expect, test } from '@playwright/test';
 /// any violation fails the build, named, so the fix is a change to the page rather than a note in
 /// a report nobody reads.
 test('the rendered console has no WCAG A/AA violations', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
   const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
@@ -21,7 +21,7 @@ test('the rendered console has no WCAG A/AA violations', async ({ page }) => {
 });
 
 test('the published build passes the same audit', async ({ page }) => {
-  await page.goto('/static/');
+  await page.goto('/static/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
   const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();

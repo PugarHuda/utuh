@@ -75,6 +75,16 @@ async function main(): Promise<void> {
     void (async () => {
       try {
         if (path === '/' || path === '/index.html') return await serveFile(join(WEB, 'index.html'), res);
+        // The console lives under /app/ so the landing can have the root. A static host serves
+        // app/index.html for both spellings; so does this.
+        if (path === '/app' || path === '/app/' || path === '/app/index.html') {
+          return await serveFile(join(WEB, 'app.html'), res);
+        }
+        // The console lives under /app/ so the landing can have the root. A static host serves
+        // app/index.html for both spellings; so does this.
+        if (path === '/app' || path === '/app/' || path === '/app/index.html') {
+          return await serveFile(join(WEB, 'app.html'), res);
+        }
         if (path === '/style.css') return await serveFile(join(WEB, 'style.css'), res);
         if (path === '/og.png') return await serveFile(join(WEB, 'og.png'), res);
         // The one webfont. Named rather than path-joined, for the same reason the ABIs are: an
@@ -84,11 +94,17 @@ async function main(): Promise<void> {
           return await serveFile(join(WEB, 'dist', path.slice('/dist/'.length)), res);
         }
 
-        // The statically-built console, served the way a static host would serve it: four files
+        // The statically-built console, served the way a static host would serve it: its files
         // and nothing else. Under a prefix rather than on its own port so the browser tests can
         // prove that this build asks for no `/abi` and no `/deployments.json` at all.
         if (path === '/static/' || path === '/static/index.html') {
           return await serveFile(join(STATIC, 'index.html'), res);
+        }
+        if (path === '/static/app' || path === '/static/app/' || path === '/static/app/index.html') {
+          return await serveFile(join(STATIC, 'app', 'index.html'), res);
+        }
+        if (path === '/static/app' || path === '/static/app/' || path === '/static/app/index.html') {
+          return await serveFile(join(STATIC, 'app', 'index.html'), res);
         }
         if (path === '/static/main.js' || path === '/static/style.css') {
           return await serveFile(join(STATIC, path.slice('/static/'.length)), res);

@@ -1,9 +1,10 @@
 import { Contract, formatEther, parseEther, toUtf8String, type Signer } from 'ethers';
 import { claimStatus, lineStatus } from '../offchain/lib/status';
+import { CLAIM_BATCH, readRefutation, readTally } from './reads';
+import { landing } from './landing';
 import {
   ATTESTATION_INDEXERS,
   CHAIN_NAME,
-  DEPLOYMENT_RECORDS,
   ORACLE_DASHBOARD,
   SOURCE_EXPLORER,
   requireChainKey,
@@ -16,7 +17,6 @@ import {
   connect,
   EXPLORER,
   hasWallet,
-  loadDeployments,
   shortAddress,
   sourceEndpoints,
   wallets,
@@ -56,6 +56,28 @@ const el = (tag: string, className?: string, text?: string): HTMLElement => {
   if (text !== undefined) node.textContent = text;
   return node;
 };
+
+/// A pencil mark, drawn rather than typed: the blue tick of a row that traced, the red circle of
+/// an exception, the clock of a window still open. The symbols live in the page's own sprite.
+function mark(kind: 'tick' | 'exc' | 'wait'): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', `mark ${kind}`);
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', `#m-${kind}`);
+  svg.appendChild(use);
+  return svg;
+}
+
+/// A status word with its mark in front. The word is the protocol's; the mark is the auditor's.
+function standing(status: string): HTMLElement {
+  const span = el('span');
+  const kind =
+    status === 'Refuted' ? 'exc' : status === 'Finalized' ? 'tick' : status === 'Sealed' ? 'wait' : undefined;
+  if (kind) span.appendChild(mark(kind));
+  span.appendChild(document.createTextNode(status));
+  return span;
+}
 
 function link(address: string): HTMLElement {
   const a = el('a', 'addr') as HTMLAnchorElement;
@@ -185,14 +207,6 @@ interface ClaimView {
   until: bigint;
 }
 
-/// How many claims to read at once.
-///
-/// Four `eth_call`s per claim, one after another, is what this did first, and on the registry with
-/// 48 claims on it that took **51.7 seconds** to draw a table. Nothing was slow; everything was
-/// waiting. Public endpoints do rate-limit, though, so this is a batch size rather than one
-/// `Promise.all` over the lot.
-const CLAIM_BATCH = 12;
-
 /// Newest first, and only this many unless asked for more. A registry accumulates claims forever
 /// and the ones anyone is looking at are the recent ones — a challenge window is a day at most.
 const CLAIM_PAGE = 25;
@@ -261,63 +275,12 @@ async function readClaims(): Promise<ClaimPage> {
 async function renderTally(): Promise<void> {
   const strip = $('tally');
   try {
-    const registries = await Promise.all(
-      (Object.keys(DEPLOYMENT_RECORDS) as DeploymentName[]).map(async (which) => {
-        const d = await within(30_000, `${which} deployment record`, loadDeployments(which));
-        if (!d.registry) return null;
-        return new Contract(d.registry, wired.abis.registry as never, cc3);
-      }),
-    );
-
-    let proven = 0n;
-    let sealed = 0;
-    let refuted = 0;
-    let burned = 0n;
-    // The newest claim a stranger could still break, and where it lives.
-    let openNow: { which: DeploymentName; id: number; blocksLeft: number } | undefined;
-    const head = await within(30_000, 'block number', cc3.getBlockNumber());
-
-    for (const [at, registry] of registries.entries()) {
-      if (!registry) continue;
-      const which = (Object.keys(DEPLOYMENT_RECORDS) as DeploymentName[])[at]!;
-      // ethers does not fail fast on an unreachable endpoint — it retries in the background and
-      // this strip would sit on its placeholders indefinitely. A tally stuck at "…" is survivable;
-      // one that resolved to a plausible zero would not be, because "0 refuted" is exactly the
-      // wrong conclusion to hand a reader.
-      const total = Number(await within(30_000, 'nextClaimId', registry.nextClaimId() as Promise<bigint>)) - 1;
-      burned += await within(30_000, 'burned', registry.burned() as Promise<bigint>);
-      sealed += total;
-
-      const ids = Array.from({ length: total }, (_, i) => i + 1);
-      for (let at = 0; at < ids.length; at += CLAIM_BATCH) {
-        const slice = await Promise.all(
-          ids.slice(at, at + CLAIM_BATCH).map(async (i) => {
-            const c = await within(30_000, `claim ${i}`, registry.claim(i));
-            return {
-              id: i,
-              status: Number(c.status),
-              until: Number(c.sealedAt) + Number(c.challengeWindow),
-              members: await within(30_000, `memberCount ${i}`, registry.memberCount(i) as Promise<bigint>),
-            };
-          }),
-        );
-        for (const c of slice) {
-          proven += c.members;
-          if (claimStatus(c.status) === 'Refuted') refuted += 1;
-          // Sealed is the only status a stranger can act on: published, and still inside its window.
-          if (claimStatus(c.status) === 'Sealed' && c.until > head) {
-            const left = c.until - head;
-            if (!openNow || left > openNow.blocksLeft) openNow = { which, id: c.id, blocksLeft: left };
-          }
-        }
-      }
-    }
-
-    $('t-proven').textContent = proven.toLocaleString();
-    $('t-claims').textContent = sealed.toLocaleString();
-    $('t-refuted').textContent = refuted.toLocaleString();
-    $('t-burned').textContent = `${formatEther(burned)} CTC`;
-    renderInvitation(openNow);
+    const t = await readTally(wired.abis);
+    $('t-proven').textContent = t.proven.toLocaleString();
+    $('t-claims').textContent = t.sealed.toLocaleString();
+    $('t-refuted').textContent = t.refuted.toLocaleString();
+    $('t-burned').textContent = `${formatEther(t.burned)} CTC`;
+    renderInvitation(t.openNow);
     strip.dataset.ready = 'true';
   } catch (e) {
     // A tally that cannot be read says so rather than showing a plausible zero.
@@ -385,7 +348,7 @@ async function renderRegistry(): Promise<void> {
       return [
         String(c.id),
         link(c.claimant),
-        claimStatus(c.status),
+        standing(claimStatus(c.status)),
         sourceRange(c.chainKey, Number(c.fromBlock), Number(c.toBlock)),
         CHAIN_NAME[c.chainKey as 1 | 3] ?? `key ${c.chainKey}`,
         String(c.members),
@@ -1035,6 +998,54 @@ async function renderClaimDetail(): Promise<void> {
 
     const head = el('p', 'note');
     head.appendChild(document.createTextNode(`claim ${id}: events from `));
+    // The standing, in words, before the members: the two links every document hands a reader
+    // open a refuted claim, and a table of members does not say so. A refuted claim names the
+    // proof that broke it, from the registry's own ClaimRefuted record.
+    const status = claimStatus(c.status);
+    const line = el('p', 'standing');
+    line.dataset.testid = 'claim-standing';
+    line.appendChild(standing(status));
+    if (status === 'Refuted') {
+      const r = await readRefutation(wired.registry, id, Number(c.sealedAt), Number(c.challengeWindow)).catch(
+        () => undefined,
+      );
+      if (r) {
+        const b = el('a', 'addr', String(r.omittedBlock)) as HTMLAnchorElement;
+        b.href = `${ex}/block/${r.omittedBlock}`;
+        b.target = '_blank';
+        b.rel = 'noreferrer';
+        const tx = el('a', 'addr', `${r.tx.slice(0, 10)}…`) as HTMLAnchorElement;
+        tx.href = `${EXPLORER}/tx/${r.tx}`;
+        tx.target = '_blank';
+        tx.rel = 'noreferrer';
+        line.appendChild(document.createTextNode(' by one proof of an in-scope event at source block '));
+        line.appendChild(b);
+        line.appendChild(
+          document.createTextNode(
+            ` that the claim left out — ${formatEther(r.reward)} CTC of the ${formatEther(c.bondPosted)} CTC bond paid to `,
+          ),
+        );
+        line.appendChild(link(r.refuter));
+        line.appendChild(document.createTextNode(', the rest burned. Refutation '));
+        line.appendChild(tx);
+        line.appendChild(document.createTextNode('.'));
+      } else {
+        line.appendChild(document.createTextNode(' — an omitted in-scope event was proven and the bond slashed.'));
+      }
+    } else if (status === 'Sealed') {
+      const left = Number(c.sealedAt) + Number(c.challengeWindow) - (await cc3.getBlockNumber());
+      line.appendChild(
+        document.createTextNode(
+          left > 0
+            ? ` — inside its challenge window, ${left} Creditcoin block(s) left. Anyone may still break it.`
+            : ' — window closed and unrefuted; anyone may finalize it.',
+        ),
+      );
+    } else if (status === 'Finalized') {
+      line.appendChild(document.createTextNode(' — survived its challenge window in public; the bond went home.'));
+    } else if (status === 'Open') {
+      line.appendChild(document.createTextNode(' — still being built; not yet sealed, so not yet challengeable.'));
+    }
     head.appendChild(emitter);
     head.appendChild(
       document.createTextNode(
@@ -1073,6 +1084,7 @@ async function renderClaimDetail(): Promise<void> {
     foot.appendChild(document.createTextNode(', by source height.'));
 
     box.replaceChildren(
+      line,
       head,
       ...(rows.length > 0
         ? [table(['#', 'source block', 'transaction', 'log', 'ordering key'], rows, 'members-table')]
@@ -1264,6 +1276,19 @@ async function main(): Promise<void> {
   void renderTally();
   await Promise.all([renderAttestcoin(), renderRegistry(), renderCredit(), renderBorrowPane(), renderAttestors()]);
   document.body.dataset.state = 'ready';
+
+  // A link that names a claim is a link to that claim, not to the top of a page it is somewhere
+  // on. Only when the detail is below the fold: a reader who can already see it keeps the header.
+  if (new URLSearchParams(location.search).has('claim')) {
+    const detail = $('claim-detail');
+    if (detail.getBoundingClientRect().top > window.innerHeight * 0.55) {
+      detail.scrollIntoView({ block: 'start' });
+      window.scrollBy(0, -16);
+    }
+  }
 }
 
-void main();
+// One bundle, two pages. The landing reads the same chain through the same code; only its DOM
+// differs, and the body says which it is.
+if (document.body.dataset.page === 'landing') void landing();
+else void main();

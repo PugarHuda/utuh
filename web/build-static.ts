@@ -103,14 +103,20 @@ function main(): Promise<void> {
   // two canonical URLs, two link previews, two things for a crawler to rank against each other.
   // Pages is the address the README and the submission give out, so Pages is the one the page
   // says, wherever it happens to be served from.
-  const html = readFileSync(join(WEB, 'index.html'), 'utf8')
-    .replace('href="/style.css"', 'href="./style.css"')
-    .replace(
-      '<script type="module" src="/dist/main.js"></script>',
-      `<script>window.__UTUH__ = ${JSON.stringify(baked)};</script>\n` +
-        '    <script type="module" src="./main.js"></script>',
-    );
-  writeFileSync(join(DEST, 'index.html'), html);
+  //
+  // Two pages, one bundle: the landing at the root and the console under app/, each with the same
+  // record baked in so the two cannot disagree about which contracts they read.
+  const bake = (file: string, prefix: string) =>
+    readFileSync(join(WEB, file), 'utf8')
+      .replace('href="/style.css"', `href="${prefix}style.css"`)
+      .replace(
+        '<script type="module" src="/dist/main.js"></script>',
+        `<script>window.__UTUH__ = ${JSON.stringify(baked)};</script>\n` +
+          `    <script type="module" src="${prefix}main.js"></script>`,
+      );
+  writeFileSync(join(DEST, 'index.html'), bake('index.html', './'));
+  mkdirSync(join(DEST, 'app'), { recursive: true });
+  writeFileSync(join(DEST, 'app', 'index.html'), bake('app.html', '../'));
 
   // Pages runs Jekyll over a folder unless told not to, and Jekyll skips files beginning with an
   // underscore — which nothing here has, today. The marker costs nothing and removes the class of

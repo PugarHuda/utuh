@@ -102,7 +102,7 @@ test.describe('a borrower in a fresh browser', () => {
     const status = ['None', 'Active', 'Settled', 'Defaulted', 'Closed'][Number((await credit.line(latest)).status)];
 
     await injectWallet(page, borrowerKey);
-    await page.goto('/');
+    await page.goto('/app/');
     await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
     await page.locator('#connect').click();
 
@@ -168,7 +168,7 @@ test.describe('borrowing from the browser', () => {
 
     // ---------------------------------------------------------------- the page
     await injectWallet(page, borrowerKey);
-    await page.goto('/');
+    await page.goto('/app/');
     await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
     await page.locator('#connect').click();
     await expect(page.locator('#connect')).toContainText(borrower.slice(0, 6));

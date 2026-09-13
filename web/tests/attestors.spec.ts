@@ -33,7 +33,7 @@ test('every recent attestation on both Creditcoin networks matches the header Et
   page,
 }) => {
   test.setTimeout(300_000);
-  await page.goto('/?deployment=mainnet');
+  await page.goto('/app/?deployment=mainnet');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
   for (const { testid, network } of TABLES) {

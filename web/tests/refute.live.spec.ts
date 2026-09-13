@@ -28,7 +28,7 @@ test.describe('refuting an incomplete claim from the browser', () => {
   test('finds the omitted event, proves it, and takes half the bond', async ({ page }) => {
     const account = await injectWallet(page, KEY!.startsWith('0x') ? KEY! : `0x${KEY!}`);
 
-    await page.goto('/');
+    await page.goto('/app/');
     await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
     await page.locator('#connect').click();

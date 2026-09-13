@@ -17,13 +17,13 @@ test('boots with no server behind it', async ({ page }) => {
   const asked: string[] = [];
   page.on('request', (r) => {
     const url = new URL(r.url());
-    if (url.host === '127.0.0.1:5173' || url.host === 'localhost:5173') asked.push(url.pathname);
+    if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') asked.push(url.pathname);
   });
 
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
 
-  await page.goto('/static/');
+  await page.goto('/static/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
   // Live chain, same as the served build.
@@ -32,7 +32,12 @@ test('boots with no server behind it', async ({ page }) => {
   await expect(page.locator('[data-testid=attestcoin-table]')).toContainText('Ethereum');
 
   // And nothing was asked of the host beyond the files a static host serves.
-  expect(asked.sort()).toEqual(['/static/', '/static/fonts/archivo.woff2', '/static/main.js', '/static/style.css']);
+  expect(asked.sort()).toEqual([
+    '/static/app/',
+    '/static/fonts/archivo.woff2',
+    '/static/main.js',
+    '/static/style.css',
+  ]);
   expect(errors, `console errors: ${errors.join(' | ')}`).toHaveLength(0);
 });
 
@@ -40,7 +45,7 @@ test('never scrolls the page sideways, whatever the tables hold', async ({ page 
   // The claims table has ten columns and no wrapping. It has to scroll inside its own box; if it
   // scrolls the window instead, every phone and half the laptops get a page that slides.
   await page.setViewportSize({ width: 900, height: 800 });
-  await page.goto('/static/');
+  await page.goto('/static/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
   const overflow = await page.evaluate(() => ({
@@ -53,7 +58,7 @@ test('never scrolls the page sideways, whatever the tables hold', async ({ page 
 test('carries the same deployment the served build does', async ({ page }) => {
   const record = await (await page.request.get('/deployments.json')).json();
 
-  await page.goto('/static/');
+  await page.goto('/static/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
   const table = page.locator('[data-testid=addresses-table]');
@@ -62,7 +67,7 @@ test('carries the same deployment the served build does', async ({ page }) => {
 });
 
 test('offers borrowing, and says what it needs first', async ({ page }) => {
-  await page.goto('/static/');
+  await page.goto('/static/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
   // No wallet in this browser, so the pane explains rather than pretending.

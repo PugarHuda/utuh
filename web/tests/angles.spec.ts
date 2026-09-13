@@ -13,7 +13,7 @@ import { injectWallet } from './wallet';
 
 test('in dark mode, still no WCAG A/AA violations — contrast included', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
   // The palette actually switched, or this checks nothing.
@@ -27,7 +27,7 @@ test('in dark mode, still no WCAG A/AA violations — contrast included', async 
 
 test('on a phone: nothing sideways, everything reachable', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
   const { scroll, client } = await page.evaluate(() => ({
@@ -51,7 +51,7 @@ test('on a phone: nothing sideways, everything reachable', async ({ page }) => {
 });
 
 test('the sweep can be started from the keyboard alone', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   test.skip((await page.locator('[data-testid=claim-select] option').count()) === 0, 'no claims to sweep');
 
@@ -71,7 +71,7 @@ test('the sweep can be started from the keyboard alone', async ({ page }) => {
 test('a wallet whose owner says no leaves the page usable and says what happened', async ({ page }) => {
   // Any key will do: it never signs. The wallet answers every send with MetaMask's 4001.
   await injectWallet(page, Wallet.createRandom().privateKey, { rejectSends: true });
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   await page.locator('#connect').click();
   await expect(page.locator('#connect')).toBeDisabled();
@@ -103,7 +103,7 @@ test('a wallet whose owner says no leaves the page usable and says what happened
 
 test('with the primary RPC down, the page reads Creditcoin through Blockscout instead', async ({ page }) => {
   await page.route('**/rpc.cc3-testnet.creditcoin.network/**', (route) => route.abort('connectionrefused'));
-  await page.goto('/');
+  await page.goto('/app/');
 
   // Not "fails politely" — works. `ready` is only reached after live reads succeed, and the head
   // block in the banner is one of them, so both came through Blockscout. The claims table is not
@@ -122,7 +122,7 @@ test('with the primary RPC down, the page reads Creditcoin through Blockscout in
 test('with Creditcoin unreachable, the page fails loudly instead of showing stale numbers', async ({ page }) => {
   await page.route('**/rpc.cc3-testnet.creditcoin.network/**', (route) => route.abort('connectionrefused'));
   await page.route('**/creditcoin-testnet.blockscout.com/api/eth-rpc**', (route) => route.abort('connectionrefused'));
-  await page.goto('/');
+  await page.goto('/app/');
 
   await expect(page.locator('body')).toHaveAttribute('data-state', /failed|ready/, { timeout: 45_000 });
   // Either the boot itself failed, or the panes did — in both cases something on screen says so,
@@ -159,7 +159,7 @@ test('an endpoint answering for the wrong chain is refused, and the sweep does n
     },
   );
 
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   const options = await page.locator('[data-testid=claim-select] option').count();
   test.skip(options === 0, 'no sweepable claim');
@@ -187,7 +187,7 @@ test('the range the borrow pane offers ends on a settled attestation, not near o
   // range that ends on a real attestation point ends on a multiple of ten — which is a fact about
   // the chain, checked against the chain, not a number this test knows.
   await injectWallet(page, Wallet.createRandom().privateKey, { rejectSends: true });
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   await page.locator('#connect').click();
 
