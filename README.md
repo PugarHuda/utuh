@@ -30,7 +30,9 @@ Two things a reader with a clone and no key can check first. `npm run judge` re-
 number this repository and the submission quote — the contracts and their verification, the tally,
 both linked claims, the explorer counters, npm, the MCP Registry, the published build, the sixteen
 protocol entry points, the test and commit counts — and exits non-zero on any that no longer
-holds; 22 of 22 held on 2026-09-13. And a bond here stands behind a specific line, not behind
+holds; on the evening of 2026-09-13 it measured 23 claims and 21 held — the two that did not are
+the npm and MCP Registry lines, because master declares `utuh-mcp` 0.4.0 and npm serves 0.3.0
+until it is published. And a bond here stands behind a specific line, not behind
 nothing: `UtuhCredit.openLine` reaches a claim only through `UtuhRegistry.isUsable(claimId,
 exposure)`, the finalized claim is spent by the line it opens, `underwrittenThrough` consumes the
 history range, and the limit is capped at ten times the enforceable loss. Exposure is gated by the
