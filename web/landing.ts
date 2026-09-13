@@ -194,7 +194,7 @@ async function renderSchedule(abis: Abis, which: DeploymentName, id: number): Pr
     h.textContent = `Claim ${s.id} — ${chain}, ${s.members} member(s) over ${(s.toBlock - s.fromBlock + 1).toLocaleString()} blocks`;
     header.appendChild(h);
     header.appendChild(el('span', 'ref', `W/P ${which === 'mainnet' ? 'M' : 'S'}-${s.id}`));
-    const scope = el('span', 'print');
+    const scope = el('span', 'gloss');
     scope.appendChild(document.createTextNode('scope · emitter '));
     scope.appendChild(out(`${ex}/address/${s.emitter}`, shortAddress(s.emitter)));
     scope.appendChild(document.createTextNode(` · claimant `));

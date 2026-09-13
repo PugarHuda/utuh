@@ -212,6 +212,7 @@ interface ClaimView {
 const CLAIM_PAGE = 25;
 
 let linkedApplied = false;
+let linkedScrolled = false;
 let linkedBumped = false;
 let claimLimit = CLAIM_PAGE;
 
@@ -1091,6 +1092,18 @@ async function renderClaimDetail(): Promise<void> {
         : []),
       foot,
     );
+
+    // A link that names a claim is a link to that claim, not to the top of a page it is somewhere
+    // on. Done here, once the detail exists, rather than at boot: a claim past the first page is
+    // drawn by a second pass, and a scroll aimed before that pass lands on the wrong pixel. Only
+    // when the detail is below the fold — a reader who can already see it keeps the header.
+    if (!linkedScrolled && new URLSearchParams(location.search).has('claim')) {
+      linkedScrolled = true;
+      if (box.getBoundingClientRect().top > window.innerHeight * 0.55) {
+        box.scrollIntoView({ block: 'start' });
+        window.scrollBy(0, -16);
+      }
+    }
   } catch (e) {
     fail(box, e);
   }
@@ -1276,16 +1289,6 @@ async function main(): Promise<void> {
   void renderTally();
   await Promise.all([renderAttestcoin(), renderRegistry(), renderCredit(), renderBorrowPane(), renderAttestors()]);
   document.body.dataset.state = 'ready';
-
-  // A link that names a claim is a link to that claim, not to the top of a page it is somewhere
-  // on. Only when the detail is below the fold: a reader who can already see it keeps the header.
-  if (new URLSearchParams(location.search).has('claim')) {
-    const detail = $('claim-detail');
-    if (detail.getBoundingClientRect().top > window.innerHeight * 0.55) {
-      detail.scrollIntoView({ block: 'start' });
-      window.scrollBy(0, -16);
-    }
-  }
 }
 
 // One bundle, two pages. The landing reads the same chain through the same code; only its DOM

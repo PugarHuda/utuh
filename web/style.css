@@ -106,6 +106,8 @@ body {
   line-height: 1.55;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
+  /* Panes redraw as the chain answers; the browser must not re-anchor the scroll each time. */
+  overflow-anchor: none;
 }
 
 ::selection {
@@ -331,7 +333,9 @@ main {
   border-left: 1px solid var(--margin);
 }
 
-section {
+/* A schedule on the console: sheet stock on the page, a hairline rule. Scoped to the referenced
+   sections so the footed totals and the landing's plain sections take nothing from it. */
+section[data-frame] {
   position: relative;
   background: var(--sheet);
   border: 1px solid var(--rule);
@@ -341,7 +345,7 @@ section {
   transition: border-color 180ms var(--ease);
 }
 
-section:focus-within {
+section[data-frame]:focus-within {
   border-color: var(--rule-strong);
 }
 
@@ -843,9 +847,15 @@ footer p {
   white-space: nowrap;
 }
 
-.schedule header .print {
+.schedule header .gloss {
   grid-column: 1 / -1;
-  font-weight: 500;
+}
+
+/* A gloss is a small line of prose under a heading — the scope of a schedule, what a snippet is.
+   Small and soft, but a sentence, so never uppercase. */
+.gloss {
+  font-size: var(--t-small);
+  color: var(--ink-soft);
 }
 
 .schedule .row {
@@ -952,11 +962,17 @@ footer p {
 
 /* Section rhythm on the landing. More space above a heading than below it. */
 .landing section.plain {
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--rule-strong);
-  border-radius: 0;
-  padding: 2.25rem 0 2.5rem;
+  padding: 0 0 2.5rem;
+}
+
+/* The header rule between sections, drawn as a rule rather than as the section's own border: the
+   section is not a box, and its text sits on the page, not inside a frame. */
+.landing section.plain::before {
+  content: '';
+  display: block;
+  height: 1px;
+  background: var(--rule-strong);
+  margin-bottom: 2.25rem;
 }
 
 .landing section.plain h2 {
@@ -1086,8 +1102,8 @@ footer p {
   color: var(--ink);
 }
 
-.snippet .print {
-  font-weight: 500;
+.snippet .gloss {
+  flex-basis: 100%;
 }
 
 /* The legend of marks. A working paper that leaves a tick undefined is a working paper nobody
