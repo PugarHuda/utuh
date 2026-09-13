@@ -174,7 +174,7 @@ beat had that it lacked:
 - **The graticule** (from the oscilloscope): the claim's block range is drawn to scale on a ruled
   axis; members and the omitted event are plotted, not listed only.
 
-Reference research (twelve refs, in the session scratchpad) confirmed the family: the Oracle
+Reference research (twelve refs, recorded in `.impeccable/refs.md`) confirmed the family: the Oracle
 document-number audit report and the physical-inventory missing-tag listing, the AO 187 exhibit
 list, the Kursbuch's typeset absence, L2BEAT's stage column, the Statuspage incident ledger. The
 rut kept out: the dark crypto console with a neon accent and glass cards; the cream editorial
