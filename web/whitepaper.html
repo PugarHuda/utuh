@@ -550,14 +550,14 @@
     <div class="col stack">
       <p>
         Member count does not explain those numbers. One append of <em>three</em> events cost
-        541,464 gas; one of <em>two</em> cost 878,903. Fitting all thirty-six appends against the
-        call's own calldata gas as well as its member count says why, and drops the worst residual
-        from 79% of the mean to 20%:
+        541,464 gas; one of <em>two</em> cost 878,903. Fitting the 56 appends the published
+        registries had seen by 2026-08-28 against the call's own calldata gas as well as its member
+        count says why, and holds the worst residual to 32% of the mean append:
       </p>
     </div>
-    <div class="formula col" tabindex="0" role="group" aria-label="Fitted cost model, scrollable">273,022 gas fixed
-  1.97 x the call's own calldata gas   (1.00 would be exact)
- 61,265 gas per member on top of its bytes</div>
+    <div class="formula col" tabindex="0" role="group" aria-label="Fitted cost model, scrollable">290,899 gas fixed
+  1.51 x the call's own calldata gas   (1.00 would be exact)
+ 81,427 gas per member on top of its bytes</div>
     <div class="col stack">
       <p>
         The calldata term is the solid one, and the interesting one: <b>a proven transaction costs
@@ -570,12 +570,16 @@
         The per-member term is <em>not</em> well determined, which is worth saying rather than
         quoting. An earlier fit over 25 appends put it at 20,526 gas — almost exactly a cold
         <code>SSTORE</code>, a satisfying number and the reason to distrust it. Eleven more appends
-        moved it to 61,265. Members and bytes are correlated here, and separating them needs
-        appends this repo has not made.
+        moved it to 61,265, and twenty more to 81,427 while the calldata multiplier fell from 2.3
+        to 1.5 &mdash; the two terms trading against each other, which is what collinear regressors
+        do. A re-run on 2026-09-13 over the mainnet registry's last 85 transactions reads 317,593,
+        1.40 and 88,066. Members and bytes are correlated here, and separating them needs appends
+        this repo has not made.
       </p>
       <p>
-        So the ceiling is bytes, not events. A thousand-event claim is a hundred batches and about
-        thirty blocks' worth of gas. Challenging it is still one proof and a binary search.
+        So the ceiling is bytes, not events. A ten-thousand-event claim is a thousand batches and
+        about thirty-three full blocks of gas (32.7 in the 08-28 fit, 33.1 on the 09-13 re-run).
+        Challenging it is still one proof and a binary search.
       </p>
     </div>
   </section>
@@ -624,7 +628,8 @@
     <div class="col stack">
       <p>
         CC3 Testnet attests Ethereum <em>mainnet</em> as chain key 3, from genesis height 0, tracking
-        within about seventy blocks of the real head. Contracts on a free testnet can therefore be
+        a few dozen blocks behind the real head &mdash; 34 measured on 2026-09-13, about 70 and
+        about 100 on earlier days. Contracts on a free testnet can therefore be
         underwritten on real Aave positions and real USDC flows, with no capital at risk and nothing
         simulated.
       </p>
@@ -785,6 +790,13 @@ bond cap    = <b>10.0 CTC</b>   (10x enforceableLoss 1.0, not the 2.0 CTC bond)
         and take the refuter's share back, so the burn is what is guaranteed. One CTC of
         enforceable loss, ten times that, ten CTC. A small bond is not allowed to underwrite a
         large loan, and it is the deterrent that sizes it, not the deposit.
+      </p>
+      <p>
+        A bond here stands behind a specific line, not a general reputation. <code>UtuhCredit.openLine</code>
+        reaches a claim only through <code>UtuhRegistry.isUsable(claimId, exposure)</code>; the
+        finalized claim is spent by the line it opens, <code>underwrittenThrough</code> consumes the
+        history range so it cannot be underwritten twice, and the limit is capped at ten times the
+        enforceable loss.
       </p>
       <p>
         And then the line does not open at all. Every number above was read off a public chain by
@@ -1015,8 +1027,10 @@ function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repa
           each way and compares them. Then the real test &mdash; a planted incomplete claim
           refuted by a watcher run with <code>PROVER_URL</code> pointed at a dead port. A real
           bond, taken on chain, with no hosted proof service reachable at all. The local path
-          takes tens of seconds against the hosted one's single second, which is fine for the
-          recommended window and is the reason not to underwrite against the twenty-block floor.
+          took tens of seconds against the hosted one's single second until the block provider
+          stopped re-fetching sibling transactions it had already been handed; since 2026-09-10 it
+          is 0.8 s against 0.9 s hosted on an 81-transaction block, byte-identical proofs either
+          way. That margin is still the reason not to underwrite against the twenty-block floor.
         </li>
         <li>
           <b>A refutation depended on a node's willingness to do arithmetic.</b>
@@ -1192,24 +1206,24 @@ function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repa
           <tr><th>Contract</th><th>CC3 Testnet &mdash; chain id 102031, all verified on Blockscout</th></tr>
         </thead>
         <tbody>
-          <tr><td>UtuhRegistry <em>(Sepolia-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac?tab=contract">0x0Ec4486664c4311E1c7711D680f1e11d9d1C29ac</a></td></tr>
-          <tr><td>UtuhCredit <em>(Sepolia-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0x1C6d88eb6a40Ef2dBB8cFAF8A1aBe5641eAe9Ea8?tab=contract">0x1C6d88eb6a40Ef2dBB8cFAF8A1aBe5641eAe9Ea8</a></td></tr>
-          <tr><td>SettlementLedger <em>(on Sepolia)</em></td><td class="num"><a href="https://eth-sepolia.blockscout.com/address/0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D?tab=contract">0x3AF37C2b6a3954c856CDAB3649971Bf546A7c34D</a></td></tr>
           <tr><td>UtuhRegistry <em>(mainnet-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac?tab=contract">0x8FA0BD5301D998Be873E31453E53d114929a5Fac</a></td></tr>
-          <tr><td>UtuhCredit <em>(mainnet-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0xaF20895A1a130e4C6C3f6fa0238073Aa42fA080d?tab=contract">0xaF20895A1a130e4C6C3f6fa0238073Aa42fA080d</a></td></tr>
+          <tr><td>UtuhCredit <em>(mainnet-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0x89FB81b1e453b7Bd18ac1A6AF03C84A40Ce10C57?tab=contract">0x89FB81b1e453b7Bd18ac1A6AF03C84A40Ce10C57</a></td></tr>
           <tr><td>EvmV1Decoder <em>(mainnet-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0x5cab00c032D7d4436f312Dd51ef59Dc5b860df3F?tab=contract">0x5cab00c032D7d4436f312Dd51ef59Dc5b860df3F</a></td></tr>
-          <tr><td>EvmV1Decoder <em>(Sepolia-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0xEEF4094b3848eD261478310a949c4A1E42d28571?tab=contract">0xEEF4094b3848eD261478310a949c4A1E42d28571</a></td></tr>
+          <tr><td>UtuhRegistry <em>(Sepolia-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0x26880c8980Cd54827543bD34c6c613253c69347b?tab=contract">0x26880c8980Cd54827543bD34c6c613253c69347b</a></td></tr>
+          <tr><td>UtuhCredit <em>(Sepolia-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0x0177aDb82152c8673a85271F7F06336B820324b6?tab=contract">0x0177aDb82152c8673a85271F7F06336B820324b6</a></td></tr>
+          <tr><td>EvmV1Decoder <em>(Sepolia-sourced)</em></td><td class="num"><a href="https://creditcoin-testnet.blockscout.com/address/0x084c45552A6c45C7269F4a7041E757ABf4Bcc008?tab=contract">0x084c45552A6c45C7269F4a7041E757ABf4Bcc008</a></td></tr>
+          <tr><td>SettlementLedger <em>(on Sepolia)</em></td><td class="num"><a href="https://eth-sepolia.blockscout.com/address/0xC8C9053C4E2c0590df684c12e5f2610EFeC9575B?tab=contract">0xC8C9053C4E2c0590df684c12e5f2610EFeC9575B</a></td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
   <div class="footer">
-    <span>81 forge tests, 9 fuzz</span>
-    <span>91 guards asserted live</span>
+    <span>193 forge tests, 10 fuzz, 12 invariants</span>
+    <span>121 guards asserted live</span>
     <span>Slither 0, halmos 5 proofs</span>
     <span>Source chains: Ethereum mainnet and Sepolia</span>
-    <span>Registry 7.6 KB runtime</span>
+    <span>Registry 13.6 KB runtime</span>
     <span><a href="https://github.com/PugarHuda/utuh">github.com/PugarHuda/utuh</a></span>
     <span>MIT</span>
   </div>
