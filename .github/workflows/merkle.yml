@@ -1,0 +1,47 @@
+name: merkle-claims
+
+# The roadmap's first item says the Merkle registry lives on the `merkle-claims` branch and tells a
+# reader to check it out and run `forge test`. This does that, from master, so the sentence has a
+# run to point at rather than an instruction to follow.
+#
+# It lives on master and checks the other branch out by name, because a workflow only fires for a
+# push to a branch that carries the workflow file itself — a file here that listened for pushes to
+# `merkle-claims` would never run. The contracts job only: that branch's console reads fields the
+# published registries do not have, so the live and browser jobs do not fit it.
+#
+# Runs once when this file lands, weekly after that, and on request.
+on:
+  push:
+    branches: [master]
+    paths: ['.github/workflows/merkle.yml']
+  schedule:
+    - cron: '52 5 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    name: contracts on merkle-claims
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: merkle-claims
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: 1.8.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      # EvmV1Decoder arrives through npm on that branch as on this one.
+      - run: npm ci
+
+      - run: forge build --sizes
+      - run: forge test -vv
