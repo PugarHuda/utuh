@@ -42,10 +42,13 @@ history nobody could refute.
 The sentence every on-chain credit system needs — *this borrower has never been liquidated* — is a
 statement about events that do not exist, and an inclusion proof can only speak about events that
 do. Utuh is the layer that makes absence assertable, then builds undercollateralized credit on it.
-A neighbouring project cannot truthfully copy this by adding another score: **twenty of the
-eighty-one** entries in this hackathon compute a score, passport or reputation over facts the
-chain already shows — a conservative keyword count taken 2026-09-10, and the fifteen entries added
-in the two days before it were almost all of that kind. Every one of them inherits the hole.
+A neighbouring project cannot truthfully copy this by adding another score: **about forty of the
+145** entries on the hackathon's final board compute a score, passport or cross-chain credit line
+over facts the chain already shows — a keyword count taken 2026-09-13 (twenty of eighty-one on
+2026-09-10). Every one of them inherits the hole. Two entrants come nearest and neither closes it:
+CoverageExchange bonds that nothing happened in a window but ships no sweeper — its README says
+automated counterexample search is out of scope — and Clearbook quotes the thesis and concedes it
+"cannot prevent that, so it measures it".
 
 Completeness here is **economic, not cryptographic**. A bond makes lying expensive; it does not
 make it impossible. That distinction is load-bearing and must never be overstated in copy.
@@ -90,7 +93,7 @@ make it impossible. That distinction is load-bearing and must never be overstate
 - A live console at utuh.vercel.app, mirrored at pugarhuda.github.io/utuh, both built from each
   commit's own artifacts by the same workflow.
 - Real measurements produced by the repo, not asserted: `npm run gas` fits a cost model over 56
-  real appends; symbolic proofs of two roundings; 136 forge tests; a nightly job that proves real
+  real appends; symbolic proofs of two roundings; 159 forge tests; a nightly job that proves real
   mainnet transactions against the live precompile.
 - Public third-party evidence of usage: CC3's own dashboard lists every `verifyAndEmit`.
 - **Absences that must never be fabricated:** no users, no testimonials, no TVL, no partnerships,

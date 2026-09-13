@@ -107,7 +107,7 @@ finding.
 ```
 git clone https://github.com/PugarHuda/utuh && cd utuh
 npm ci && forge build
-forge test            # 159, no network, no key
+forge test            # 159 (`forge test --list`; the summary prints 155, folding 5 invariants into 1), no network, no key
 npm run puretest      # 46 assertions on the classifiers and payload reader, no key
 npm run judge         # every deployed claim measured live, no key
 npm run livetest      # the full live suite against CC3 — needs a funded testnet key

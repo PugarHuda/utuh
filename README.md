@@ -11,7 +11,8 @@ who proves one event was left out.
 
 Built for BUIDL CTC 2026 Fall on Creditcoin.
 
-**Technical brief:** https://claude.ai/code/artifact/2caca05b-c659-463f-b5ca-28e207f95147
+**Whitepaper (PDF):** https://utuh.vercel.app/whitepaper.pdf — 15 pages, rendered from
+[`web/whitepaper.html`](web/whitepaper.html). **Deck:** [`web/deck.pdf`](web/deck.pdf), 12 slides.
 
 Deployed and verified on Creditcoin CC3 Testnet. **[The console is live at
 utuh.vercel.app](https://utuh.vercel.app/)** — it reads the chain from your own
@@ -945,7 +946,8 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 159 forge tests, five of them invariants
+npm run test                # 159 forge tests, five of them invariants (the run summary says 155:
+                            # forge folds the five invariants into one line; `forge test --list` counts 159)
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -1200,7 +1202,9 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-159 tests, 9 of them fuzzed and 5 of them invariants over random sequences. Everything below runs with `forge test`, no key and no network.
+159 tests, 9 of them fuzzed and 5 of them invariants over random sequences. Everything below runs with
+`forge test`, no key and no network. (`forge test --list` counts 159; the run summary prints 155
+because forge reports the five invariants of one suite as a single test.)
 
 Most of them cover the part that runs in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
@@ -1527,9 +1531,11 @@ they happen, recorded by the network rather than by us.
 - Claim members are held as a storage array so refutation is a binary search the chain runs
   itself, with no witness a claimant could withhold. What caps a claim is not that array, though —
   measured, the cost follows the _bytes of the transactions being proven_ at about twice their
-  calldata gas, and a ten-thousand-event claim is forty blocks' worth. Beyond the point where
-  that is affordable, the array becomes an incremental Merkle root and the refuter supplies an
-  adjacency proof of the two members bracketing the gap.
+  calldata gas, and a ten-thousand-event claim is forty blocks' worth. The replacement — an
+  incremental Merkle root per claim, with the refuter supplying an adjacency proof of the two
+  members bracketing the gap — is built and tested on branch `merkle-claims` and is **not** on
+  master or deployed, because it changes storage and a redeploy renumbers every claim this file
+  links. [docs/ROADMAP.md](docs/ROADMAP.md) says why and when.
 - Writability is still in third-party audit and not on testnet, so Utuh is read-side only. A
   default is recorded on Creditcoin; enforcing consequences back on Ethereum waits for outbound
   messaging.
