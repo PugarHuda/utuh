@@ -59,7 +59,7 @@ const LISTED = {
 const QUOTED = {
   transactions: 359,
   gas: 148_000_000,
-  foundryTests: 159,
+  foundryTests: 193,
   commits: 156,
   claimsRefuted: 33,
   /// TransactionVerified events the network's indexer attributes to the listed addresses.
@@ -390,14 +390,17 @@ async function main(): Promise<void> {
 
   // ── What is local to this tree, and what a clone can count ────────────────────────────────────
   try {
-    const listed = JSON.parse(
-      execFileSync('forge', ['test', '--list', '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }),
-    ) as Record<string, Record<string, string[]>>;
-    const tests = Object.values(listed).reduce((n, f) => n + Object.values(f).reduce((m, t) => m + t.length, 0), 0);
+    // The number a stranger sees: `forge test` reports invariant campaigns as one test each, so
+    // it prints 193 where `--list` counts 203 functions. The prose quotes what the run prints,
+    // and so does this. The suite takes about three seconds.
+    const run = execFileSync('forge', ['test'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const m = run.match(/(\d+) tests? passed, (\d+) failed, \d+ skipped \((\d+) total tests?\)/);
+    const tests = m ? Number(m[3]) : NaN;
+    const failedTests = m ? Number(m[2]) : NaN;
     note(
       `at least ${QUOTED.foundryTests} Foundry tests`,
-      `forge test --list → ${tests}`,
-      tests >= QUOTED.foundryTests,
+      m ? `forge test → ${tests} total, ${failedTests} failed` : 'forge test printed no summary line',
+      tests >= QUOTED.foundryTests && failedTests === 0,
     );
   } catch {
     note(`at least ${QUOTED.foundryTests} Foundry tests`, 'forge not on PATH — install Foundry to count them', false);
