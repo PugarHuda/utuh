@@ -83,6 +83,16 @@ contract EventScopeTest is Test {
     }
 
     /// @notice A later transaction index must outrank any log index in an earlier transaction.
+    /// @notice Two in-scope logs from one transaction are two members. Gluwa's own ASCBase dedupes
+    ///         per transaction — keccak(chainKey, height, txIndex) — which would fold a transaction
+    ///         that repaid twice into one event; the key here carries the log index, so it does not.
+    function test_twoLogsOfOneTransactionAreTwoMembers() public pure {
+        uint256 first = EventScope.key(1_000_000, 7, 0);
+        uint256 second = EventScope.key(1_000_000, 7, 1);
+        assertTrue(first != second, "two logs of one transaction collapsed into one key");
+        assertLt(first, second, "log order inside a transaction is not preserved");
+    }
+
     function testFuzz_txIndexDominatesLogIndex(uint64 height, uint64 txIndex, uint32 logIndex) public pure {
         vm.assume(txIndex < type(uint64).max);
         uint256 earlier = EventScope.key(height, txIndex, logIndex);
