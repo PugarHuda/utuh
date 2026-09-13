@@ -1099,9 +1099,12 @@ async function renderClaimDetail(): Promise<void> {
     // when the detail is below the fold — a reader who can already see it keeps the header.
     if (!linkedScrolled && new URLSearchParams(location.search).has('claim')) {
       linkedScrolled = true;
+      // The whole Watch schedule, not the detail alone: the sweep stamp sits just above the detail
+      // and is the thing the linked claim is there to invite.
+      const pane = box.closest('section') ?? box;
       if (box.getBoundingClientRect().top > window.innerHeight * 0.55) {
-        box.scrollIntoView({ block: 'start' });
-        window.scrollBy(0, -16);
+        pane.scrollIntoView({ block: 'start' });
+        window.scrollBy(0, -12);
       }
     }
   } catch (e) {

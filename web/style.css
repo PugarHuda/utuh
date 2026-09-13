@@ -104,7 +104,12 @@ body {
   line-height: 1.55;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
-  /* Panes redraw as the chain answers; the browser must not re-anchor the scroll each time. */
+}
+
+/* Console panes redraw as the chain answers, and the deep-link scroll aims at one of them; the
+   browser must not re-anchor the scroll each time. The landing keeps anchoring: a reader partway
+   down should not be shifted when the schedules fill in above. */
+body[data-page='app'] {
   overflow-anchor: none;
 }
 
