@@ -44,7 +44,8 @@ audit would be the least honest page in the repository.
   _Check it:_ the `watch` workflow's run history, and the page's own network log.
 - **The watcher role as an agent.** `npx utuh-mcp` — five tools, claims as addressable resources,
   the job written down as a prompt, per-tool annotations saying which one spends.
-  _Check it:_ npm `utuh-mcp@0.3.0`, and the MCP Registry entry `io.github.PugarHuda/utuh-mcp`.
+  _Check it:_ npm `utuh-mcp@0.4.0`, the MCP Registry entry `io.github.PugarHuda/utuh-mcp`, and the
+  `utuh-mcp.mcpb` on GitHub release `v0.4.0`.
 - **All sixteen protocol entry points**, five on the Block Prover and eleven on ChainInfo, each
   because something needed it. _Check it:_ the table in the README, then the contracts.
 

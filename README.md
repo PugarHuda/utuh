@@ -30,9 +30,8 @@ Two things a reader with a clone and no key can check first. `npm run judge` re-
 number this repository and the submission quote — the contracts and their verification, the tally,
 both linked claims, the explorer counters, npm, the MCP Registry, the published build, the sixteen
 protocol entry points, the test and commit counts — and exits non-zero on any that no longer
-holds; on the evening of 2026-09-13 it measured 23 claims and 21 held — the two that did not are
-the npm and MCP Registry lines, because master declares `utuh-mcp` 0.4.0 and npm serves 0.3.0
-until it is published. And a bond here stands behind a specific line, not behind
+holds; late on 2026-09-13, after `utuh-mcp` 0.4.0 was published, 23 of 23 held. And a bond here
+stands behind a specific line, not behind
 nothing: `UtuhCredit.openLine` reaches a claim only through `UtuhRegistry.isUsable(claimId,
 exposure)`, the finalized claim is spent by the line it opens, `underwrittenThrough` consumes the
 history range, and the limit is capped at ten times the enforceable loss. Exposure is gated by the
@@ -626,13 +625,16 @@ That entry is Claude Desktop's `claude_desktop_config.json` and Cursor's `.curso
 Code's `.vscode/mcp.json` wants `{ "servers": { "utuh": { "type": "stdio", "command": "npx",
 "args": ["-y", "utuh-mcp"] } } }`, and Claude Code is `claude mcp add utuh -- npx -y utuh-mcp`.
 Add `"env": { "PRIVATE_KEY": "0x…" }` to the entry only if `refute_claim` should be able to send;
-the other four tools spend nothing. What npm serves today is **0.3.0** — five tools, one prompt,
-the resources — verified from a clean cache on 2026-09-13. Master is 0.4.0 and ships with the next
-`npm publish` (`dist-mcp/RELEASE.md`): every tool answers with `structuredContent` against an
+the other four tools spend nothing. npm serves **0.4.0** (published 2026-09-13; a clean-cache
+`npx -y utuh-mcp` reports it, with logging and completions capabilities and `instructions`), and
+the same server is attached to the GitHub release
+[`v0.4.0`](https://github.com/PugarHuda/utuh/releases/tag/v0.4.0) as `utuh-mcp.mcpb` for Claude
+Desktop's one-click install. In 0.4.0 every tool answers with `structuredContent` against an
 `outputSchema`, sweeps and audits narrate progress over `notifications/progress` and log over
 `notifications/message`, argument completion works for the resource templates, the server sends
 `instructions` at `initialize`, and a missing claim or a bad cursor comes back as an `isError`
-result rather than a thrown exception.
+result rather than a thrown exception. 0.3.0 — five tools, one prompt, the resources — was what
+npm served for most of that day, and the earlier releases stay installable by version.
 
 Listed in the official [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp)
 as `io.github.PugarHuda/utuh-mcp`, so a client that does not know the package name can still find
