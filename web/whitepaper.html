@@ -1026,11 +1026,11 @@ function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repa
           produce the same continuity roots: <code>npm run provers</code> proves one transaction
           each way and compares them. Then the real test &mdash; a planted incomplete claim
           refuted by a watcher run with <code>PROVER_URL</code> pointed at a dead port. A real
-          bond, taken on chain, with no hosted proof service reachable at all. The local path
-          took tens of seconds against the hosted one's single second until the block provider
-          stopped re-fetching sibling transactions it had already been handed; since 2026-09-10 it
-          is 0.8 s against 0.9 s hosted on an 81-transaction block, byte-identical proofs either
-          way. That margin is still the reason not to underwrite against the twenty-block floor.
+          bond, taken on chain, with no hosted proof service reachable at all. The independent
+          proof path is twenty to thirty times slower than the hosted one &mdash; 20 s on Sepolia,
+          30 s on mainnet against 0.9 s, measured 2026-09-13 &mdash; and produces byte-identical
+          proofs; size the challenge window for it, which is the reason not to underwrite against
+          the twenty-block floor.
         </li>
         <li>
           <b>A refutation depended on a node's willingness to do arithmetic.</b>
