@@ -75,6 +75,9 @@ async function ecosystem(): Promise<number> {
   };
 
   const get = async (url: string, init?: RequestInit) => {
+    // Every URL here is a constant from ./lib/networks; the guard makes that a property of the
+    // call rather than of the current import list.
+    if (new URL(url).protocol !== 'https:') throw new Error(`refusing a non-https probe: ${url}`);
     const c = new AbortController();
     const t = setTimeout(() => c.abort(), 20_000);
     try {

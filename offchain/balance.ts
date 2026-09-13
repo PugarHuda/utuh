@@ -1,7 +1,7 @@
 import { formatEther } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, requirePrivateKey } from './config';
-import { signer, readDeployments } from './lib/contracts';
+import { signer, readDeployments, faucetHint } from './lib/contracts';
 import { chainInfoAt } from './lib/chain';
 import { runScript } from './lib/cli';
 
@@ -31,10 +31,7 @@ async function main() {
     console.log(`credit     ${d.credit}`);
   }
 
-  if (balance === 0n) {
-    console.log(`\nNo CTC yet. In the Creditcoin Discord #token-faucet channel:`);
-    console.log(`  /faucet address:${wallet.address}`);
-  }
+  if (balance === 0n) console.log(`\nNo CTC yet. ${faucetHint(wallet.address)}`);
 }
 
 runScript(main);

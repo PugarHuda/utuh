@@ -156,7 +156,8 @@ thousand events is broken by a single proof or by none at all.
 
 _Building_ one is not. `npm run gas` measures it rather than reasoning about it — it finds every
 transaction a registry has ever seen from the registry's own logs, reads the receipts, and fits a
-cost model. No explorer involved. Across the four registries deployed so far, 139 transactions:
+cost model. No explorer involved. Across the four registries deployed by 2026-08-28, when the fit
+below was taken, 139 transactions:
 
 | Call                      | Gas (mean) | % of a 75M block |
 | ------------------------- | ---------- | ---------------- |
@@ -171,8 +172,8 @@ cost model. No explorer involved. Across the four registries deployed so far, 13
 
 Member count alone does not explain those. One append of **three** events cost 541,464 gas while
 an append of **two** cost 878,903, because the cost follows the _size of the transactions being
-proven_, not how many events sit inside them. A least-squares fit over all 56 appends the published
-registries have seen, against the call's own calldata gas and its member count:
+proven_, not how many events sit inside them. A least-squares fit over the 56 appends the published
+registries had seen by 2026-08-28, against the call's own calldata gas and its member count:
 
 ```
   290,899 gas fixed
@@ -226,6 +227,14 @@ The practical ceiling is therefore set by bytes:
 The asymmetry is still the point — challenging is one proof and a binary search, whatever the claim
 holds — but a claim of ten thousand events is thirty blocks' worth of gas, and that is the number
 that caps this rather than any argument about storage.
+
+Re-run on 2026-09-13 with the default `GAS_LOOKBACK` of 100,000 CC3 blocks — the mainnet
+registry's last 85 transactions, 23 of them appends — the fit reads 317,593 fixed, 1.40× the
+call's own calldata gas, 88,066 per member, worst residual 14% of the mean append, and 185 gas
+per continuity hash with the bytes held at their own price; the ceiling comes out at 24.9M,
+248.6M and 2,485.5M gas for 100, 1,000 and 10,000 events. The shape and the calldata term hold.
+The per-member and per-hash terms move with the sample, which is what the paragraph above says
+they do, and `npm run gas` prints whichever sample it was given rather than this one.
 
 ### The subtle part
 

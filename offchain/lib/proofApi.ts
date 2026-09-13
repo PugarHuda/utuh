@@ -135,9 +135,9 @@ function hostOf(url: string): string {
 /// a block the builder has not indexed yet, and a proof request in that gap comes back 422 from the
 /// batch endpoint — measured, on a block the precompile had attested a minute earlier. Anything
 /// that is about to ask for proofs waits on this as well.
-export async function builderAttestedHeight(chainKey: number): Promise<number> {
+export async function builderAttestedHeight(chainKey: number, hosts: string[] = proofHosts()): Promise<number> {
   const failures: string[] = [];
-  for (const host of proofHosts()) {
+  for (const host of hosts) {
     try {
       const res = await fetchWithin(`${host.replace(/\/$/, '')}/api/v1/attested-height/${chainKey}`, {}, 20_000);
       if (!res.ok) {

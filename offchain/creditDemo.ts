@@ -12,8 +12,9 @@ import {
   requirePrivateKey,
 } from './config';
 import { SWEEP_CHUNK } from './lib/networks';
-import { readDeployments, registryAt, creditAt, signer } from './lib/contracts';
-import { chainInfoAt, waitForBlock } from './lib/chain';
+import { readDeployments, registryAt, creditAt, signer, requireFunds } from './lib/contracts';
+import { waitForBlock } from './lib/chain';
+import { claimEnd } from './lib/attest';
 import { scopeFor, scanScope, Metric, type Scope } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, refuteClaim } from './lib/claims';
@@ -24,8 +25,6 @@ const BOND = parseEther(process.env.BOND ?? '2');
 
 /// Mirrors UtuhCredit.MIN_HISTORY_BLOCKS: a clean window shorter than this says very little.
 const HISTORY_BLOCKS = 216_001;
-/// Stay behind the attestation frontier so every block in the range is provable.
-const FRONTIER_LAG = 60;
 
 async function main() {
   const d = readDeployments();
@@ -34,16 +33,23 @@ async function main() {
   const wallet = signer(CC3_RPC, CC3_CHAIN_ID, requirePrivateKey());
   const registry = registryAt(d.registry, wallet);
   const credit = creditAt(d.credit, wallet);
-  const chainInfo = chainInfoAt(wallet.provider!);
   const ck = CHAIN_KEY.mainnet;
   const eth = source(ck);
   const prover = Prover.withDefaults(ck, 60000);
   const minWindow = Number(await registry.MIN_CHALLENGE_WINDOW());
 
-  const frontier = Number((await chainInfo.getLatestAttestedHeightAndHash(ck)).height);
-  const toBlock = frontier - FRONTIER_LAG;
+  // Two claims, two bonds, and the appends behind them. Said before the sweep, not after it.
+  await requireFunds(wallet, BOND * 2n + parseEther('2'), 'this demonstration');
+
+  // End where the attestations are finished and the builder has indexed, rather than a guessed
+  // sixty blocks under a moving frontier. See `claimEnd`.
+  const end = await claimEnd(wallet.provider!, ck);
+  const toBlock = end.toBlock;
   const fromBlock = toBlock - HISTORY_BLOCKS;
-  console.log(`Ethereum mainnet attested up to ${frontier}`);
+  console.log(
+    `Ethereum mainnet attested up to ${end.frontier}, settled at ${end.settled}, ` +
+      `proof builder indexed to ${end.builder ?? 'unknown'}`,
+  );
   console.log(`underwriting window ${fromBlock}..${toBlock} (${HISTORY_BLOCKS} blocks, ~30 days)\n`);
 
   // ------------------------------------------------------------------

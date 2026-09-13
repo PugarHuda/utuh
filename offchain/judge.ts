@@ -139,8 +139,8 @@ async function main(): Promise<void> {
   for (const [name, address] of Object.entries(LISTED)) {
     const code = await provider.getCode(address);
     const deployed = code !== '0x';
-    let verified = 'unknown';
-    let matched = 'unknown';
+    let verified: string;
+    let matched: string;
     try {
       const bs = await json<{ is_verified?: boolean; is_fully_verified?: boolean }>(
         `${BLOCKSCOUT}/smart-contracts/${address}`,

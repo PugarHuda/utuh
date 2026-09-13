@@ -1,8 +1,9 @@
 import { formatEther, parseEther } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, USDC, TRANSFER_SIG, source, requirePrivateKey } from './config';
-import { readDeployments, registryAt, signer } from './lib/contracts';
-import { chainInfoAt, waitForBlock } from './lib/chain';
+import { readDeployments, registryAt, signer, requireFunds } from './lib/contracts';
+import { waitForBlock } from './lib/chain';
+import { claimEnd } from './lib/attest';
 import { scopeFor, scanScope, eventKey, Metric } from './lib/scope';
 import { Prover } from './lib/proofs';
 import { buildClaim, findOmission, refuteClaim } from './lib/claims';
@@ -22,14 +23,18 @@ async function main() {
 
   const wallet = signer(CC3_RPC, CC3_CHAIN_ID, requirePrivateKey());
   const registry = registryAt(d.registry, wallet);
-  const chainInfo = chainInfoAt(wallet.provider!);
   const ck = CHAIN_KEY.mainnet;
 
-  const frontier = Number((await chainInfo.getLatestAttestedHeightAndHash(ck)).height);
-  const toBlock = frontier - 30;
+  await requireFunds(wallet, BOND * 2n + parseEther('2'), 'this demonstration');
+
+  const end = await claimEnd(wallet.provider!, ck);
+  const toBlock = end.toBlock;
   const fromBlock = toBlock - RANGE_BLOCKS + 1;
 
-  console.log(`Ethereum mainnet attested on Creditcoin up to block ${frontier}`);
+  console.log(
+    `Ethereum mainnet attested on Creditcoin up to block ${end.frontier}, settled at ${end.settled}, ` +
+      `proof builder indexed to ${end.builder ?? 'unknown'}`,
+  );
   console.log(`claim range: ${fromBlock}..${toBlock}\n`);
 
   const eth = source(ck);

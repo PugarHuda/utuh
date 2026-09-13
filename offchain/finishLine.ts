@@ -1,7 +1,8 @@
 import { JsonRpcProvider, Wallet, formatEther, keccak256, concat, toUtf8Bytes, parseEther } from 'ethers';
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
-import { registryAt, creditAt, signer } from './lib/contracts';
+import { registryAt, creditAt, signer, requireFunds } from './lib/contracts';
+import { claimEnd } from './lib/attest';
 import type { Scope } from './lib/scope';
 import { scopeFromCredit, plainSpec, sameScope } from './lib/specs';
 import { Prover } from './lib/proofs';
@@ -49,6 +50,7 @@ async function main() {
 
   if (claimId === 0n) {
     console.log('\nno repayment claim yet — building one');
+    await requireFunds(borrower, parseEther(process.env.BOND ?? '2') + parseEther('1'), 'the repayment claim');
     claimId = await buildRepayClaim(registryRead, registryAsBorrower, creditRead, line);
   }
 
@@ -108,13 +110,20 @@ async function buildRepayClaim(registry: any, registryAsBorrower: any, credit: a
 
   const head = await eth.getBlockNumber();
   const fromBlock = Number(line.repayFrom);
-  const toBlock = head - 3;
-  console.log(`  sweeping ${fromBlock}..${toBlock} on chain key ${chainKey}`);
+  const swept = head - 3;
+  console.log(`  sweeping ${fromBlock}..${swept} on chain key ${chainKey}`);
 
-  const events = await sweepForClaim(scope, fromBlock, toBlock, { log: (m) => console.log('  ' + m) });
+  const events = await sweepForClaim(scope, fromBlock, swept, { log: (m) => console.log('  ' + m) });
   console.log(`  payments found: ${events.length}`);
   if (events.length === 0) throw new Error('no repayment on the source chain to prove');
 
+  // The claim ends where the attestations are finished, or at the newest payment if that is
+  // later — only then is there anything to wait for, and the wait says which attestation covers it.
+  const end = await claimEnd(registry.runner!.provider!, chainKey);
+  const toBlock = Math.max(end.toBlock, events[events.length - 1]!.blockNumber);
+  console.log(
+    `  claim range ${fromBlock}..${toBlock} (settled attestation ${end.settled}, builder ${end.builder ?? 'unknown'})`,
+  );
   await prover.waitAttested(toBlock);
   const window = Number(await registry.MIN_CHALLENGE_WINDOW());
   const built = await buildClaim(registryAsBorrower, prover, scope, fromBlock, toBlock, events, {

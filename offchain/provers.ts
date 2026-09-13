@@ -54,11 +54,17 @@ async function main() {
   /// what gets compared is the proof.
   const results: Record<string, { proof: EventProofStruct; continuity: ContinuityProofStruct; seconds: number }> = {};
 
+  // The local builder alone. This used to be `withDefaults` with the primary hosted URL sent to a
+  // dead port — which still wires the *alternate* hosted hostname, so the "local" timing was the
+  // hosted service under its other name, and the README repeated a 1x that measured nothing. Wired
+  // by hand here: no hosted builder at all, source RPCs and the precompile only.
+  const localRpcs = sources(chainKey).map((s) => s.provider);
+  const local = new Prover(chainKey, 'http://127.0.0.1:1', 180_000).withLocalFallback(localRpcs, cc3);
+
   for (const [name, prover] of [
     // The hosted builder alone, so a hosted outage shows up as a hosted failure.
     ['hosted', new Prover(chainKey, PROVER_URL, 180_000)],
-    // The local builder alone: same wiring as everything else, with the hosted URL sent nowhere.
-    ['local', Prover.withDefaults(chainKey, 180_000, 'http://127.0.0.1:1')],
+    ['local', local],
   ] as const) {
     const started = process.hrtime.bigint();
     try {
@@ -72,6 +78,7 @@ async function main() {
     prover.close();
   }
 
+  for (const p of localRpcs) p.destroy();
   cc3.destroy();
 
   if (results.hosted && results.local) {
