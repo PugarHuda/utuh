@@ -125,13 +125,11 @@ jobs:
       # did not answer". They lived behind `npm run livetest`, which needs a funded wallet, so CI
       # had never run one of them. This job has no secrets at all, which is exactly the proof that
       # they need none.
+      # `npm run puretest` is also the watcher's rules (offchain/watchTest.ts): resume from the
+      # mark, soonest deadline first, retire a claim only on a verdict that cannot change, survive
+      # a refutation that threw.
       - name: the checks that need no chain
         run: npm run puretest
-
-      # The watcher's rules — resume from the mark, soonest deadline first, retire a claim only on
-      # a verdict that cannot change, survive a refutation that threw — asserted without a chain.
-      - name: the watcher's rules
-        run: npx tsx offchain/watchTest.ts
 
       # The published server, spoken to over its own protocol. `npx utuh-mcp` is a public artifact
       # with an entry in the official MCP Registry, and the thing that reaches users is an esbuild
