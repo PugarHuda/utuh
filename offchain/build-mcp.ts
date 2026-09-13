@@ -55,7 +55,21 @@ async function main(): Promise<void> {
         license: 'MIT',
         repository: { type: 'git', url: 'git+https://github.com/PugarHuda/utuh.git' },
         homepage: 'https://utuh.vercel.app/',
-        keywords: ['mcp', 'model-context-protocol', 'creditcoin', 'attestcoin', 'watcher', 'completeness'],
+        // The two spellings the directories that crawl npm key on (Glama, mcp.so, PulseMCP, LobeHub)
+        // are `mcp-server` and `modelcontextprotocol`; none of them listed the package without.
+        keywords: [
+          'mcp',
+          'mcp-server',
+          'model-context-protocol',
+          'modelcontextprotocol',
+          'creditcoin',
+          'attestcoin',
+          'ethereum',
+          'blockchain',
+          'ai-agent',
+          'watcher',
+          'completeness',
+        ],
         engines: { node: '>=20' },
       },
       null,
@@ -73,14 +87,47 @@ The [Utuh](https://github.com/PugarHuda/utuh) watcher as a Model Context Protoco
 AI agent can hold the role. Utuh bonds the claim that a set of source-chain events is complete;
 anyone who proves one omitted event takes half the bond. This server is the "anyone".
 
+## Connect a client
+
+No clone, no key, no build: every client below runs \`npx -y utuh-mcp\` and gets the same server.
+Add \`"env": { "PRIVATE_KEY": "0x…" }\` to the entry only if you want \`refute_claim\` to be able to
+send; the other four tools read the chain and spend nothing.
+
+**Claude Desktop** — \`claude_desktop_config.json\` (Settings → Developer → Edit Config), or install
+\`utuh-mcp.mcpb\` from the [releases](https://github.com/PugarHuda/utuh/releases) with one click:
+
 \`\`\`json
 { "mcpServers": { "utuh": { "command": "npx", "args": ["-y", "utuh-mcp"] } } }
 \`\`\`
 
+**Claude Code**:
+
+\`\`\`bash
+claude mcp add utuh -- npx -y utuh-mcp
+\`\`\`
+
+**Cursor** — \`.cursor/mcp.json\` in the project, or \`~/.cursor/mcp.json\` for every project:
+
+\`\`\`json
+{ "mcpServers": { "utuh": { "command": "npx", "args": ["-y", "utuh-mcp"] } } }
+\`\`\`
+
+**VS Code** — \`.vscode/mcp.json\` in the workspace (Copilot agent mode):
+
+\`\`\`json
+{ "servers": { "utuh": { "type": "stdio", "command": "npx", "args": ["-y", "utuh-mcp"] } } }
+\`\`\`
+
+**Any other client** — it is a stdio server: run \`npx -y utuh-mcp\` and speak JSON-RPC on its
+stdin and stdout. It is listed in the official MCP Registry as \`io.github.PugarHuda/utuh-mcp\`.
+
+## What it serves
+
 Five tools, each the same function the daemon and the [live console](https://utuh.vercel.app/) run:
 
 - **tally** — what both registries have done, read live from Creditcoin CC3 Testnet
-- **list_claims** — every claim with its status, bond, and remaining challenge window
+- **list_claims** — a page of claims with status, bond, and remaining challenge window; pass the
+  returned \`nextCursor\` for the next page
 - **sweep_claim** — sweep Ethereum across independent endpoints and check a claim's completeness
 - **refute_claim** — prove one omitted event and take half the bond (needs \`confirm: true\` and a
   funded \`PRIVATE_KEY\` — everything else needs no key and spends nothing)
@@ -89,14 +136,34 @@ Five tools, each the same function the daemon and the [live console](https://utu
   network. Both networks attest Ethereum mainnet from disjoint attestor sets, and the tool reports
   whether their digests for the same block agree
 
+Every tool answers in prose and as \`structuredContent\` validated against its \`outputSchema\`, so
+a client can hand the verdict to code. Every tool carries its annotations, so a client knows which
+four only read and which one sends a transaction that slashes a real bond. A sweep, an audit and a
+refutation report each step as a logging notification and, when the call carried a progress token,
+as progress. A failure the caller can act on — no such claim, no usable endpoint — comes back as an
+\`isError\` result with an explanation rather than a JSON-RPC error.
+
 Claims are addressable as resources too, so an agent can hold one as context instead of re-reading
 a paragraph: \`utuh://tally\`, \`utuh://claims/{deployment}\`, \`utuh://claim/{deployment}/{id}\` —
-live JSON, read from the same contracts. And the watcher's job is written down as a prompt,
-\`hold_the_watcher_role\`, which sweeps every claim still inside its window and reports the gaps
-without spending anything.
+live JSON, read from the same contracts. The templates list their deployments and complete their
+variables, so a picker offers \`sepolia\`, \`mainnet\`, and then the claim ids that exist.
 
-Every tool carries its annotations, so a client knows which four only read and which one sends a
-transaction that slashes a real bond.
+The watcher's job is written down as two prompts: \`hold_the_watcher_role\` sweeps every claim still
+inside its window and reports the gaps without spending anything, and \`weigh_a_refutation\` takes
+one claim from finding to decision — confirm the gap, lay out the bond and the reward, and send only
+on an explicit yes. The server's \`instructions\` at \`initialize\` say the same in five sentences,
+for a client that never reads a prompt.
+
+## Privacy Policy
+
+utuh-mcp runs on your machine and keeps nothing. It collects no telemetry and stores no data between
+runs. Every tool reads public chain state over JSON-RPC from Creditcoin CC3 Testnet and public
+Ethereum endpoints; those endpoints see your IP address and the requests, as any RPC provider does,
+and \`sweep_claim\` and \`audit_attestors\` name the endpoints they used in their results. The only
+secret it can hold is \`PRIVATE_KEY\`, which you supply, which is read from the environment, never
+written anywhere, and used only by \`refute_claim\` after \`confirm: true\`. Nothing is shared with the
+authors or any third party. Questions: open an issue at https://github.com/PugarHuda/utuh or use
+the contact in that repository's SECURITY.md.
 
 The first MCP client ever connected to this server found the gap in a standing claim and refuted
 it — a real slashed bond, during its own smoke test.
@@ -127,6 +194,9 @@ it — a real slashed bond, during its own smoke test.
         repository: { type: 'git', url: 'https://github.com/PugarHuda/utuh' },
         homepage: 'https://utuh.vercel.app/',
         license: 'MIT',
+        // The Claude Connectors Directory rejects a bundle without one. The README ships in the npm
+        // tarball, so npm renders it at a URL that outlives any branch.
+        privacy_policies: ['https://www.npmjs.com/package/utuh-mcp#privacy-policy'],
         keywords: ['creditcoin', 'attestcoin', 'ethereum', 'watcher', 'completeness', 'credit'],
         server: {
           type: 'node',
@@ -149,7 +219,7 @@ it — a real slashed bond, during its own smoke test.
         },
         tools: [
           { name: 'tally', description: 'What both registries have done, read live from Creditcoin' },
-          { name: 'list_claims', description: 'Every claim with status, bond and remaining challenge window' },
+          { name: 'list_claims', description: 'A page of claims with status, bond and remaining challenge window' },
           {
             name: 'sweep_claim',
             description: 'Sweep Ethereum across independent endpoints and check a claim for omitted events',
@@ -160,11 +230,21 @@ it — a real slashed bond, during its own smoke test.
           },
           { name: 'audit_attestors', description: "Check what Creditcoin's attestors signed, three ways" },
         ],
+        // Names must match what the server lists — `mcpTest.ts` compares this file with tools/list
+        // and prompts/list over the wire, so a tool added on one side fails the build on the other.
         prompts: [
           {
             name: 'hold_the_watcher_role',
             description: 'The watcher job: sweep every open claim, report gaps, spend nothing',
-            text: 'Hold the Utuh watcher role. List every claim still inside its challenge window on both deployments, sweep each one, and report any claim whose sweep shows an in-scope event it does not contain, with the claim id, the omitted event, and how many independent endpoints vouched for it. Do not call refute_claim unless the operator explicitly confirms; it sends a real transaction.',
+            arguments: ['deployment'],
+            text: 'Hold the Utuh watcher role. List every claim still inside its challenge window on the given deployment, sweep each one, and report any claim whose sweep shows an in-scope event it does not contain, with the claim id, the omitted event, and how many independent endpoints vouched for it. Do not call refute_claim; it sends a real transaction.',
+          },
+          {
+            name: 'weigh_a_refutation',
+            description:
+              'One claim from finding to decision: confirm the gap, lay out cost and reward, send only on a yes',
+            arguments: ['deployment', 'claimId'],
+            text: 'Weigh a refutation of the given claim. Read it, sweep it, and if it omits an event lay out the omitted event, the endpoints that vouched, the bond and the half of it paid as reward. Ask whether to send, and call refute_claim with confirm: true only after an explicit yes.',
           },
         ],
         compatibility: {
@@ -178,7 +258,38 @@ it — a real slashed bond, during its own smoke test.
     ) + '\n',
   );
 
-  console.log(`dist-mcp/ written — utuh-mcp@${version}, plus dist-mcp/mcpb/ for \`mcpb pack\``);
+  // The release is a hand sequence, because npm publish needs a login this repository does not
+  // hold: written where the person about to run it is standing.
+  writeFileSync(
+    join(DIST, 'RELEASE.md'),
+    `# Releasing utuh-mcp@${version}
+
+Everything below is checked before it is announced, and nothing is automated past the point where a
+login is needed.
+
+1. Version. \`package.json\` at the repository root and \`server.json\` both say \`${version}\`; this
+   directory was generated from the former, and \`npm run mcp:test\` asserts the bundle reports it.
+   npm refuses to overwrite a published version, so a change to the server is a bump first.
+2. Build and prove: \`npm run mcp:test\` — rebuilds this directory and speaks the protocol to the
+   bundle, live against Creditcoin. Nothing ships that did not pass.
+3. Publish to npm, from here, with your login:
+   \`cd dist-mcp && npm publish\`. Then check: \`npm view utuh-mcp version\` prints \`${version}\`.
+4. Tag: \`git tag v${version} && git push origin v${version}\`. The tag runs
+   \`.github/workflows/mcp-registry.yml\`, which refuses to list a version npm does not serve,
+   checks the tarball carries \`mcpName: io.github.PugarHuda/utuh-mcp\`, authenticates to the
+   official MCP Registry over GitHub OIDC (no secret to store), publishes \`server.json\`, and reads
+   the listing back: \`https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp\`.
+5. Claude Desktop bundle: \`npx -y @anthropic-ai/mcpb pack dist-mcp/mcpb dist-mcp/utuh-mcp.mcpb\`
+   and attach \`utuh-mcp.mcpb\` to the GitHub release for \`v${version}\`. The manifest validates with
+   \`npx -y @anthropic-ai/mcpb validate dist-mcp/mcpb/manifest.json\`.
+6. From a clean cache, the way a judge would: \`npx -y utuh-mcp@${version}\` and send it
+   \`initialize\` — it must report \`"version": "${version}"\`.
+`,
+  );
+
+  console.log(
+    `dist-mcp/ written — utuh-mcp@${version}, plus dist-mcp/mcpb/ for \`mcpb pack\` and dist-mcp/RELEASE.md`,
+  );
 }
 
 void main();
