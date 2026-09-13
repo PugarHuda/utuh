@@ -29,6 +29,11 @@
       content="The Utuh console reading Creditcoin CC3 Testnet: attested chains, the deployment, the claims."
     />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Utuh — completeness for the Attestcoin Protocol" />
+    <meta
+      name="twitter:description"
+      content="Attestcoin proves a transaction happened. It cannot prove a set is complete. Utuh bonds that assertion and lets anyone break it with one proof — and underwrites credit on it. Live on Creditcoin CC3 Testnet."
+    />
     <meta name="twitter:image" content="https://utuh.vercel.app/og.png" />
     <meta name="theme-color" content="#100e0c" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#ddd7cc" media="(prefers-color-scheme: light)" />
@@ -76,7 +81,14 @@
           <option value="mainnet">Mainnet-sourced — real Aave history</option>
         </select>
         <span class="chip">chain id <b id="chain-id">…</b></span>
-        <span class="chip">block <b id="cc3-block">…</b></span>
+        <span class="chip"
+          >block <b id="cc3-block">…</b
+          ><span
+            id="rpc-route"
+            title="Creditcoin's own RPC did not answer from this browser; every read is going through Blockscout's proxy for the same chain"
+            >via Blockscout</span
+          ></span
+        >
         <button id="connect" class="act">connect wallet</button>
         <span id="wallet-choice" data-testid="wallet-choice"></span>
       </div>
@@ -88,33 +100,28 @@
          summed, read from the registries themselves — the refutation count is the one number here
          that no other project on this protocol can report, because nothing else has the call. -->
     <section id="tally" class="tally" data-testid="tally" data-ready="false" aria-label="what this registry has done">
-      <div class="t">
-        <b id="t-proven">…</b><span>events proven into claims</span>
-      </div>
-      <div class="t">
-        <b id="t-claims">…</b><span>claims sealed and challengeable</span>
-      </div>
-      <div class="t struck-num">
-        <b id="t-refuted">…</b><span>broken by someone who found the gap</span>
-      </div>
-      <div class="t">
-        <b id="t-burned">…</b><span>bond slashed from claimants who were short</span>
-      </div>
+      <div class="t"><b id="t-proven">…</b><span>events proven into claims</span></div>
+      <div class="t"><b id="t-claims">…</b><span>claims sealed and challengeable</span></div>
+      <div class="t struck-num"><b id="t-refuted">…</b><span>broken by someone who found the gap</span></div>
+      <div class="t"><b id="t-burned">…</b><span>bond slashed from claimants who were short</span></div>
     </section>
 
-    <!-- Filled by the page once it knows which claim is still challengeable. Empty until then, so
-         it never invites anyone to break something that has already settled. -->
-    <p id="invitation" class="invitation" data-testid="invitation"></p>
+    <!-- Rewritten by the page once it knows which claim is still challengeable, so it never invites
+         anyone to break something that has already settled. Until then it says what it is doing,
+         at the height the answer will take, so the strip below does not jump when it arrives. -->
+    <p id="invitation" class="invitation" data-testid="invitation">
+      <span class="note">Reading both registries for a claim still inside its challenge window…</span>
+    </p>
 
     <main>
       <section data-frame="12">
         <h2>What Creditcoin can read</h2>
-        <div id="attestcoin-body" class="body">reading the ChainInfo precompile…</div>
+        <div id="attestcoin-body" class="body" tabindex="0">reading the ChainInfo precompile…</div>
       </section>
 
       <section data-frame="12A">
         <h2>Deployment</h2>
-        <div id="addresses" class="body">…</div>
+        <div id="addresses" class="body" tabindex="0">…</div>
       </section>
 
       <section data-frame="13">
@@ -124,7 +131,7 @@
           Block Prover on the way in, so it cannot be inflated; the bond is what stands behind the assertion that
           nothing was left out.
         </p>
-        <div id="registry-body" class="body">reading the registry…</div>
+        <div id="registry-body" class="body" tabindex="0">reading the registry…</div>
         <div id="actions" class="actions"></div>
       </section>
 
@@ -139,9 +146,17 @@
           <select id="claim-select" data-testid="claim-select" aria-label="claim to sweep"></select>
           <button id="sweep" class="act" data-testid="sweep">sweep the source chain</button>
         </div>
-        <div id="claim-detail" class="body" data-testid="claim-detail"></div>
+        <div id="claim-detail" class="body" tabindex="0" data-testid="claim-detail"></div>
         <div id="refute-box" class="actions"></div>
-        <div id="log" class="log" data-testid="log" role="log" aria-live="polite" aria-atomic="false"></div>
+        <div
+          id="log"
+          class="log"
+          data-testid="log"
+          role="log"
+          tabindex="0"
+          aria-live="polite"
+          aria-atomic="false"
+        ></div>
       </section>
 
       <section data-frame="14">
@@ -150,12 +165,13 @@
           The whole underwriting, from this page: bind your Ethereum address, build the two claims, wait out their
           challenge window, open the line. Same contracts the scripts use, your wallet, real bonds.
         </p>
-        <div id="borrow-body" class="body">connect a wallet to borrow.</div>
+        <div id="borrow-body" class="body" tabindex="0">connect a wallet to borrow.</div>
         <div
           id="borrow-log"
           class="log"
           data-testid="borrow-log"
           role="log"
+          tabindex="0"
           aria-live="polite"
           aria-atomic="false"
         ></div>
@@ -182,7 +198,7 @@
           different set of attestors, and it is checked against Ethereum rather than against testnet. The last line
           compares the two: the same Ethereum block, the same digest, signed by sets with nothing in common.
         </p>
-        <div id="attestors-body" class="body">reading the attestation indexer…</div>
+        <div id="attestors-body" class="body" tabindex="0">reading the attestation indexer…</div>
       </section>
 
       <section data-frame="15">
@@ -191,7 +207,7 @@
           Nothing bridges. The history stays on Ethereum, the credit is issued in CTC on Creditcoin, repayment happens
           back on Ethereum, and only proof crosses.
         </p>
-        <div id="credit-body" class="body">reading the credit contract…</div>
+        <div id="credit-body" class="body" tabindex="0">reading the credit contract…</div>
       </section>
     </main>
 

@@ -320,8 +320,10 @@ async function renderTally(): Promise<void> {
     renderInvitation(openNow);
     strip.dataset.ready = 'true';
   } catch (e) {
-    // A tally that cannot be read says so rather than showing a plausible zero.
+    // A tally that cannot be read says so rather than showing a plausible zero, and the invitation
+    // stops saying it is looking.
     for (const id of ['t-proven', 't-claims', 't-refuted', 't-burned']) $(id).textContent = '—';
+    $('invitation').replaceChildren();
     strip.dataset.ready = 'failed';
     strip.title = reason(e);
   }
@@ -1011,9 +1013,16 @@ function sourceRange(chainKey: number, from: number, to: number): HTMLElement {
 /// into one number — and nothing else, so what can be linked is the block; the transaction at that
 /// index inside it is the one. Every member passed through the Block Prover on the way in, and the
 /// oracle dashboard has the verification the precompile emitted for it, by source height.
+/// Which render of the detail is the current one. Reading a claim's members is one `keyAt` call per
+/// member, in order, and a slow afternoon makes that a slow render; a person who picks another claim
+/// meanwhile starts a second one, and whichever finished last used to own the pane — measured, the
+/// picker said 70 and the pane said 71. The stale render checks before it draws and stands down.
+let detailRun = 0;
+
 async function renderClaimDetail(): Promise<void> {
   const box = $('claim-detail');
   const chosen = ($('claim-select') as HTMLSelectElement).value;
+  const run = ++detailRun;
   if (!chosen) {
     box.replaceChildren();
     return;
@@ -1032,6 +1041,17 @@ async function renderClaimDetail(): Promise<void> {
     emitter.target = '_blank';
     emitter.rel = 'noreferrer';
     emitter.title = c.scope.emitter;
+
+    // The status first, in the words a reader arriving by link needs: whether this is the claim
+    // somebody broke, what that cost, or how long it can still be broken for. Measured before this,
+    // the pane for the refuted claim every document points at said "3 member(s), aggregate 3e15"
+    // and not once that it was refuted.
+    const status = el('p', 'note');
+    status.dataset.testid = 'claim-status';
+    const verdict = el('b', claimStatus(Number(c.status)) === 'Refuted' ? 'bad' : 'good');
+    verdict.textContent = `claim ${id} — ${claimStatus(Number(c.status))}`;
+    status.appendChild(verdict);
+    status.appendChild(document.createTextNode(await statusSentence(c, id)));
 
     const head = el('p', 'note');
     head.appendChild(document.createTextNode(`claim ${id}: events from `));
@@ -1072,15 +1092,61 @@ async function renderClaimDetail(): Promise<void> {
     foot.appendChild(dash);
     foot.appendChild(document.createTextNode(', by source height.'));
 
+    if (run !== detailRun) return;
     box.replaceChildren(
+      status,
       head,
       ...(rows.length > 0
         ? [table(['#', 'source block', 'transaction', 'log', 'ordering key'], rows, 'members-table')]
         : []),
       foot,
     );
+
+    // A link that names a claim is a link to *this*, not to the top of the page. Once, on arrival,
+    // and only when the URL asked: the two links every document hands out opened on the same hero as
+    // the root page, with the claim they named 2,000 pixels below the fold.
+    if (!linkedShown && new URLSearchParams(location.search).get('claim') === chosen) {
+      linkedShown = true;
+      $('claim-select').closest('section')?.scrollIntoView({ block: 'start' });
+    }
   } catch (e) {
-    fail(box, e);
+    if (run === detailRun) fail(box, e);
+  }
+}
+
+let linkedShown = false;
+
+/// What the status means for this claim, with the numbers the contract holds about it.
+async function statusSentence(
+  c: { status: bigint; bondPosted: bigint; sealedAt: bigint; challengeWindow: bigint },
+  id: bigint,
+): Promise<string> {
+  const bond = formatEther(c.bondPosted);
+  switch (claimStatus(Number(c.status))) {
+    case 'Refuted': {
+      // The split is the contract's constant, read rather than assumed to be half.
+      const share = (await wired.registry.REFUTER_SHARE_BPS()) as bigint;
+      const reward = (c.bondPosted * share) / 10_000n;
+      return (
+        `. Somebody proved an in-scope event it left out. ${bond} CTC was at stake: ${formatEther(reward)} CTC ` +
+        `went to the refuter and ${formatEther(c.bondPosted - reward)} CTC was burned. The claim is still on ` +
+        'the sheet, struck through above.'
+      );
+    }
+    case 'Sealed': {
+      const head = await cc3.getBlockNumber();
+      const left = Number(c.sealedAt) + Number(c.challengeWindow) - head;
+      return left > 0
+        ? `. Published, ${bond} CTC bonded, ${left} Creditcoin blocks left in its challenge window — anyone ` +
+            'who proves one omitted event takes half the bond. The sweep below is how.'
+        : `. Its window has closed unrefuted; anyone may finalize it and the ${bond} CTC bond goes back.`;
+    }
+    case 'Finalized':
+      return `. Its challenge window passed with nobody able to show an omission; the ${bond} CTC bond was returned.`;
+    case 'Open':
+      return `. Still being built by its claimant, ${bond} CTC bonded; not yet published, so not yet refutable.`;
+    default:
+      return `. Claim ${id} has no record on this registry.`;
   }
 }
 

@@ -242,6 +242,29 @@ h1::after {
   font-size: var(--t-data);
   font-family: var(--data);
   margin-left: 0.4rem;
+  /* Sized for the answer before it arrives. The chips hold an ellipsis until the chain speaks, and
+     on a phone the width they gain when it does pushed the connect button onto a new line and
+     everything under the header down with it — a layout shift of 0.21, measured, from two numbers. */
+  display: inline-block;
+}
+
+#chain-id {
+  min-width: 6ch;
+}
+
+#cc3-block {
+  min-width: 7ch;
+}
+
+/* Said only when it happens: Creditcoin's own RPC stopped answering and every read on the page is
+   going through Blockscout's proxy for the same chain. Slower is fine; silent about why is not. */
+#rpc-route {
+  display: none;
+  margin-left: 0.4rem;
+}
+
+body[data-rpc='fallback'] #rpc-route {
+  display: inline;
 }
 
 /* ---------------------------------------------------------------- the strip */
@@ -351,6 +374,14 @@ h2 {
 .body {
   overflow-x: auto;
   min-width: 0;
+}
+
+/* The panes and logs take focus because they scroll (a region that scrolls and cannot be reached
+   from a keyboard is a WCAG failure axe names). The ring is drawn inside the frame so it does not
+   collide with the frame's own border. */
+.body:focus-visible,
+.log:focus-visible {
+  outline-offset: -2px;
 }
 
 /* ---------------------------------------------------------------- data */
