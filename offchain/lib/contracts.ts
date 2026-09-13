@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Contract, ContractFactory, Wallet, JsonRpcProvider } from 'ethers';
+import { Contract, ContractFactory, Wallet, JsonRpcProvider, formatEther } from 'ethers';
 
 const ROOT = join(__dirname, '..', '..');
 const OUT = join(ROOT, 'out');
@@ -60,6 +60,37 @@ export async function deploy(
 export function signer(rpc: string, chainId: number, privateKey: string): Wallet {
   const provider = new JsonRpcProvider(rpc, chainId, { staticNetwork: true });
   return new Wallet(privateKey, provider);
+}
+
+/// Where testnet CTC comes from, said once. `npm run balance` prints it for an empty account and
+/// every script that is about to post a bond prints it for a short one.
+export function faucetHint(address: string): string {
+  return `Testnet CTC is free: in the Creditcoin Discord #token-faucet channel run\n  /faucet address:${address}`;
+}
+
+/// The sentence a stranger reads when their key cannot pay for what the script is about to do, or
+/// null when it can. Pure, so the wording is pinned by `npm run puretest` rather than by somebody
+/// remembering to run out of money.
+export function shortfall(address: string, have: bigint, need: bigint, what: string): string | null {
+  if (have >= need) return null;
+  return (
+    `${address} holds ${formatEther(have)} CTC on CC3 Testnet and ${what} needs about ` +
+    `${formatEther(need)} CTC (bonds plus gas) — short by ${formatEther(need - have)} CTC. ` +
+    faucetHint(address)
+  );
+}
+
+/// Refuse before the first transaction, not after the sweep.
+///
+/// Without this, a stranger with a fresh key running `npm run credit` sweeps thirty days of Aave
+/// history — a minute or two — and is then told `insufficient funds for intrinsic transaction
+/// cost` by ethers, which is true and says nothing about how much or where to get it. The balance
+/// is one round trip; asking first costs a second and saves the minute and the guessing.
+export async function requireFunds(wallet: Wallet, need: bigint, what: string): Promise<bigint> {
+  const have = await wallet.provider!.getBalance(wallet.address);
+  const why = shortfall(wallet.address, have, need, what);
+  if (why) throw new Error(why);
+  return have;
 }
 
 export interface Deployments {

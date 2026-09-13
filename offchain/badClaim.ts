@@ -1,7 +1,8 @@
 import { Wallet, formatEther, keccak256, concat, toUtf8Bytes, parseEther, getAddress } from 'ethers';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, source, requirePrivateKey } from './config';
-import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
+import { CC3_RPC, CC3_CHAIN_ID, requirePrivateKey } from './config';
+import { registryAt, creditAt, signer, readDeployments, requireFunds } from './lib/contracts';
+import { claimEnd } from './lib/attest';
 import { eventKey, type Scope } from './lib/scope';
 import { scopeFromCredit } from './lib/specs';
 import { Prover } from './lib/proofs';
@@ -40,6 +41,7 @@ async function main() {
   console.log(`subject ${subject}`);
   if (balance < bond + parseEther('1')) {
     const need = bond + parseEther('1') - balance;
+    await requireFunds(lender, need + parseEther('0.1'), 'topping up the liar');
     await (await lender.sendTransaction({ to: liar.address, value: need })).wait();
     console.log(`  topped up ${formatEther(need)} CTC`);
   }
@@ -47,11 +49,12 @@ async function main() {
   const scope: Scope = await scopeFromCredit(credit, 'volume', subject);
 
   const chainKey = scope.chainKey;
-  const eth = source(chainKey);
   const prover = Prover.withDefaults(chainKey, 60_000);
 
-  const head = await eth.getBlockNumber();
-  const toBlock = head - 3;
+  // Ending at the source head meant waiting a quarter of an hour for attestation to reach it.
+  // Ending where the attestations are finished waits for nothing and proves the same events.
+  const end = await claimEnd(lender.provider!, chainKey);
+  const toBlock = end.toBlock;
   const fromBlock = Number(process.env.BAIT_FROM ?? toBlock - 3_000);
 
   const events = await sweepForClaim(scope, fromBlock, toBlock, { log: (m) => console.log('  ' + m) });

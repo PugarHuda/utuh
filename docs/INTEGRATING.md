@@ -148,6 +148,28 @@ the one the data pins down least. `npm run gas` refits it from the registry's ow
 
 ---
 
+## Who has this gap today
+
+Eight contracts on this hackathon's board, read at the commit named on 2026-09-13, that compute a
+score, a tier or a cap from adverse-event counters which only move when somebody submits the
+proof. Each is a prospective consumer of `isUsable`, not a competitor, and none is an accusation:
+every one of them is correct about what it proves.
+
+| Repository, commit | The line that assumes the set is complete |
+| --- | --- |
+| `OoJae/crosscredit` @ `8366b1a` | `contracts/src/creditcoin/ScoreLib.sol:175` — `spotless = profile.late == 0 && profile.liquidations == 0`, Platinum tier gated on it; the counters move at `CreditRegistry.sol:591` and `:691`, each only on a submitted proof |
+| `seekdaseek/nomen` @ `6950c36` | `contracts/Nomen.sol:153` — `if (r.borrows > 0 && r.liquidations == 0) v += 50`; `++r.liquidations` at `:283`, reached only through permissionless `record()` |
+| `henessay/truthgate` @ `7f9fd3a` | `contracts/src/cc3/CreditCore.sol:611` — liquidation penalty accumulated in `_scoreLiquidations`; `markLoanAsExpired` is `onlyOwner` at `:856` |
+| `HoangDucBach/miro` @ `6be210b` | `contracts/creditcoin/src/CreditPassport.sol:251` — `p.negativeEvents++`; score is `positive − negativeEvents × NEGATIVE_PENALTY` at `:279-280` |
+| `Ted1166/attestcoin-credit-passport` @ `e275766` | `contracts/contracts/CreditScoreRegistry.sol:152` — `recordVerifiedRepayment` is `onlyRole(OPERATOR_ROLE)`; score at `:250` has no adverse term at all |
+| `Kohap/credit-passport` @ `2bbe48e` | `packages/contracts-creditcoin/src/CreditScore.sol:40-41` — every admitted loan adds 30 or 50; `CreditPassportASC.sol:123` admits closed loans only |
+| `SamarthSrivastavaa/clearbook` @ `a306d77` | `contracts/src/Clearbook.sol:307-312` — `markDelinquent` means "no repayment claimed by maturity", which its README concedes it "cannot prevent, so it measures" |
+| `gluwa/attestcoin-protocol-examples` @ `6668487` | `loan/contracts/sol/ASCLoanManager.sol` — `_noteLoanRepayment` proves presence; `markLoanAsExpired` is `onlyOwner` ([COMPLETENESS.md](COMPLETENESS.md)) |
+
+Three more carry the softer, positive-only version of the same shape (`DruxAMB/creditpass`,
+`Spagero763/standing`, `Nasiru0001/attestlend-passport`). These repositories move; the commit is
+the claim.
+
 ## Who this is for
 
 Anything that wants a sentence about events that did not happen:
@@ -173,6 +195,35 @@ The thing to tell your users: **build the claim from more than one source-chain 
 claimant who sweeps with a single RPC is betting their bond on that node having mentioned every
 log, and a missed event is not a smaller claim — it is an incomplete one, and being slashed for it
 looks exactly like lying.
+
+## Installing it
+
+Checked end to end on 2026-09-13 with forge 1.8.0, from an empty directory:
+
+```sh
+forge init gate && cd gate
+forge install PugarHuda/utuh --no-git
+npm i @gluwa/usc-contracts@0.1.2
+```
+
+`remappings.txt`:
+
+```
+utuh/=lib/utuh/src/
+@gluwa/usc-contracts/=node_modules/@gluwa/usc-contracts/
+forge-std/=lib/forge-std/src/
+```
+
+`foundry.toml` needs `solc = "0.8.28"`, `optimizer = true`, `optimizer_runs = 200`, `via_ir = false`
+— the settings the deployed contracts were built with. A twelve-line consumer that imports
+`utuh/UtuhRegistry.sol` and calls `claim`, `memberCount` and `isUsable` then compiles to 1,488
+bytes of bytecode with no link references: your contract never touches `EvmV1Decoder`, so it does
+not need the deployed library. solc prints a stack-depth *note* on `_extractLog` while compiling
+the registry; it is a lint, not an error.
+
+The pin is `0.1.2` on purpose. Gluwa's newer `@gluwa/asc-contracts` 0.2.1 made the decoder's
+functions `internal`, and the published registries link the `public` 0.1.2 decoder as a library;
+the interfaces your contract reads are the same in both.
 
 ## Addresses
 

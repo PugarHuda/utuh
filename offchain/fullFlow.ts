@@ -14,7 +14,7 @@ import {
 import 'dotenv/config';
 import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, source, requirePrivateKey } from './config';
 import { writeFileSync } from 'node:fs';
-import { artifact, deploy, signer, registryAt, creditAt } from './lib/contracts';
+import { artifact, deploy, signer, registryAt, creditAt, requireFunds } from './lib/contracts';
 import { sendChecked } from './lib/gasLimit';
 import { scopeFor, scanScope, Metric, type Scope } from './lib/scope';
 import { Prover } from './lib/proofs';
@@ -73,6 +73,9 @@ async function main() {
 
   // ------------------------------------------------------------------
   console.log('=== 1. funding the parties ===');
+  // Three deployments, two top-ups and a refutation come out of the lender's CTC before anyone
+  // else acts; a lender that cannot cover them is told so here rather than at step three.
+  await requireFunds(lender, BORROWER_CTC + DEFAULTER_CTC + parseEther('6'), 'the full flow');
   await topUpSepolia(lenderEth, borrower.address, BORROWER_SEPOLIA);
   await topUpCtc(lender, borrower.address, BORROWER_CTC);
   await topUpCtc(lender, defaulter.address, DEFAULTER_CTC);

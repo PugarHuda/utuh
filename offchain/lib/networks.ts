@@ -81,8 +81,19 @@ export const SOURCE_RPC_DEFAULT: Record<ChainKey, string> = {
 };
 
 /// Independent endpoints for the same chain, for anything that needs a second opinion.
+///
+/// Mainnet's second was `rpc.mevblocker.io` until 2026-09-13. It answers everything the sweep asks
+/// — a 10,000-block filtered `eth_getLogs` 60,000 blocks deep, three times the same, and
+/// `eth_getBlockReceipts` — and under the console's boot burst its error responses carry no CORS
+/// header, so a judge's browser logs red `blocked by CORS policy` lines about a healthy page. Of the
+/// CORS-open alternatives measured the same day, `0xrpc.io/eth` is the one that also serves the
+/// deep filtered query consistently (315/315/315) and block receipts; flashbots timed out on it,
+/// drpc, merkle and cloudflare refused it, ankr and publicnode want a key. It is the same operator
+/// as the Sepolia `0xrpc.io/sep` below and independent of tenderly, which is what a second opinion
+/// is for. It answers nothing to a request without a User-Agent — `rpcRequest` in `../config`
+/// sends one, and a browser always does.
 export const SOURCE_RPCS_DEFAULT: Record<ChainKey, string[]> = {
-  [CHAIN_KEY.mainnet]: [SOURCE_RPC_DEFAULT[CHAIN_KEY.mainnet], 'https://rpc.mevblocker.io'],
+  [CHAIN_KEY.mainnet]: [SOURCE_RPC_DEFAULT[CHAIN_KEY.mainnet], 'https://0xrpc.io/eth'],
   // Two truthful endpoints is the floor for sealing a claim, and publicnode alone does not clear
   // it: it is a pool, and some of its backends are pruned — the same 300-block WETH query 60,000
   // blocks deep answered 0, 8, 8, 0 on four consecutive calls while tenderly answered 8 each time.

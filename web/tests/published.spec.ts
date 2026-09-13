@@ -98,7 +98,16 @@ test('the canonical console and its mirror are serving the same build', async ({
   // file entirely while this reported both hosts identical. `.well-known/security.txt` is left out
   // because its `Expires` field is stamped at build time and differs between two builds of the same
   // commit, which is a difference about nothing.
-  const FILES = ['index.html', 'app/index.html', 'main.js', 'style.css', 'llms.txt', 'og.png', 'whitepaper.pdf'];
+  const FILES = [
+    'index.html',
+    'app/index.html',
+    'main.js',
+    'style.css',
+    'llms.txt',
+    'og.png',
+    'whitepaper.pdf',
+    'deck.pdf',
+  ];
   const MIRROR = 'https://pugarhuda.github.io/utuh/';
   if (new URL(PUBLISHED!).host === new URL(MIRROR).host) test.skip(true, 'PUBLISHED_URL is the mirror itself');
 

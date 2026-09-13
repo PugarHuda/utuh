@@ -26,6 +26,18 @@ and a false _"never liquidated"_ claim over 216,000 blocks of Ethereum mainnet
 Every verification behind them is on Creditcoin's own oracle dashboard, which nobody here can
 write to: [transaction-verifications](https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications).
 
+Two things a reader with a clone and no key can check first. `npm run judge` re-measures every
+number this repository and the submission quote — the contracts and their verification, the tally,
+both linked claims, the explorer counters, npm, the MCP Registry, the published build, the sixteen
+protocol entry points, the test and commit counts — and exits non-zero on any that no longer
+holds; on the evening of 2026-09-13 it measured 23 claims and 21 held — the two that did not are
+the npm and MCP Registry lines, because master declares `utuh-mcp` 0.4.0 and npm serves 0.3.0
+until it is published. And a bond here stands behind a specific line, not behind
+nothing: `UtuhCredit.openLine` reaches a claim only through `UtuhRegistry.isUsable(claimId,
+exposure)`, the finalized claim is spent by the line it opens, `underwrittenThrough` consumes the
+history range, and the limit is capped at ten times the enforceable loss. Exposure is gated by the
+bond and consumed by the draw.
+
 Building something else on Creditcoin that needs a sentence about events that did _not_ happen?
 The registry is usable on its own — see **[docs/INTEGRATING.md](docs/INTEGRATING.md)**. Not sure
 whether what you have already built has this gap in it?
@@ -62,8 +74,9 @@ same as closing it, and an inclusion proof gives none of them a way to.
 
 ## What this uses of Creditcoin's, and what it deliberately does not
 
-`npm run doctor` ends by making a live request to every Creditcoin-owned surface this depends on,
-so the list below is checkable rather than asserted. Today's run:
+`npm run doctor` (no key needed; given one it also reports the balance) ends by making a live
+request to every Creditcoin-owned surface this depends on, so the list below is
+checkable rather than asserted. A run on 2026-09-10:
 
 ```
 Creditcoin ecosystem surfaces
@@ -80,6 +93,15 @@ Creditcoin ecosystem surfaces
 On top of the protocol itself — both precompiles, both `verifyAndEmit` overloads, `EvmV1Decoder`,
 `@gluwa/usc-contracts` and `@gluwa/usc-sdk`, the hosted Proof Builder under both of its hostnames,
 and `RawProofBuilder` as the path that needs no hosted service at all.
+
+The pins are deliberate. Gluwa published `@gluwa/asc-contracts` 0.2.1 on 2026-08-31 under the new
+ASC name, and the reference examples import from it; this tree stays on `@gluwa/usc-contracts`
+0.1.2 and `@gluwa/usc-sdk` 0.18.0 (there is no newer SDK and no `asc-sdk`). 0.1.2's
+`EvmV1Decoder` functions are `public`, which is why the decoder links as a deployed library at
+`0x5cab…df3F`; 0.2.1 made them `internal` and dropped the type-specific decoders Utuh never calls.
+The four it does call keep identical signatures in 0.2.1, and changing the pin changes bytecode
+and breaks the Blockscout and Sourcify match of the live deployment, so the rename lands on the
+`merkle-claims` branch, which redeploys anyway.
 
 Two of those lines are worth reading twice. Every append and every refutation goes through
 `verifyAndEmit` rather than its `view` twin, so **Creditcoin's own oracle dashboard is the record**
@@ -156,7 +178,8 @@ thousand events is broken by a single proof or by none at all.
 
 _Building_ one is not. `npm run gas` measures it rather than reasoning about it — it finds every
 transaction a registry has ever seen from the registry's own logs, reads the receipts, and fits a
-cost model. No explorer involved. Across the four registries deployed so far, 139 transactions:
+cost model. No explorer involved. Across the four registries deployed by 2026-08-28, when the fit
+below was taken, 139 transactions:
 
 | Call                      | Gas (mean) | % of a 75M block |
 | ------------------------- | ---------- | ---------------- |
@@ -171,8 +194,8 @@ cost model. No explorer involved. Across the four registries deployed so far, 13
 
 Member count alone does not explain those. One append of **three** events cost 541,464 gas while
 an append of **two** cost 878,903, because the cost follows the _size of the transactions being
-proven_, not how many events sit inside them. A least-squares fit over all 56 appends the published
-registries have seen, against the call's own calldata gas and its member count:
+proven_, not how many events sit inside them. A least-squares fit over the 56 appends the published
+registries had seen by 2026-08-28, against the call's own calldata gas and its member count:
 
 ```
   290,899 gas fixed
@@ -224,8 +247,16 @@ The practical ceiling is therefore set by bytes:
 ```
 
 The asymmetry is still the point — challenging is one proof and a binary search, whatever the claim
-holds — but a claim of ten thousand events is thirty blocks' worth of gas, and that is the number
-that caps this rather than any argument about storage.
+holds — but a claim of ten thousand events is about thirty-three full blocks of gas, and that is
+the number that caps this rather than any argument about storage.
+
+Re-run on 2026-09-13 with the default `GAS_LOOKBACK` of 100,000 CC3 blocks — the mainnet
+registry's last 85 transactions, 23 of them appends — the fit reads 317,593 fixed, 1.40× the
+call's own calldata gas, 88,066 per member, worst residual 14% of the mean append, and 185 gas
+per continuity hash with the bytes held at their own price; the ceiling comes out at 24.9M,
+248.6M and 2,485.5M gas for 100, 1,000 and 10,000 events. The shape and the calldata term hold.
+The per-member and per-hash terms move with the sample, which is what the paragraph above says
+they do, and `npm run gas` prints whichever sample it was given rather than this one.
 
 ### The subtle part
 
@@ -267,7 +298,8 @@ attested   sepolia  chainKey 1  height 11530210
 attested   mainnet  chainKey 3  height 25797540
 ```
 
-The mainnet frontier tracks within roughly a hundred blocks of the real chain head. So contracts
+The mainnet frontier tracks a few dozen blocks behind the real chain head — 34 measured on
+2026-09-13, about 70 and about 100 on earlier days. So contracts
 on a free testnet can be underwritten on real Aave positions, real USDC flows, and real borrowers,
 with no capital at risk and nothing simulated.
 
@@ -393,6 +425,9 @@ unmarked. The guard was resting on a transaction nobody was obliged to send.
 `activeLineOf[subject]` removes the dependency. A subject has one line at a time; an overdue line is
 still `Active`, so it blocks by itself, and `markDefault` goes back to being bookkeeping. Each guard
 then has exactly one job — the slot says _you have a line open_, the count says _you failed one_.
+One consequence of bookkeeping is worth knowing: `draw` checks the limit and the slot, not the
+deadline, so an overdue line nobody has marked can still be drawn up to its limit. Exposure stays
+bounded by the limit, which is what the cap is for.
 
 The rule needs an exit, or it is a trap. An undrawn line cannot be settled (nothing was borrowed)
 and cannot be defaulted (`markDefault` refuses a `drawn` of zero, correctly — no money went out, so
@@ -587,6 +622,18 @@ npm run mcp     # the same server from this repo, for hacking on it
 { "mcpServers": { "utuh": { "command": "npx", "args": ["-y", "utuh-mcp"] } } }
 ```
 
+That entry is Claude Desktop's `claude_desktop_config.json` and Cursor's `.cursor/mcp.json`. VS
+Code's `.vscode/mcp.json` wants `{ "servers": { "utuh": { "type": "stdio", "command": "npx",
+"args": ["-y", "utuh-mcp"] } } }`, and Claude Code is `claude mcp add utuh -- npx -y utuh-mcp`.
+Add `"env": { "PRIVATE_KEY": "0x…" }` to the entry only if `refute_claim` should be able to send;
+the other four tools spend nothing. What npm serves today is **0.3.0** — five tools, one prompt,
+the resources — verified from a clean cache on 2026-09-13. Master is 0.4.0 and ships with the next
+`npm publish` (`dist-mcp/RELEASE.md`): every tool answers with `structuredContent` against an
+`outputSchema`, sweeps and audits narrate progress over `notifications/progress` and log over
+`notifications/message`, argument completion works for the resource templates, the server sends
+`instructions` at `initialize`, and a missing claim or a bad cursor comes back as an `isError`
+result rather than a thrown exception.
+
 Listed in the official [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp)
 as `io.github.PugarHuda/utuh-mcp`, so a client that does not know the package name can still find
 it. The registry hosts metadata only; it proves ownership by fetching the published tarball and
@@ -613,13 +660,17 @@ prose it has to re-read every turn. Claims are also **resources** — `utuh://ta
 re-read, carrying the scope a refuter needs and a `refutable` flag that answers the only question
 worth asking first. The watcher's job is a **prompt**, `hold_the_watcher_role`: sweep everything
 still inside its window, treat "no gap found" as provenance rather than proof, and bring a finding
-back rather than spending. And every tool carries its **annotations**, so a client can tell the four
+back rather than spending; a second prompt in 0.4.0, `weigh_a_refutation`, takes a deployment and
+a claim id, confirms the gap, lays out bond and reward, and sends only after an explicit yes. And
+every tool carries its **annotations**, so a client can tell the four
 that only read from the one that sends a transaction and slashes somebody's bond — the confirmation
 belongs on exactly one of the five, and now the server says which.
 
 `npm run mcp:test` builds that bundle and speaks the protocol to it — the three listings, a prompt
-fetched, the tally read live off Creditcoin, and `refute_claim` asked to spend with `confirm`
-withheld, which must refuse. Twenty-nine assertions, no key, and CI runs it on every push: what
+fetched, the tally read live off Creditcoin, a sweep of mainnet claim 1 (refuted on chain, so the
+sweep has to find the same gap), and `refute_claim` asked to spend with `confirm` withheld, which
+must refuse. Sixty-six assertions over the wire in about sixteen seconds, no key, and CI runs it
+on every push: what
 reaches a user is an esbuild bundle with the registry ABI and both deployment records baked in, and
 every one of those is a thing that can quietly stop being included.
 
@@ -682,6 +733,11 @@ mainnet claim runs from the browser against Ethereum mainnet in ten-thousand-blo
 size both default endpoints serve; Sepolia's are swept in five-hundred-block pieces because
 publicnode stops answering past that. The daemon uses the same table, so the page and the daemon
 cannot reach different verdicts by asking in different pieces.
+
+What a mainnet sweep costs, measured 2026-09-13: one subject's 216,000-block window, 400 in-scope
+Aave repayments, both default endpoints — 320 s at the 10,000-block chunk, 582 s at 500. The
+`eth_getLogs` calls are not where the time goes; the per-event receipt lookups that pin each log to
+its position inside its transaction are.
 
 A claim has an address. `?claim=N` opens claim N on arrival — what a post, a document or a
 refuter's message points at — reaching past the first page if it has to, and the address bar
@@ -764,9 +820,12 @@ page boots, reads the live chain, and asks its host for nothing but `index.html`
 `style.css` and the font they use. A GitHub Actions workflow builds it from each commit's own artifacts, so the ABI the
 page carries is the ABI the contracts were compiled with.
 
-Three more files are written beside those and never requested by the page, because they are for
-other readers. `.well-known/security.txt` is RFC 9116, for a researcher who found the deployment
-rather than the repository. `whitepaper.pdf` is the document. And `llms.txt` is the
+More files are written beside those and never requested by the page, because they are for other
+readers. `.well-known/security.txt` is RFC 9116, for a researcher who found the deployment rather
+than the repository. `whitepaper.pdf` and `deck.pdf` are the documents. `robots.txt` and
+`sitemap.xml` are for a crawler. `.well-known/agent-registration.json` is the agent card ERC-8004
+expects at that path, describing the watcher role; nothing is registered on-chain for it. And
+`llms.txt` is the
 [convention](https://llmstxt.org) an agent reads on arrival — Creditcoin's own Attestcoin docs
 publish one, which is where this project found it. That last one is not a summary of the page: the
 page is for a person, and an agent landing here needs three things in the order it needs them —
@@ -853,6 +912,12 @@ test/
                             claim that the registry is reusable is checked rather than asserted
   RegistryInvariant.t.sol   four actors, random sequences, and the books have to balance after
                             every move — every wei escrowed, credited or burned, nothing else
+  CreditInvariant.t.sol     the same for the lender's money: balance equals `available`, funding
+                            minus withdrawals equals what is available plus what is out, one
+                            active line per subject, watermarks only advance
+  Audit.t.sol               every refusal that had no test, and the questions a reviewer asks
+                            first — reentrancy on each CTC path, exact window boundaries, one
+                            claim pair underwriting a line at every lender
   UtuhCredit.t.sol          deployment floors, control binding, scope identity, terms, liquidity
   Lifecycle.t.sol           the whole loop locally — claim, refute, finalize, underwrite, draw,
                             settle, default, cure — on real Sepolia transaction bytes, with only
@@ -946,8 +1011,8 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 159 forge tests, five of them invariants (the run summary says 155:
-                            # forge folds the five invariants into one line; `forge test --list` counts 159)
+npm run test                # 193 forge tests, twelve of them invariants (`forge test --list` counts
+                            # 203 functions, one per invariant; the summary counts each invariant contract once)
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -974,7 +1039,7 @@ npm run mcp                 # the watcher as an MCP server, so an agent can hold
                             # (--dry needs no PRIVATE_KEY at all — it is what CI runs hourly)
 npm run bait                # seal a deliberately short claim for the watcher to find
 npm run livetest            # 121 guards asserted against the live chain, refunds included
-npm run puretest            # the 46 of them that need no key and no chain — what CI runs
+npm run puretest            # 93 assertions that need no key and no chain — what CI runs
 
 npm run web                 # the console on http://127.0.0.1:5173 — read-only without a wallet
 npm run web:build           # bundle it; the server serves ABIs straight out of out/
@@ -1148,6 +1213,10 @@ Both proofs carry the same continuity roots.
 The local path is 27x slower. Size the challenge window for it, not for the fast one.
 ```
 
+(That run is from August. On 2026-09-13, after the builder stopped re-fetching sibling
+transactions, the same comparison reads 0.9 s hosted against 20.0 s local on Sepolia and 29.9 s on
+mainnet — see Known limits for the wrong number that sat in between.)
+
 The test that matters is not the comparison but the outage. Plant an incomplete claim, then run
 the watcher with `PROVER_URL` pointed at a dead port:
 
@@ -1202,9 +1271,9 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-159 tests, 9 of them fuzzed and 5 of them invariants over random sequences. Everything below runs with
-`forge test`, no key and no network. (`forge test --list` counts 159; the run summary prints 155
-because forge reports the five invariants of one suite as a single test.)
+193 tests, 10 of them fuzzed and 12 of them invariants over random sequences. Everything below runs
+with `forge test`, no key and no network. (`forge test --list` counts 203 functions; the run summary
+prints 193 because forge reports each invariant contract as a single test.)
 
 Most of them cover the part that runs in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
@@ -1237,9 +1306,15 @@ never more; members stay strictly ascending; burned only grows. The first of tho
 the registry cannot afford to break — a bond that leaks is a deterrent that quietly stopped
 deterring — and it is now checked three thousand times a run rather than once per hand-written
 path. Its gas is random and is excluded from the snapshot for the same reason the fuzz tests are.
+`test/CreditInvariant.t.sol` does the same to the credit contract with seven more: its balance is
+exactly `available`; `funded − withdrawn == available + Σ drawn`; `drawn <= limit` on every line;
+one `Active` line per subject at most, and `activeLineOf` names it; `defaultsOf` equals the count
+of `Defaulted` lines; a drawn line has a deadline and owes something while an undrawn one has
+neither; and the two watermarks only advance.
 
 CI also refuses a push that drops line coverage under 90% or branch coverage under 70%; they read
-99.54% and 75.96% today, and the table below is those numbers.
+99.77% and 98.08% on 2026-09-13, and the table below is those numbers. The floors stay where they
+are as regression guards, not as a description of the coverage.
 
 The branch floor was added the day it was needed. Lines had been the only gate, and lines are easy
 to satisfy: 97.69% of them were covered while barely half the *decisions* had ever been taken, and
@@ -1288,29 +1363,36 @@ demonstration failing on a chain.
 The live scripts still run and still matter: `npm run e2e`, `npm run credit` and `npm run livetest`
 either pass on the real chain or they do not pass at all.
 
-Of the 52 errors these contracts can revert with, 21 are named by a unit test, 8 by the live suite,
-and 2 by another script in the loop. The remaining 21 are named nowhere. Most are behind `openLine`,
-which is behind `proveControl`, which is behind `0x0FD2`: reaching them means a real line on a real
-chain, so the live suite reaches what it can — a settled line refuses a draw, a second settlement
-and a default, and an unopened line refuses a draw — and the rest are reached only by the full
-loop's happy path.
+Of the 58 errors declared under `src/`, 57 are named by a unit test as of 2026-09-13 — on 09-08 it
+was 21 of 52, with 21 named nowhere, because most sit behind `openLine`, which is behind
+`proveControl`, which is behind `0x0FD2`. The Lifecycle fixture is what made them reachable on a
+laptop; `test/Audit.t.sol` is what reached them. The live suite still asserts what it can on the
+real chain — a settled line refuses a draw, a second settlement and a default; an unopened line
+refuses a draw.
 
-One of the 52 is not reachable at all: `EventScope.TopicOutOfRange` is declared and never thrown.
+The 58th is not reachable at all: `EventScope.TopicOutOfRange` is declared and never thrown.
 The range check it was written for lives in `UtuhCredit._requireTopic`, which reverts
 `BadSubjectTopic` and names the offending value. It stays declared rather than being deleted,
 because removing it changes 61 characters of the solc metadata CBOR — the executable code is
 identical, measured — and the contracts already verified on Blockscout were built from a source
 tree that has this line in it.
 
-`forge coverage` now reads:
+`forge coverage --no-match-test invariant --no-match-coverage "test|script" --report summary` — the
+CI command, forge 1.8.0 — read this on 2026-09-13 (the two interface files are omitted: they declare
+the precompile ABIs and hold no logic):
 
 | File                              | Lines            | Branches       | Functions       |
 | --------------------------------- | ---------------- | -------------- | --------------- |
-| `src/UtuhCredit.sol`              | 99.58% (237/238) | 67.80% (40/59) | 100.00% (35/35) |
-| `src/UtuhRegistry.sol`            | 99.36% (156/157) | 82.86% (29/35) | 100.00% (21/21) |
+| `src/UtuhCredit.sol`              | 99.58% (237/238) | 96.61% (57/59) | 100.00% (35/35) |
+| `src/UtuhRegistry.sol`            | 100.00% (157/157) | 100.00% (35/35) | 100.00% (21/21) |
 | `src/lib/EventScope.sol`          | 100.00% (25/25)  | 100.00% (7/7)  | 100.00% (6/6)   |
 | `src/source/SettlementLedger.sol` | 100.00% (8/8)    | 100.00% (3/3)  | 100.00% (2/2)   |
-| **Total**                         | **99.54%**       | **75.96%**     | **100.00%**     |
+| **Total**                         | **99.77%**       | **98.08%**     | **100.00%**     |
+
+Before the 2026-09-13 audit pass the same command read 99.54% of lines and 75.96% of branches, with
+`UtuhCredit` at 67.80% and `UtuhRegistry` at 82.86%. `test/Audit.t.sol` closed the gap: every
+refusal in `openLine`, `draw`, `settle`, `cure`, `closeLine`, `markDefault`, `appendBatch` and
+`refute` now has a test that makes it fire.
 
 It read 9.6%, then 47%, then 96%, and the sentence that followed the first of those — that everything
 reachable without a precompile was covered — was not true when it was written. Branches were 58%,
@@ -1323,12 +1405,13 @@ including both arms where the Block Prover says no — the answer the entire des
 The one that needed more than a test was `TransactionFailedOnSource`. Inclusion is not success, and
 saying so needs bytes that fail: `test/fixtures` now carries a real Ethereum mainnet transaction
 that reverted, block 25,926,178 index 96, fetched from the same hosted Proof Builder a claimant
-uses. What is still uncovered is mostly arithmetic arms and the transfer-refused path, which needs
-a payee that rejects ether and a credited balance to refuse.
+uses. What is still uncovered is one line: `revert ClaimAlreadySpent` in `_applyRepayment`, which
+cannot be reached because the `settledThrough` watermark refuses any spent repayment claim first —
+defence in depth, and `test_aCuredRepaymentClaimCannotBeSpentAgain` documents that it is.
 
-`npm run puretest` is the half of that suite which needs neither: 46 assertions about classifiers,
+`npm run puretest` is the half of that suite which needs neither: 71 assertions about classifiers,
 the payload reader, the gas model, and the difference between a prover saying "absent" and a prover
-saying nothing. They were written beside the live checks because that is where their callers are,
+saying nothing, plus 22 on the watcher's four retirement rules — 93 in all. They were written beside the live checks because that is where their callers are,
 and the cost was that CI never ran one of them — the whole file needed a funded wallet. It runs on
 every push now, in the job that holds no secrets at all, which is also the proof that it needs none.
 
@@ -1342,7 +1425,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 159 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 193 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings** across 10 contracts and 97 detectors, which is only worth stating
 alongside what it was allowed to look for.
 
@@ -1386,10 +1469,13 @@ review that happens on its own schedule.
 Halmos is the third opinion and the only one that is not sampling. `npm run symbolic` proves the
 three properties of the ordering key over *every* input rather than 256 of them — that the height
 comes back out of a key, that two distinct positions cannot collide into one, and that key order
-is chronological order — and `npm run symbolic:deep` does the same for the money roundings. Three
-passed, no counterexamples, in about a second; the deep suite takes minutes, so CI runs it daily
-rather than on every push. The one rounding the solver could not decide is written down as
-undecided in `CreditRounding.symbolic.t.sol` rather than quietly dropped.
+is chronological order — and `npm run symbolic:deep` does the same for the money roundings. All
+five checks pass with no counterexample: the three key properties in under a second, the two
+rounding proofs in about five minutes (`check_backingIsNeverShortOfTheLimit` alone took 303 s on
+2026-09-13), which is why CI runs the deep suite daily rather than on every push. The one rounding
+property the solver could not decide — that `backingFor` never overshoots by more than a unit — is
+written down as undecided in `CreditRounding.symbolic.t.sol` and left to the fuzzer, rather than
+quietly dropped.
 
 solc also suggests two functions could be `pure`. They could not: both read through a `storage`
 pointer parameter, which the mutability checker does not track. Accepting the suggestion compiles
@@ -1440,7 +1526,7 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 | `get_attestation_height_for_digest` on `0x0FD3`  | the leg that checks the attestation indexer against the chain itself             |
 | `PrecompileChainInfoProvider`                    | waiting for attestation without asking a hosted service                          |
 | `RawProofBuilder` over source RPCs               | proofs built locally when the hosted Proof Builder is down                      |
-| `PrecompileBlockProver`                          | `npm run probe` — the `view` twin of `verifyAndEmit`, over `eth_call`           |
+| `PrecompileBlockProver`                          | `npm run probe` — the batch `view` twin of `verifyAndEmit`, over `eth_call`     |
 | `utils.gas.MAX_GAS_CAP` / `gasAsPercentageOfMax` | `npm run gas` — what a call costs against a 75M block                           |
 | Ethereum mainnet as source chain (`chainKey 3`)  | all demos                                                                       |
 | Hosted Proof Builder, both published hostnames   | `prover.` and `proof-gen-api.` are tried in turn before the local builder       |
@@ -1449,6 +1535,15 @@ All sixteen entry points the protocol exposes are in that table — five on the 
 on ChainInfo — and each is there because something needed it, which is the only reason worth having.
 Seven of the ChainInfo eleven were added late, when a stocktake found them unused; what they bought
 is below, and none of it is a call made to be counted.
+
+Grep `src/` and you find six of the sixteen: both `verifyAndEmit` overloads, `calculateTxIndex`,
+`is_height_attested`, `get_attestation_genesis_height` and `get_latest_attestation_height_and_hash`
+— the ones a contract has to ask on-chain, at the lines the table in
+[docs/AUDIT.md](docs/AUDIT.md) and the submission name. The other ten are asked off-chain, by the
+scripts, the daemon, the MCP server and the browser, through the SDK's own precompile clients: the
+`view` prover over `eth_call`, `RawProofBuilder`, and the eight ChainInfo methods that decide where
+a claim may end, when a height becomes provable, and whether an indexer's row is real. Nothing
+on-chain needs them; everything that builds or checks a claim does.
 
 ### What Creditcoin itself says about the source chain
 
@@ -1526,12 +1621,21 @@ lists each verification against its source-chain height and the Creditcoin block
 Sepolia log there is where the full-flow run's settlements and its repayment show up, minutes after
 they happen, recorded by the network rather than by us.
 
+The same indexer counts it. Its `transactionVerifieds` table is every `TransactionVerified` event
+`0x0FD2` has ever emitted, and late on 2026-09-13 it held 139,988 rows for CC3 Testnet (earlier that
+day 139,838 — 132,507 for chain key 3 and 7,331 for key 1 when read together; it grows with every
+attestation); 248 of them, 0.18%, were verified for Utuh's contracts across 374 transactions — none
+through the mainnet-sourced credit, which `npm run credit` never writes to. The 248 decompose
+exactly: 212 registry members, 34 refutation proofs, 2 control bindings. `npm run judge`
+reads the table (`offchain/lib/attestations.ts`) as an independent witness for the tally; the spot
+check is `appendBatch` `0x5ccfb529…25fb25`, three rows there and three members.
+
 ## Known limits
 
 - Claim members are held as a storage array so refutation is a binary search the chain runs
   itself, with no witness a claimant could withhold. What caps a claim is not that array, though —
   measured, the cost follows the _bytes of the transactions being proven_ at about twice their
-  calldata gas, and a ten-thousand-event claim is forty blocks' worth. The replacement — an
+  calldata gas, and a ten-thousand-event claim is about thirty-three full blocks. The replacement — an
   incremental Merkle root per claim, with the refuter supplying an adjacency proof of the two
   members bracketing the gap — is built and tested on branch `merkle-claims` and is **not** on
   master or deployed, because it changes storage and a redeploy renumbers every claim this file
@@ -1546,17 +1650,18 @@ they happen, recorded by the network rather than by us.
   of them is lying — only that one of them is. It does not affect what a claim records, because
   that comes from bytes the Block Prover verified, but it is a signal an operator has to act on
   themselves.
-- **The independent proof path used to be slow enough to matter, and is now as fast as the
-  endpoint.** Building a proof locally cost tens of seconds against roughly one for the hosted
-  service, because the SDK's builder fetched the block with all its transactions and then asked
-  for every one of those transactions again, by hash, one at a time, with a sleep between. The
-  block it had already fetched carried all of them, so the block provider in `offchain/lib/proofs.ts`
-  now keeps them and answers the second ask from memory: 127 round trips became zero. Measured
-  2026-09-10 on Sepolia via publicnode — 1.2s local against 3.4s hosted on a 127-transaction block
-  before the change, 0.8s against 0.9s on an 81-transaction one after; the proofs are byte-identical
-  either way. What remains is the endpoint's own latency on one block-with-receipts call and the
-  continuity blocks, which is the floor. Still measure it for your own endpoints with
-  `npm run provers` before choosing a window: a slow endpoint is slow on that one call too.
+- **The independent proof path is twenty to thirty times slower than the hosted one, and a
+  paragraph here said otherwise for three days.** The SDK's builder fetched a block with all its
+  transactions and then asked for each of them again by hash, one at a time with a sleep between;
+  the block provider in `offchain/lib/proofs.ts` now answers the second ask from memory, and 127
+  round trips became zero. On 2026-09-10 this section then reported 0.8 s local against 0.9 s
+  hosted. That measurement was wrong: `npm run provers` was reaching the hosted service under its
+  second hostname and calling it local, because the SDK's `withDefaults` wires the alternate
+  hosted URL in even when the primary is a dead port. Fixed on 2026-09-13, the real local builder
+  produces byte-identical proofs in 20.0 s on Sepolia (hosted 0.9 s, 23×) and 29.9 s on mainnet
+  (35×). What remains is the endpoint's own latency on one block-with-receipts call and the
+  continuity blocks. Size a challenge window for the slow path, and measure it for your own
+  endpoints with `npm run provers` first.
 - A claimant watching the mempool can front-run an incoming refutation with their own, keeping half
   the bond and denying the watcher their reward. This is priced rather than prevented: the
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —
@@ -1703,6 +1808,19 @@ the same question` — as a third verdict beside ok and FAIL: useful to the unio
   the ones somebody is about to underwrite. For a general-purpose fact registry built on this
   layer it would not be, and such a registry would have to find its own reason for someone to
   watch. That is the boundary of what the bond buys.
+- **A finalized claim is not reserved by the lender that relies on it.** The registry's `isUsable`
+  is stateless, and `claimSpent` and `underwrittenThrough` belong to one `UtuhCredit` deployment,
+  so the same volume-and-clean pair opens a full line at every lender that accepts it. Each
+  lender's cap holds for its own line — `BOND_MULTIPLE` times the enforceable loss — but the
+  burned half of the bond is one amount, so aggregate exposure across N lenders on one bond is
+  N times the cap while a liar loses the burn once. A registry-level reservation closes it and is
+  an ABI change, so it is on the roadmap rather than in the deployed registries; a test pins the
+  behaviour so nobody rediscovers it (`test_oneClaimPairUnderwritesALineAtEveryLender`).
+- **The lender's repayment window is not checked against the registry's challenge floor.** A
+  repayment claim needs at least `MIN_CHALLENGE_WINDOW` blocks after sealing before it can be
+  finalized, so a lender that deploys with `repayWindowBlocks` below that floor plus the time to
+  build a claim has a line nobody can repay in time. It is the lender's own choice and is readable
+  on-chain before any draw; the published policy is 5760 blocks against a floor of 25.
 - Binding an address costs the borrower one source-chain transaction. That is a real onboarding
   step, and there is no way around it that does not reintroduce the hole it closes. `npm run credit`
   therefore stops at `SubjectNotControlled` when pointed at a stranger's history — the refusal is

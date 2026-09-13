@@ -24,9 +24,8 @@ import { runScript } from '../offchain/lib/cli';
 ///
 /// The deck is the same pipeline and the same palette, one 1280x720 landscape page per slide,
 /// because the submission form asks for "a deck or a whitepaper" and a reader skims one and reads
-/// the other. It is rendered but not published: the console asserts that it asks its host for its
-/// own files and nothing else, and a document nobody links from the page does not belong in that
-/// list. It travels as an upload, or from the repository.
+/// the other. `web:static` publishes it beside the whitepaper; nothing on the page asks for either,
+/// which is why the console's "four files" assertion is untouched by both.
 ///
 ///   npm run web:pdf      → web/whitepaper.pdf + web/whitepaper.sha256, web/deck.pdf
 

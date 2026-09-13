@@ -1,4 +1,4 @@
-import { JsonRpcProvider, formatEther } from 'ethers';
+import { JsonRpcProvider, Wallet, formatEther } from 'ethers';
 import 'dotenv/config';
 import {
   CC3_RPC,
@@ -12,7 +12,7 @@ import {
   withDeadline,
   requirePrivateKey,
 } from './config';
-import { signer, readDeployments, creditAt } from './lib/contracts';
+import { signer, readDeployments, creditAt, faucetHint } from './lib/contracts';
 import { chainInfoAt, supportedChains, verifyChainKeys } from './lib/chain';
 import { checkpointLag, confirmEndpoints, latestAttestation } from './lib/attest';
 import { Prover } from './lib/proofs';
@@ -75,6 +75,9 @@ async function ecosystem(): Promise<number> {
   };
 
   const get = async (url: string, init?: RequestInit) => {
+    // Every URL here is a constant from ./lib/networks; the guard makes that a property of the
+    // call rather than of the current import list.
+    if (new URL(url).protocol !== 'https:') throw new Error(`refusing a non-https probe: ${url}`);
     const c = new AbortController();
     const t = setTimeout(() => c.abort(), 20_000);
     try {
@@ -186,19 +189,28 @@ async function main() {
   let problems = 0;
 
   console.log('Creditcoin');
-  const wallet = signer(CC3_RPC, CC3_CHAIN_ID, requirePrivateKey());
+  // Every probe below is a read, and a stranger running this before writing a `.env` — which is
+  // exactly when the README tells them to — used to get an eleven-frame stack trace about a
+  // missing key instead of the answers. The key buys one line: the balance of the account that
+  // would pay. Without it that line says so and the rest runs.
+  const key = process.env.PRIVATE_KEY ? requirePrivateKey() : null;
+  const wallet = signer(CC3_RPC, CC3_CHAIN_ID, key ?? Wallet.createRandom().privateKey);
   const cc3 = wallet.provider as JsonRpcProvider;
   try {
     const [block, balance, net] = await Promise.all([
       cc3.getBlockNumber(),
-      cc3.getBalance(wallet.address),
+      key ? cc3.getBalance(wallet.address) : Promise.resolve(null),
       cc3.getNetwork(),
     ]);
     console.log(`  ok    ${CC3_RPC}  chain ${net.chainId}  block ${block}`);
-    console.log(`  ${balance > 0n ? 'ok   ' : 'WARN '} ${wallet.address}  ${formatEther(balance)} CTC`);
-    if (balance === 0n) {
-      problems++;
-      console.log('        request from the Creditcoin Discord #token-faucet channel');
+    if (balance === null) {
+      console.log('  ...   no PRIVATE_KEY in .env — the balance check is skipped; everything else here is a read');
+    } else {
+      console.log(`  ${balance > 0n ? 'ok   ' : 'WARN '} ${wallet.address}  ${formatEther(balance)} CTC`);
+      if (balance === 0n) {
+        problems++;
+        console.log(`        ${faucetHint(wallet.address)}`);
+      }
     }
   } catch (e: any) {
     problems++;

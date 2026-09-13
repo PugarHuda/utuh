@@ -1,0 +1,16 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "Utuh watcher",
+  "description": "Holds the watcher role on Creditcoin's Attestcoin Protocol: sweeps bonded completeness claims on CC3 Testnet against Ethereum and refutes one that omits an event, taking half its bond. Exposed as an MCP server (npm utuh-mcp; official MCP Registry io.github.PugarHuda/utuh-mcp). Four read-only tools, one transaction tool that requires confirm: true. Testnet only.",
+  "image": "https://utuh.vercel.app/og.png",
+  "services": [
+    { "name": "MCP", "endpoint": "npx -y utuh-mcp", "version": "0.3.0" },
+    { "name": "web", "endpoint": "https://utuh.vercel.app/" },
+    { "name": "llms.txt", "endpoint": "https://utuh.vercel.app/llms.txt" },
+    { "name": "repository", "endpoint": "https://github.com/PugarHuda/utuh" }
+  ],
+  "x402Support": false,
+  "active": true,
+  "registrations": [],
+  "supportedTrust": ["crypto-economic"]
+}

@@ -96,12 +96,7 @@ export async function scanScope(
 
   for (let start = fromBlock; start <= toBlock; start += chunkSize) {
     const end = Math.min(start + chunkSize - 1, toBlock);
-    const logs = await provider.getLogs({
-      address: scope.emitter,
-      topics: filterTopics as any,
-      fromBlock: start,
-      toBlock: end,
-    });
+    const logs = await fetchLogs(provider, { address: scope.emitter, topics: filterTopics }, start, end);
 
     for (const log of logs) {
       // An endpoint's answer is not automatically an answer to the question. Everything below is
@@ -150,6 +145,64 @@ export async function scanScope(
 
   found.sort((a, b) => (eventKey(a) < eventKey(b) ? -1 : eventKey(a) > eventKey(b) ? 1 : 0));
   return found;
+}
+
+/// Did the endpoint refuse this *range* — too many results, too many blocks, a response it will
+/// not size — rather than fail to answer at all?
+///
+/// The two call for opposite handling. A refusal is deterministic: the same range gets the same
+/// answer, and asking again unchanged is how a sweep spends its deadline learning nothing. Halving
+/// the range is what fixes it, and each endpoint says so in its own words, so this reads the words
+/// the public ones actually use: geth's `query returned more than 10000 results`, erigon's `block
+/// range too large`, alchemy's `Query timeout exceeded. Consider reducing your block range`, the
+/// `-32005` and `-32614` codes providers reuse for it, and the plain `too many` and `exceeds the
+/// limit` phrasings. Anything else is a failure to ask and gets the ordinary retry.
+export function isRangeRefusal(e: unknown): boolean {
+  const err = e as {
+    message?: unknown;
+    shortMessage?: unknown;
+    error?: { message?: unknown; code?: unknown };
+    info?: { error?: { message?: unknown; code?: unknown }; responseBody?: unknown };
+  };
+  const codes = [err?.error?.code, err?.info?.error?.code].map(String);
+  if (codes.includes('-32005') || codes.includes('-32614')) return true;
+  const text = [err?.message, err?.shortMessage, err?.error?.message, err?.info?.error?.message, err?.info?.responseBody]
+    .filter((t) => typeof t === 'string')
+    .join(' ')
+    .toLowerCase();
+  return /returned more than \d+|block range|range (is )?too (large|wide|big)|too many (results|logs|blocks)|exceed\w* (the |your |max\w* )?(limit|range|block)|reducing your block range|response size|limit(ed)? to \d+ blocks|max\w* \d+ blocks/.test(
+    text,
+  );
+}
+
+/// `eth_getLogs` over one chunk, in a form the endpoint will answer.
+///
+/// Two failures used to end the whole endpoint's sweep, and it then counted as one that errored —
+/// which, with two endpoints configured, is the difference between sealing a claim and refusing
+/// to. A transient failure is asked again, three times with a rising pause. A range the endpoint
+/// refuses is split in half and both halves asked, down to a single block; the chunk sizes in
+/// `./networks` are measured, but a busy window can outgrow a measured cap, and the cap was never
+/// the endpoint's word anyway.
+async function fetchLogs(
+  provider: JsonRpcProvider,
+  base: { address: string; topics: (string | null)[] },
+  start: number,
+  end: number,
+): Promise<Awaited<ReturnType<JsonRpcProvider['getLogs']>>> {
+  let last: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await provider.getLogs({ ...base, topics: base.topics as any, fromBlock: start, toBlock: end });
+    } catch (e) {
+      if (isRangeRefusal(e) && end > start) {
+        const mid = start + Math.floor((end - start) / 2);
+        return [...(await fetchLogs(provider, base, start, mid)), ...(await fetchLogs(provider, base, mid + 1, end))];
+      }
+      last = e;
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+    }
+  }
+  throw last;
 }
 
 export interface UnionSweep {

@@ -4,6 +4,8 @@ import { PROVER_URL, cc3, sources } from '../config';
 import { PROVER_URL_ALTERNATE } from './networks';
 import type { ScopedEvent } from './scope';
 import { assertFoldsToItsRoot } from './merkle';
+import { provable, type Provability } from './attest';
+import { builderAttestedHeight } from './proofApi';
 
 /// Mirrors UtuhRegistry.EventProof.
 export interface EventProofStruct {
@@ -114,12 +116,51 @@ export function isAbsence(prover: string, message: string): boolean {
   return /Transaction 0x[0-9a-fA-F]{64} not found$/.test(message.trim());
 }
 
+/// One step of the wait before a proof is requested, decided without a network so it can be pinned.
+///
+/// Two things have to be true and they become true at different moments: Creditcoin has attested
+/// the height, and the hosted builder has indexed it. The precompile is the authority on the first
+/// and `get_attestation_bounds` says which attestation will cover it; the builder's own endpoint is
+/// the only authority on the second, and it runs behind — measured ten blocks behind on Ethereum
+/// mainnet — answering 422 inside the gap. A builder that does not answer at all is only a reason
+/// to stop waiting when there is a local builder to build from the chain instead.
+export function waitVerdict(
+  height: number,
+  chain: Provability,
+  indexed: number | null,
+  hasLocal: boolean,
+): { done: boolean; why: string } {
+  if (!chain.attested) {
+    return {
+      done: false,
+      why:
+        chain.waitFor > 0
+          ? `waiting for Creditcoin to attest source block ${height} — the attestation at ${chain.waitFor} covers it`
+          : `waiting for Creditcoin to attest source block ${height} — past the frontier, no attestation covers it yet`,
+    };
+  }
+  if (indexed === null) {
+    return hasLocal
+      ? { done: true, why: `source block ${height} is attested; no hosted builder answered, proofs will be built from the chain` }
+      : { done: false, why: `source block ${height} is attested; waiting for a proof builder to answer` };
+  }
+  if (indexed < height) {
+    return { done: false, why: `waiting for the proof builder to index source block ${height} — at ${indexed}` };
+  }
+  return { done: true, why: `source block ${height} is attested and indexed` };
+}
+
 export class Prover {
   private builder: proofProvider.service.ProofBuilder;
   /// The same service under its other published hostname. See {withHostedFallback}.
   private builderAlt?: proofProvider.service.ProofBuilder;
   private local?: proofProvider.raw.RawProofBuilder;
   private localChainInfo?: chainInfo.PrecompileChainInfoProvider;
+  /// The Creditcoin provider behind {localChainInfo}, for the precompile reads the SDK does not wrap.
+  private cc3?: JsonRpcProvider;
+  /// Every hosted builder this will ask, in order — the ones whose index has to reach a height
+  /// before a proof for it can be requested.
+  private hosted: string[];
   private owned: JsonRpcProvider[] = [];
 
   constructor(
@@ -128,6 +169,7 @@ export class Prover {
     timeoutMs = 30000,
   ) {
     this.builder = new proofProvider.service.ProofBuilder(chainKey, builderUrl, timeoutMs);
+    this.hosted = [builderUrl];
   }
 
   /// The prover every script should use: hosted, with the local builder already behind it.
@@ -170,6 +212,7 @@ export class Prover {
   withHostedFallback(url: string, timeoutMs = 30000): this {
     if (url && url !== this.builderUrl) {
       this.builderAlt = new proofProvider.service.ProofBuilder(this.chainKey, url, timeoutMs);
+      this.hosted.push(url);
     }
     return this;
   }
@@ -190,6 +233,7 @@ export class Prover {
   /// as a feature.
   withLocalFallback(sourceRpc: JsonRpcProvider | JsonRpcProvider[], cc3: JsonRpcProvider, encoding = 1): this {
     this.localChainInfo = new chainInfo.PrecompileChainInfoProvider(cc3);
+    this.cc3 = cc3;
     this.local = new proofProvider.raw.RawProofBuilder(
       this.chainKey,
       new AnyOfBlockProvider(Array.isArray(sourceRpc) ? sourceRpc : [sourceRpc]),
@@ -235,20 +279,55 @@ export class Prover {
     throw err;
   }
 
-  /// Block until Creditcoin has attested `height` on the source chain, which is what makes a
-  /// proof for that block generatable at all.
+  /// Block until Creditcoin has attested `height` on the source chain *and* a hosted builder has
+  /// indexed it — the two moments a proof request has to be behind, in that order.
   ///
-  /// The ChainInfo precompile is where this fact lives; the hosted builder only relays it. When a
-  /// local fallback is wired, ask the chain directly — otherwise a hosted outage stalls a claimant
-  /// at the one step that has no reason to depend on a hosted service at all.
+  /// This used to ask the precompile alone whenever a local builder was wired, which is every
+  /// script. The precompile is the authority on attestation and the hosted builder only relays it;
+  /// but the builder's own index trails the precompile, and a batch request inside that gap comes
+  /// back 422 — after the claim was opened and the bond posted. The browser waited on both already
+  /// (`web/borrow.ts`); the scripts now do the same, through {waitVerdict}, and say which
+  /// attestation they are waiting for rather than how far a moving edge has left to travel.
+  ///
+  /// With no local builder wired there is no provider to read the precompile through, so the
+  /// hosted builder's own `waitUntilHeightAttested` stands in — it polls the same index.
   ///
   /// Both budgets are stated rather than defaulted, because the SDK's two implementations disagree
   /// about them: the hosted builder waits fifteen minutes, the precompile provider one. Switching
   /// to the precompile without saying so silently turned a fifteen-minute wait into a one-minute
   /// one, and a claimant thirty blocks behind the frontier simply gave up.
-  async waitAttested(height: number, timeoutMs = WAIT_ATTESTED_MS, pollMs = 15_000): Promise<void> {
-    const provider = this.localChainInfo ?? this.builder;
-    await provider.waitUntilHeightAttested(this.chainKey, height, pollMs, timeoutMs);
+  async waitAttested(
+    height: number,
+    timeoutMs = WAIT_ATTESTED_MS,
+    pollMs = 15_000,
+    log: (line: string) => void = (line) => console.log(`  ${line}`),
+  ): Promise<void> {
+    if (!this.cc3) {
+      await this.builder.waitUntilHeightAttested(this.chainKey, height, pollMs, timeoutMs);
+      return;
+    }
+    const started = Date.now();
+    let said = '';
+    for (;;) {
+      const chain = await provable(this.cc3, this.chainKey, height);
+      const indexed = chain.attested ? await builderAttestedHeight(this.chainKey, this.hosted).catch(() => null) : null;
+      const verdict = waitVerdict(height, chain, indexed, this.local !== undefined);
+      if (verdict.why !== said) {
+        log(verdict.why);
+        said = verdict.why;
+      }
+      if (verdict.done) return;
+      if (Date.now() - started > timeoutMs) {
+        // Attested but not indexed, with a local builder to build from the chain: proceed rather
+        // than fail a claimant on a hosted service's backlog. Not attested is not negotiable.
+        if (chain.attested && this.local) {
+          log(`the hosted builder has not indexed ${height} in ${Math.round(timeoutMs / 1000)}s — building from the chain`);
+          return;
+        }
+        throw new Error(`gave up after ${Math.round(timeoutMs / 1000)}s: ${verdict.why}`);
+      }
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
   }
 
   /// Prove a group of events that share a batch.

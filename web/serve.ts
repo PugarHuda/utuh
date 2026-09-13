@@ -30,7 +30,19 @@ const TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8',
+  '.pdf': 'application/pdf',
+  '.xml': 'application/xml; charset=utf-8',
 };
+
+const PUBLISHED_ONLY = [
+  '/llms.txt',
+  '/whitepaper.pdf',
+  '/deck.pdf',
+  '/robots.txt',
+  '/sitemap.xml',
+  '/.well-known/security.txt',
+  '/.well-known/agent-registration.json',
+];
 
 /// Which artifacts the page may read, by name. An allowlist rather than a path join, because the
 /// alternative is serving whatever `out/` happens to contain to whoever asks.
@@ -112,11 +124,13 @@ async function main(): Promise<void> {
         if (path === '/static/fonts/archivo.woff2') {
           return await serveFile(join(STATIC, 'fonts', 'archivo.woff2'), res);
         }
-        // Served by both roots because a static host serves it at the root and the tests reach the
-        // published build under /static/. Written by `npm run web:static`; nothing on the page ever
-        // asks for it, which is why the four-file assertion next door is unchanged.
-        if (path === '/llms.txt' || path === '/static/llms.txt') {
-          return await serveFile(join(STATIC, 'llms.txt'), res);
+        // What `npm run web:static` writes for a static host to serve at the root and nothing on the
+        // page ever asks for — which is why the four-file assertion next door is unchanged. Served by
+        // both roots because the tests reach the published build under /static/.
+        for (const file of PUBLISHED_ONLY) {
+          if (path === file || path === `/static${file}`) {
+            return await serveFile(join(STATIC, ...file.split('/')), res);
+          }
         }
 
         if (path.startsWith('/abi/')) {

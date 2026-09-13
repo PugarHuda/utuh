@@ -25,13 +25,16 @@ import {
   heightForDigest,
   latestAttestation,
   provable,
+  tightestEnd,
 } from './lib/attest';
-import { registryAt, creditAt, signer, readDeployments } from './lib/contracts';
+import { registryAt, creditAt, signer, readDeployments, requireFunds, shortfall } from './lib/contracts';
+import { verifiedIn } from './lib/attestations';
+import { ATTESTATION_INDEXERS } from './lib/networks';
 import { scopeFromCredit, plainSpec, sameScope } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
-import { answersTheQuestion, valueOf, type Scope } from './lib/scope';
+import { answersTheQuestion, valueOf, isRangeRefusal, type Scope } from './lib/scope';
 import { supportedChains, verifyChainKeys } from './lib/chain';
-import { Prover, isAbsence } from './lib/proofs';
+import { Prover, isAbsence, waitVerdict } from './lib/proofs';
 import { calldataGas, modelledGas, isChainRejection, isTransportFailure, isPayloadTooLarge } from './lib/gasLimit';
 import { waitForBlock } from './lib/chain';
 import { claimStatus } from './lib/status';
@@ -127,6 +130,7 @@ async function main() {
   console.log(`stranger ${stranger.address}\n`);
 
   const bond = parseEther('2');
+  await requireFunds(owner, bond * 2n + parseEther('2'), 'the live suite');
   const window = Number(await registry.MIN_CHALLENGE_WINDOW());
 
   // Build the scope from the credit contract's own spec, so these are the shapes the system uses.
@@ -356,6 +360,18 @@ async function main() {
     );
     const invented = await heightForDigest(owner.provider!, key, '0x' + 'ab'.repeat(32));
     check('a digest no attestation carries resolves to nothing', !invented.exists);
+
+    // The oracle's own record of a Utuh append: three members appended in one transaction on
+    // 2026-09-05, three TransactionVerified rows in the network's indexer, keyed by that hash.
+    const appended = '0x5ccfb5293087ab3b1dfbbfe0e81c3c66e1e7dce35eef7bd64a79a27cda25fb25';
+    check(
+      "the network's indexer counts the three members of a three-member append",
+      (await verifiedIn(ATTESTATION_INDEXERS.testnet, [appended])) === 3,
+    );
+    check(
+      'and attributes nothing to a transaction that never verified anything',
+      (await verifiedIn(ATTESTATION_INDEXERS.testnet, ['0x' + 'cd'.repeat(32)])) === 0,
+    );
 
     // And the endpoint guard, which is only worth having if it fires. A Sepolia endpoint offered
     // under Ethereum mainnet's chain key is exactly the misconfiguration that would sweep the wrong
@@ -788,6 +804,96 @@ async function pureChecks(): Promise<void> {
         console.log(`  FAIL  ${name} → ${got ? 'the chain refused' : 'we failed to ask'}, expected the opposite`);
       }
     }
+  }
+
+  // ------------------------------------------------------------------
+  // Where a claim ends and when a proof may be asked for. Both used to be guesses — `frontier - 30`,
+  // `head - 3`, "the precompile says attested" — and each guess cost either a quarter-hour wait or
+  // a 422 with a bond already posted. The decisions are pure; the numbers come from the chain.
+  console.log('');
+  console.log('where a claim ends, and when its proofs can be asked for');
+  {
+    check('a claim ends at the finished attestation, not the frontier', tightestEnd(1000, 990, 1000) === 990);
+    check('and no later than the builder has indexed', tightestEnd(1000, 990, 980) === 980);
+    check('a builder that did not answer does not move the end', tightestEnd(1000, 990, null) === 990);
+    check(
+      'a chain too young to have a finished attestation ends at its frontier',
+      tightestEnd(1000, null, null) === 1000,
+    );
+    check('a builder ahead of the chain cannot end a claim past it', tightestEnd(1000, 990, 5000) === 990);
+
+    const attested = { attested: true, parentHeight: 990, childHeight: 1000, waitFor: 0 };
+    const pending = { attested: false, parentHeight: 990, childHeight: 0, waitFor: 1000 };
+    const beyond = { attested: false, parentHeight: 990, childHeight: 0, waitFor: 0 };
+    const verdicts: [string, ReturnType<typeof waitVerdict>, boolean, string][] = [
+      ['not attested yet', waitVerdict(995, pending, 995, true), false, 'the attestation at 1000 covers it'],
+      [
+        'not attested and past the frontier',
+        waitVerdict(995, beyond, 995, true),
+        false,
+        'no attestation covers it yet',
+      ],
+      ['attested, builder behind', waitVerdict(995, attested, 990, true), false, 'index source block 995 — at 990'],
+      ['attested and indexed', waitVerdict(995, attested, 995, false), true, 'attested and indexed'],
+      [
+        'attested, no builder answered, local builder wired',
+        waitVerdict(995, attested, null, true),
+        true,
+        'built from the chain',
+      ],
+      [
+        'attested, no builder answered, nothing local',
+        waitVerdict(995, attested, null, false),
+        false,
+        'waiting for a proof builder',
+      ],
+    ];
+    for (const [name, got, done, phrase] of verdicts) {
+      check(`${name} → ${done ? 'go' : 'wait'}`, got.done === done && got.why.includes(phrase));
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // A range the endpoint refuses is split; a failure to answer is retried. Confusing the two either
+  // spends the deadline asking the same refused question, or splits a range that was fine.
+  console.log('');
+  console.log('telling a refused range apart from a failed request');
+  {
+    const wrap = (message: string, code?: number) => ({
+      shortMessage: 'could not coalesce error',
+      error: { message, code },
+    });
+    const cases: [string, unknown, boolean][] = [
+      ['geth: more than 10000 results', wrap('query returned more than 10000 results'), true],
+      ['erigon: block range too large', wrap('block range too large'), true],
+      ['alchemy: reduce your block range', wrap('Query timeout exceeded. Consider reducing your block range.'), true],
+      ['a -32005 code with any wording', wrap('limit exceeded', -32005), true],
+      ['a -32614 code with any wording', wrap('eth_getLogs is limited', -32614), true],
+      ['too many blocks', wrap('too many blocks requested'), true],
+      ['a cap stated in blocks', wrap('exceeds the max block range of 500'), true],
+      ['a timeout', makeError('timed out', 'TIMEOUT'), false],
+      ['a 502', makeError('bad gateway', 'SERVER_ERROR'), false],
+      ['a revert', makeError('reverted', 'CALL_EXCEPTION'), false],
+      ['a rate limit', wrap('rate limit exceeded, retry later', -32029), false],
+      ['nothing at all', undefined, false],
+    ];
+    for (const [name, err, want] of cases) {
+      check(`${name} → ${want ? 'split' : 'retry'}`, isRangeRefusal(err) === want);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // What a stranger without CTC is told, before the sweep rather than after it.
+  console.log('');
+  console.log('what an unfunded key is told');
+  {
+    const who = '0x' + '11'.repeat(20);
+    const told = shortfall(who, parseEther('1'), parseEther('6'), 'this demonstration');
+    check(
+      'a short account is refused with the amount and the faucet',
+      told !== null && told.includes('short by 5.0 CTC') && told.includes('/faucet address:' + who),
+    );
+    check('an account that can pay is not refused', shortfall(who, parseEther('6'), parseEther('6'), 'x') === null);
   }
 
   // ------------------------------------------------------------------

@@ -4,6 +4,7 @@ import { sources, withDeadline, SOURCE_TIMEOUT_MS, CHAIN_KEY, SOURCE_CHAIN_ID } 
 import { Prover, planBatches } from './proofs';
 import { sendChecked, isChainRejection, isTransportFailure } from './gasLimit';
 import { attested, verifyChainKeys } from './chain';
+import { SWEEP_CHUNK, requireChainKey } from './networks';
 
 export interface BuildOptions {
   bond: bigint;
@@ -32,12 +33,18 @@ export async function sweepForClaim(
   // means to bet on one endpoint has to say so.
   const minSources = opts.minSources ?? 2;
 
+  // The chain's measured chunk, not a flat five hundred. Five hundred is Sepolia's cap, where
+  // publicnode stops answering past a few hundred blocks; mainnet's two endpoints both serve ten
+  // thousand, and a thirty-day underwriting window is 216,000 blocks — 432 calls per endpoint at
+  // the flat size against 22 at the measured one. Endpoints with a lower cap are still asked in
+  // pieces they answer (`chunkFor`), and one that refuses a range it was expected to serve is
+  // asked again in halves (`fetchLogs`), so a wider default costs coverage nothing.
   const sweep = await scanScopeUnion(
     sources(scope.chainKey),
     scope,
     fromBlock,
     toBlock,
-    opts.chunkSize ?? 500,
+    opts.chunkSize ?? SWEEP_CHUNK[requireChainKey(scope.chainKey)],
     (work) => withDeadline(SOURCE_TIMEOUT_MS, work),
   );
 
@@ -287,7 +294,7 @@ export async function refuteClaim(
   claimId: bigint,
   omission: ScopedEvent,
   log: (message: string) => void = () => {},
-): Promise<{ reward: bigint; key: bigint }> {
+): Promise<{ reward: bigint; key: bigint; txHash: string }> {
   const { proof, continuity } = await prover.proveOne(omission);
   // The one call in this repo that must go through even when the node will not estimate it.
   const tx = await sendChecked(registry, 'refute', [claimId, proof, continuity], { members: 0, log });
@@ -301,7 +308,7 @@ export async function refuteClaim(
       continue;
     }
     if (parsed?.name === 'ClaimRefuted') {
-      return { key: parsed.args[2] as bigint, reward: parsed.args[3] as bigint };
+      return { key: parsed.args[2] as bigint, reward: parsed.args[3] as bigint, txHash: receipt.hash };
     }
   }
   throw new Error('ClaimRefuted not found in receipt');

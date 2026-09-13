@@ -1,6 +1,7 @@
 import { Contract, toUtf8String, type JsonRpcProvider, type Provider } from 'ethers';
 import chainInfoAbi from '@gluwa/usc-sdk/dist/chain-info/chain_info.json';
 import { CHAIN_INFO_ADDRESS } from './networks';
+import { builderAttestedHeight } from './proofApi';
 
 /// The rest of the ChainInfo precompile — the seven entry points nothing here used to call.
 ///
@@ -134,6 +135,47 @@ function point(r: { height: bigint; hash: string; isAttestation: boolean; exists
     isAttestation: Boolean(r.isAttestation),
     exists: Boolean(r.exists),
   };
+}
+
+/// Where a claim's range should end: the newest source height that *both* the chain and the proof
+/// builder are ready to speak for.
+///
+/// Three heights are in play and they are not the same one. The precompile's frontier is the
+/// optimistic edge; its own attestation is the one still settling, and `find_highest_attested_before`
+/// steps back to the one that is finished. The hosted builder indexes behind the precompile — measured
+/// 2026-09-13, ten blocks behind on Ethereum mainnet at the moment of asking — and a proof request
+/// inside that gap is answered 422 rather than with a proof. So the honest end is the lower of the
+/// two, and the scripts that used to guess it as `frontier - 30` or `head - 3` now ask.
+///
+/// `head - 3` was the worst of the guesses: it ended a claim past the frontier and then waited for
+/// attestation to catch up to the source head, which on Ethereum is about seventy blocks — a
+/// quarter of an hour of `waiting for…` before the first proof could be requested. Ending where the
+/// attestations are costs nothing and waits for nothing.
+export interface ClaimEnd {
+  frontier: number;
+  /// The newest finished attestation, or the frontier itself on a chain too young to have one before it.
+  settled: number;
+  /// How far the hosted builder has indexed, or null when no builder answered.
+  builder: number | null;
+  toBlock: number;
+}
+
+/// The decision, kept pure so it can be pinned without a chain: end at the finished attestation, and
+/// no later than the builder has indexed. A builder that did not answer does not move the end — the
+/// local builder reads the chain directly, and `waitAttested` will still wait for the hosted one.
+export function tightestEnd(frontier: number, settled: number | null, builder: number | null): number {
+  const chain = settled ?? frontier;
+  return builder === null ? chain : Math.min(chain, builder);
+}
+
+export async function claimEnd(provider: Provider, chainKey: number): Promise<ClaimEnd> {
+  const frontier = await latestAttestation(provider, chainKey);
+  const [before, builder] = await Promise.all([
+    attestationBefore(provider, chainKey, frontier.height),
+    builderAttestedHeight(chainKey).catch(() => null),
+  ]);
+  const settled = before.exists ? before.height : frontier.height;
+  return { frontier: frontier.height, settled, builder, toBlock: tightestEnd(frontier.height, before.exists ? before.height : null, builder) };
 }
 
 /// How far the checkpoints trail the attestations.

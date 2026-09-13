@@ -74,7 +74,11 @@ run against it — the console and the MCP server on that branch read `claimRoot
 which the published registries do not have.
 
 _How you would know:_ a claim with six figures of members, sealed and refuted, on a public chain.
-Until then: `git checkout merkle-claims && forge test`.
+Until then: `git checkout merkle-claims && forge test`, or let CI do it — workflow
+`merkle-claims`, job `contracts on merkle-claims` (`.github/workflows/merkle.yml`), checks the
+branch out and runs its 165 tests on forge 1.8.0 on every push to master, weekly, and on
+dispatch (a workflow file only runs from the ref that carries it, so not on pushes to the branch
+itself). Run history: <https://github.com/PugarHuda/utuh/actions/workflows/merkle.yml>.
 
 ### 2. Mainnet
 
@@ -91,7 +95,7 @@ against them. The runbook is [MAINNET.md](MAINNET.md): measured 2026-09-10, thre
 
 Money at rest in a bond contract is a different risk class from a demo, and no amount of
 self-testing substitutes for someone whose job is to break it. Slither at zero findings across 97
-detectors, 159 Foundry tests, symbolic proofs over every input rather than 256 samples, and an
+detectors, 193 Foundry tests, symbolic proofs over every input rather than 256 samples, and an
 invariant suite over random sequences are the floor, not the ceiling. The CertiK credits attached
 to this hackathon's prizes are the start of it.
 
@@ -99,16 +103,32 @@ _How you would know:_ a published report with findings and responses, including 
 were not fixed and why. The half a project can produce alone is done: [AUDIT.md](AUDIT.md) —
 scope, trust model, invariants, where to look first, and what is already known.
 
-### 4. The claim-building path stops being the slow half — **shipped 2026-09-10**
+### 4. The claim-building path stops being the slow half — **partly shipped; the 09-10 number was wrong**
 
 Building a proof locally cost tens of seconds against roughly one for the hosted service, because
 `RawProofBuilder` re-fetched every sibling transaction in the block one at a time after already
 having fetched the block that contained them. The block provider now keeps what the block carried
 and answers the second ask from memory; 127 round trips became zero, and the proofs are
-byte-identical.
+byte-identical. This page said on 2026-09-10 that the local path then ran in 0.8 s. It did not:
+`npm run provers` was reaching the hosted service under its second hostname and reporting it as
+local. Measured correctly on 2026-09-13, the local builder takes 20.0 s on Sepolia and 29.9 s on
+mainnet against 0.9 s hosted. What remains is the endpoint's own latency on the block-with-receipts
+call and the continuity blocks, which no client-side change removes.
 
-_How you would know:_ `npm run provers` — 0.8s local against 0.9s hosted on the day it landed, on
-the same endpoint, same block. Moved here from "specified" because the observable arrived.
+_How you would know:_ `npm run provers` printing a local time within a small multiple of the
+hosted one. Today it prints 23× and 35×.
+
+### 5. A claim reserved by the lender that relies on it
+
+Found in the 2026-09-13 audit pass, pinned by `test_oneClaimPairUnderwritesALineAtEveryLender`:
+`isUsable` is stateless and `claimSpent` is per `UtuhCredit`, so one finalized volume-and-clean
+pair opens a full line at every lender that accepts it, and the burned half of one bond stands
+behind all of them. The fix is a registry function that lets the consuming contract reserve a
+claim — one call, one mapping, an ABI change, so it rides the same redeploy as item 1 rather than
+its own.
+
+_How you would know:_ a `reserve(claimId)` (or equivalent) on the published registry's ABI, and
+`UtuhCredit.openLine` calling it before it lends.
 
 ---
 

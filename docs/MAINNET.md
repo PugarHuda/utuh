@@ -18,6 +18,14 @@ on 2026-09-10.
 - The contracts. Nothing in `src/` is testnet-shaped; the chain key and the precompile addresses
   are constructor arguments and constants respectively.
 - Blockscout exists: `https://creditcoin.blockscout.com` answers `/api/v2/stats`.
+- Nobody has built there yet. The mainnet attestation indexer
+  (`attestations-graphql.cc3-mainnet-usc.creditcoin.network/graphql`) records 65
+  `TransactionVerified` events ever, from 65 distinct transactions, the first on 2026-06-18 and
+  the last on 2026-08-07 — and every one of them, resolved on `creditcoin.blockscout.com`
+  2026-09-13, is an EOA calling `0x0FD2` `verifyAndEmit` directly (29, 23, 7 and 6 from four
+  addresses). No application contract has verified a transaction on Creditcoin Mainnet. The
+  attestor set there is seven keys; the testnet frontier for Ethereum ran 40 blocks ahead of
+  mainnet's that minute (25,969,540 against 25,969,500).
 
 ## What is different, and it is three things
 
@@ -42,8 +50,9 @@ table cannot be used by accident.
 `prover.cc3-mainnet.creditcoin.network`, `proof-gen-api.cc3-mainnet.creditcoin.network` and
 `prover.creditcoin.network` do not resolve. Every proof on mainnet comes from `RawProofBuilder`
 over public Ethereum endpoints plus the ChainInfo precompile — the path `npm run provers` proves is
-byte-identical to the hosted one, and which as of 2026-09-10 runs in under a second on a block
-with receipts. `Prover.withDefaults(chainKey, budget, 'http://127.0.0.1:1')` is how the scripts
+byte-identical to the hosted one, and which takes 20–30 s per proof (29.9 s on mainnet, measured
+2026-09-13; an earlier note here saying "under a second" was measuring the hosted service under its
+second hostname). `Prover.withDefaults(chainKey, budget, 'http://127.0.0.1:1')` is how the scripts
 already run it with the hosted URL sent nowhere.
 
 The consequence for refuters: the independence argument stops being a fallback and becomes the
