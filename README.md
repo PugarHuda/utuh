@@ -1521,7 +1521,7 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 | `get_attestation_height_for_digest` on `0x0FD3`  | the leg that checks the attestation indexer against the chain itself             |
 | `PrecompileChainInfoProvider`                    | waiting for attestation without asking a hosted service                          |
 | `RawProofBuilder` over source RPCs               | proofs built locally when the hosted Proof Builder is down                      |
-| `PrecompileBlockProver`                          | `npm run probe` — the `view` twin of `verifyAndEmit`, over `eth_call`           |
+| `PrecompileBlockProver`                          | `npm run probe` — the batch `view` twin of `verifyAndEmit`, over `eth_call`     |
 | `utils.gas.MAX_GAS_CAP` / `gasAsPercentageOfMax` | `npm run gas` — what a call costs against a 75M block                           |
 | Ethereum mainnet as source chain (`chainKey 3`)  | all demos                                                                       |
 | Hosted Proof Builder, both published hostnames   | `prover.` and `proof-gen-api.` are tried in turn before the local builder       |
@@ -1617,12 +1617,11 @@ Sepolia log there is where the full-flow run's settlements and its repayment sho
 they happen, recorded by the network rather than by us.
 
 The same indexer counts it. Its `transactionVerifieds` table is every `TransactionVerified` event
-`0x0FD2` has ever emitted, and on 2026-09-13 it held 139,838 rows for CC3 Testnet — 132,507 for
-chain key 3 and 7,331 for key 1 when read together (139,875 by the time `npm run judge` read it
-that evening; it grows with every attestation); 224 of them were verified for Utuh's contracts —
-202 through the mainnet-sourced registry, 20 through the Sepolia-sourced one, 2 through its credit
-contract, none through the mainnet-sourced credit, which `npm run credit` never writes to. The 224
-decompose exactly: 189 registry members, 33 refutation proofs, 2 control bindings. `npm run judge`
+`0x0FD2` has ever emitted, and late on 2026-09-13 it held 139,988 rows for CC3 Testnet (earlier that
+day 139,838 — 132,507 for chain key 3 and 7,331 for key 1 when read together; it grows with every
+attestation); 248 of them, 0.18%, were verified for Utuh's contracts across 374 transactions — none
+through the mainnet-sourced credit, which `npm run credit` never writes to. The 248 decompose
+exactly: 212 registry members, 34 refutation proofs, 2 control bindings. `npm run judge`
 reads the table (`offchain/lib/attestations.ts`) as an independent witness for the tally; the spot
 check is `appendBatch` `0x5ccfb529…25fb25`, three rows there and three members.
 
