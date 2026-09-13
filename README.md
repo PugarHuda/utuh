@@ -734,6 +734,11 @@ size both default endpoints serve; Sepolia's are swept in five-hundred-block pie
 publicnode stops answering past that. The daemon uses the same table, so the page and the daemon
 cannot reach different verdicts by asking in different pieces.
 
+What a mainnet sweep costs, measured 2026-09-13: one subject's 216,000-block window, 400 in-scope
+Aave repayments, both default endpoints — 320 s at the 10,000-block chunk, 582 s at 500. The
+`eth_getLogs` calls are not where the time goes; the per-event receipt lookups that pin each log to
+its position inside its transaction are.
+
 A claim has an address. `?claim=N` opens claim N on arrival — what a post, a document or a
 refuter's message points at — reaching past the first page if it has to, and the address bar
 follows the picker, so the URL always says what is on screen. And a visitor with two wallets
