@@ -49,17 +49,57 @@ jobs:
       - run: npm ci
       - run: forge build
 
-      # Sweeps everything sealed in the last WATCH_LOOKBACK blocks. Hourly runs and a 5,000-block
-      # lookback overlap by a wide margin, so a claim sealed between two runs is seen by the next.
+      # The watcher remembers how far it has read and which claims are still unresolved in
+      # WATCH_STATE, and a fresh runner has no such file: every hourly run printed "no usable state
+      # — starting 5000 blocks back", which is a poller with a wide overlap, not a watcher that
+      # resumes. The file is carried between runs in the Actions cache. Keys are immutable, so each
+      # run saves under its own run id and the next restores the newest one by prefix; a cache that
+      # has aged out (seven days unused) falls back to the lookback, and the log says which happened.
+      - name: where the last run stopped
+        uses: actions/cache/restore@v6
+        with:
+          path: .watch-${{ matrix.registry.name }}.json
+          key: watch-state-${{ matrix.registry.name }}-${{ github.run_id }}
+          restore-keys: watch-state-${{ matrix.registry.name }}-
+
+      # Sweeps everything sealed since the mark, or the last WATCH_LOOKBACK blocks the first time.
       - name: sweep
         env:
           REGISTRY: ${{ matrix.registry.address }}
           WATCH_STATE: .watch-${{ matrix.registry.name }}.json
           PRIVATE_KEY: ${{ secrets.WATCH_PRIVATE_KEY }}
         # With a key: a real watcher, refuting what it finds and collecting the refuter's share.
-        # Without: the dry run, whose only voice is the exit code.
+        # Without: the dry run, whose only voice is the exit code — and, below, the job summary.
         run: |
-          if [ -n "$PRIVATE_KEY" ]; then npm run watch -- --once; else npm run watch -- --once --dry; fi
+          set -o pipefail
+          if [ -n "$PRIVATE_KEY" ]; then npm run watch -- --once; else npm run watch -- --once --dry; fi 2>&1 | tee sweep.txt
+
+      # What the sweep found, where a person looking at the run sees it without opening a log:
+      # whether it resumed or started over, the tally, any gap, and the state the next run inherits.
+      - name: the sweep, summarised
+        if: always()
+        run: |
+          {
+            echo "### ${{ matrix.registry.name }} — \`${{ matrix.registry.address }}\`"
+            echo
+            echo '```'
+            grep -E 'resuming from|no usable state|sweep\(s\):|INCOMPLETE|incomplete claim|refuted with|reward |ENDPOINT|never answered|inspection failed|looking for claims failed' sweep.txt || echo 'the sweep printed nothing — see the log'
+            echo '```'
+            echo
+            echo 'Carried to the next run:'
+            echo '```json'
+            cat ".watch-${{ matrix.registry.name }}.json" 2>/dev/null || echo 'no state was written — the next run starts from the lookback'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Saved even when the sweep goes red: a gap found is a claim still queued, and the next run
+      # must inherit it rather than rediscover it from the lookback.
+      - name: remember it for the next run
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: .watch-${{ matrix.registry.name }}.json
+          key: watch-state-${{ matrix.registry.name }}-${{ github.run_id }}
 
   published:
     # The console people actually open, checked hourly the way a person would: it loads, it says
