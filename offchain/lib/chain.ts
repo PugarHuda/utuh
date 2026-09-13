@@ -62,9 +62,24 @@ export async function waitForBlock(
   const tty = process.stdout.isTTY === true;
   let announced = false;
   let lastPrinted = 0;
+  // One dropped poll used to end the whole run. Measured 2026-09-13: `npm run e2e` built and
+  // refuted two claims over twenty minutes and then died in this loop on a single `request
+  // timeout` from the Creditcoin RPC while waiting out a challenge window — with an honest bond
+  // left in a sealed claim for somebody to finalize by hand. A poll that fails is a poll to
+  // repeat; only a run of them says the endpoint is gone.
+  let misses = 0;
 
   for (;;) {
-    const now = await provider.getBlockNumber();
+    let now: number;
+    try {
+      now = await provider.getBlockNumber();
+      misses = 0;
+    } catch (e) {
+      if (++misses >= 20) throw e;
+      if (!tty) console.log(`  poll ${misses}/20 failed (${(e as Error).message.slice(0, 60)}) — trying again`);
+      await new Promise((r) => setTimeout(r, pollMs));
+      continue;
+    }
     if (now >= target) {
       if (tty && announced) process.stdout.write('\r'.padEnd(72) + '\r');
       return;
