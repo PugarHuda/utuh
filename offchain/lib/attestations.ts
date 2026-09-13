@@ -40,20 +40,10 @@ interface GqlResponse {
   errors?: { message: string }[];
 }
 
-/// The most recent attestations for a source chain, newest first.
-export async function recentAttestations(
-  indexer: AttestationIndexer,
-  chainKey: number,
-  first = 6,
-  timeoutMs = 15_000,
-): Promise<{ total: number; nodes: Attestation[] }> {
-  const query = `{
-    attestations(filter: { chainKey: { equalTo: "${chainKey}" } }, orderBy: HEADER_NUMBER_DESC, first: ${first}) {
-      totalCount
-      nodes { headerNumber headerHash digest timestamp }
-    }
-  }`;
-
+/// One GraphQL query against an indexer, with a deadline. Every read below is this call with a
+/// different query; the five copies of the fetch it replaced had already drifted on whether a
+/// GraphQL `errors` array was a failure.
+async function gql<T>(indexer: AttestationIndexer, query: string, timeoutMs = 15_000): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -64,41 +54,87 @@ export async function recentAttestations(
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(`the attestation indexer answered ${res.status}`);
-    const body = (await res.json()) as GqlResponse;
+    const body = (await res.json()) as { data?: T; errors?: { message: string }[] };
     if (body.errors?.length) throw new Error(body.errors.map((e) => e.message).join('; '));
-    const a = body.data?.attestations;
-    if (!a) throw new Error('the attestation indexer returned no attestations field');
-    return {
-      total: a.totalCount,
-      nodes: a.nodes.map((n) => ({
-        headerNumber: Number(n.headerNumber),
-        headerHash: n.headerHash,
-        digest: n.digest,
-        timestampMs: Number(n.timestamp),
-      })),
-    };
+    if (!body.data) throw new Error('the attestation indexer returned no data');
+    return body.data;
   } finally {
     clearTimeout(timer);
   }
 }
 
+/// The most recent attestations for a source chain, newest first.
+export async function recentAttestations(
+  indexer: AttestationIndexer,
+  chainKey: number,
+  first = 6,
+  timeoutMs = 15_000,
+): Promise<{ total: number; nodes: Attestation[] }> {
+  const body = await gql<GqlResponse['data']>(
+    indexer,
+    `{
+    attestations(filter: { chainKey: { equalTo: "${chainKey}" } }, orderBy: HEADER_NUMBER_DESC, first: ${first}) {
+      totalCount
+      nodes { headerNumber headerHash digest timestamp }
+    }
+  }`,
+    timeoutMs,
+  );
+  const a = body?.attestations;
+  if (!a) throw new Error('the attestation indexer returned no attestations field');
+  return {
+    total: a.totalCount,
+    nodes: a.nodes.map((n) => ({
+      headerNumber: Number(n.headerNumber),
+      headerHash: n.headerHash,
+      digest: n.digest,
+      timestampMs: Number(n.timestamp),
+    })),
+  };
+}
+
 /// How many attestors the network has registered. The quorum is a subset of this.
 export async function attestorCount(indexer: AttestationIndexer, timeoutMs = 15_000): Promise<number> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(indexer.graphql, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query: '{ attestors { totalCount } }' }),
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error(`the attestation indexer answered ${res.status}`);
-    const body = (await res.json()) as { data?: { attestors?: { totalCount: number } } };
-    return body.data?.attestors?.totalCount ?? 0;
-  } finally {
-    clearTimeout(timer);
+  const body = await gql<{ attestors?: { totalCount: number } }>(indexer, '{ attestors { totalCount } }', timeoutMs);
+  return body.attestors?.totalCount ?? 0;
+}
+
+/// How many `TransactionVerified` events the network's own indexer attributes to these Creditcoin
+/// transactions — the oracle's record of every proof the Block Prover accepted, read back.
+///
+/// Utuh counts its proven events off its registries, which is Utuh counting itself. The indexer
+/// keeps a `transactionVerifieds` table of every event `0x0FD2` ever emitted, keyed by the
+/// Creditcoin transaction that caused it, with the source height and index each one verified. So
+/// the tally has a witness that is not this repository: hand it the hashes of the registry's
+/// transactions and it says how many verifications it saw in them. Measured 2026-09-13: appendBatch
+/// 0x5ccfb529… with three members is three rows, at exactly the three Ethereum heights appended.
+///
+/// Fifty hashes a query; the filter takes an `in` list, verified against the live endpoint.
+export async function verifiedIn(indexer: AttestationIndexer, txHashes: string[], timeoutMs = 15_000): Promise<number> {
+  let n = 0;
+  for (let i = 0; i < txHashes.length; i += 50) {
+    const list = txHashes
+      .slice(i, i + 50)
+      .map((h) => `"${h.toLowerCase()}"`)
+      .join(',');
+    const body = await gql<{ transactionVerifieds?: { totalCount: number } }>(
+      indexer,
+      `{ transactionVerifieds(filter: { txHash: { in: [${list}] } }) { totalCount } }`,
+      timeoutMs,
+    );
+    n += body.transactionVerifieds?.totalCount ?? 0;
   }
+  return n;
+}
+
+/// Every verification the network has ever recorded, so a share can be stated rather than a count.
+export async function verifiedTotal(indexer: AttestationIndexer, timeoutMs = 15_000): Promise<number> {
+  const body = await gql<{ transactionVerifieds?: { totalCount: number } }>(
+    indexer,
+    '{ transactionVerifieds { totalCount } }',
+    timeoutMs,
+  );
+  return body.transactionVerifieds?.totalCount ?? 0;
 }
 
 /// The BLS public keys registered to attest a source chain on this network.
@@ -110,21 +146,10 @@ export async function attestorCount(indexer: AttestationIndexer, timeoutMs = 15_
 /// assumed: measured 2026-09-07, CC3 Testnet registers 5 keys for Ethereum and Creditcoin Mainnet
 /// registers 7, and the intersection is empty.
 export async function attestorKeys(indexer: AttestationIndexer, chainKey: number, timeoutMs = 15_000): Promise<string[]> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(indexer.graphql, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        query: `{ attestors(filter: { chainKey: { equalTo: "${chainKey}" } }) { nodes { blsPublicKey } } }`,
-      }),
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error(`the attestation indexer answered ${res.status}`);
-    const body = (await res.json()) as { data?: { attestors?: { nodes: { blsPublicKey: string }[] } } };
-    return (body.data?.attestors?.nodes ?? []).map((n) => String(n.blsPublicKey).toLowerCase());
-  } finally {
-    clearTimeout(timer);
-  }
+  const body = await gql<{ attestors?: { nodes: { blsPublicKey: string }[] } }>(
+    indexer,
+    `{ attestors(filter: { chainKey: { equalTo: "${chainKey}" } }) { nodes { blsPublicKey } } }`,
+    timeoutMs,
+  );
+  return (body.attestors?.nodes ?? []).map((n) => String(n.blsPublicKey).toLowerCase());
 }

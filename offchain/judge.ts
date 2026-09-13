@@ -4,7 +4,14 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import 'dotenv/config';
 import { CC3_RPC, cc3 } from './config';
-import { CC3_CHAIN_ID, CHAIN_INFO_ADDRESS, ORACLE_DASHBOARD, type DeploymentName } from './lib/networks';
+import {
+  ATTESTATION_INDEXERS,
+  CC3_CHAIN_ID,
+  CHAIN_INFO_ADDRESS,
+  ORACLE_DASHBOARD,
+  type DeploymentName,
+} from './lib/networks';
+import { verifiedIn, verifiedTotal } from './lib/attestations';
 import { chainInfoAt, supportedChains } from './lib/chain';
 import { claimStatus } from './lib/status';
 import { runScript } from './lib/cli';
@@ -55,6 +62,8 @@ const QUOTED = {
   foundryTests: 159,
   commits: 156,
   claimsRefuted: 33,
+  /// TransactionVerified events the network's indexer attributes to the listed addresses.
+  verified: 224,
 };
 
 /// The two links every document hands a reader, and what each must still be.
@@ -102,6 +111,20 @@ async function json<T>(url: string, ms = 20_000): Promise<T> {
   const res = await fetch(url, { signal: AbortSignal.timeout(ms), headers: { 'user-agent': 'utuh-judge' } });
   if (!res.ok) throw new Error(`${url} → ${res.status}`);
   return (await res.json()) as T;
+}
+
+/// Every transaction sent to an address, by hash, following Blockscout's paging to the end.
+async function transactionsTo(address: string): Promise<string[]> {
+  const out: string[] = [];
+  let page = '';
+  for (;;) {
+    const r = await json<{ items: { hash: string }[]; next_page_params: Record<string, unknown> | null }>(
+      `${BLOCKSCOUT}/addresses/${address}/transactions?filter=to${page}`,
+    );
+    out.push(...r.items.map((i) => i.hash));
+    if (!r.next_page_params) return out;
+    page = '&' + new URLSearchParams(Object.entries(r.next_page_params).map(([k, v]) => [k, String(v)])).toString();
+  }
 }
 
 async function head(url: string, ms = 20_000): Promise<{ status: number; type: string; bytes: number }> {
@@ -256,6 +279,37 @@ async function main(): Promise<void> {
     counted === 3 && txs >= QUOTED.transactions && gas >= QUOTED.gas,
   );
 
+  // ── The oracle's own count of what Utuh proved, not Utuh's count of itself ────────────────────
+  // The registries say how many events they hold. The network's attestation indexer says how many
+  // `TransactionVerified` events the Block Prover emitted inside the registries' transactions —
+  // the same number, kept by somebody else. Blockscout pages the hashes; the indexer counts them.
+  try {
+    const hashes: string[] = [];
+    for (const address of [
+      sepoliaRecord.registry,
+      sepoliaRecord.credit,
+      mainnetRecord.registry,
+      mainnetRecord.credit,
+    ]) {
+      hashes.push(...(await transactionsTo(address)));
+    }
+    const [mine, total] = await Promise.all([
+      verifiedIn(ATTESTATION_INDEXERS.testnet, hashes),
+      verifiedTotal(ATTESTATION_INDEXERS.testnet),
+    ]);
+    note(
+      `at least ${QUOTED.verified} TransactionVerified events the network's indexer attributes to the listed addresses`,
+      `${mine} of ${total.toLocaleString()} ever recorded on CC3 Testnet (${((100 * mine) / total).toFixed(2)}%), across ${hashes.length} transactions; the registries themselves hold ${proven}`,
+      mine >= QUOTED.verified && BigInt(mine) >= proven,
+    );
+  } catch (e) {
+    note(
+      `at least ${QUOTED.verified} TransactionVerified events the network's indexer attributes to the listed addresses`,
+      `unknown, not zero: ${(e as Error).message.slice(0, 80)}`,
+      false,
+    );
+  }
+
   // ── Attestcoin attests what the submission says it attests ────────────────────────────────────
   const chains = await supportedChains(provider);
   const keys = chains.map((c) => Number(c.chainKey)).sort();
@@ -347,12 +401,33 @@ async function main(): Promise<void> {
     note(`at least ${QUOTED.foundryTests} Foundry tests`, 'forge not on PATH — install Foundry to count them', false);
   }
   try {
-    const commits = Number(execFileSync('git', ['rev-list', '--count', 'HEAD'], { encoding: 'utf8' }).trim());
-    note(
-      `at least ${QUOTED.commits} commits, built in the open`,
-      `git rev-list --count HEAD → ${commits}`,
-      commits >= QUOTED.commits,
-    );
+    // A shallow clone — CI's default checkout — has one commit and would call the sentence false.
+    // The history is public, so ask GitHub for the count instead: `per_page=1` makes the `last`
+    // page number in the Link header the number of commits.
+    const shallow =
+      execFileSync('git', ['rev-parse', '--is-shallow-repository'], { encoding: 'utf8' }).trim() === 'true';
+    if (shallow) {
+      const res = await fetch('https://api.github.com/repos/PugarHuda/utuh/commits?per_page=1&sha=master', {
+        signal: AbortSignal.timeout(20_000),
+        headers: { 'user-agent': 'utuh-judge' },
+      });
+      const last = (res.headers.get('link') ?? '').match(/[?&]page=(\d+)>;\s*rel="last"/);
+      const commits = last ? Number(last[1]) : NaN;
+      note(
+        `at least ${QUOTED.commits} commits, built in the open`,
+        Number.isFinite(commits)
+          ? `shallow clone; GitHub counts ${commits} on master`
+          : `shallow clone and GitHub answered ${res.status}`,
+        commits >= QUOTED.commits,
+      );
+    } else {
+      const commits = Number(execFileSync('git', ['rev-list', '--count', 'HEAD'], { encoding: 'utf8' }).trim());
+      note(
+        `at least ${QUOTED.commits} commits, built in the open`,
+        `git rev-list --count HEAD → ${commits}`,
+        commits >= QUOTED.commits,
+      );
+    }
   } catch {
     note(`at least ${QUOTED.commits} commits`, 'not a git checkout', false);
   }

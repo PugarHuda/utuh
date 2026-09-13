@@ -28,6 +28,8 @@ import {
   tightestEnd,
 } from './lib/attest';
 import { registryAt, creditAt, signer, readDeployments, requireFunds, shortfall } from './lib/contracts';
+import { verifiedIn } from './lib/attestations';
+import { ATTESTATION_INDEXERS } from './lib/networks';
 import { scopeFromCredit, plainSpec, sameScope } from './lib/specs';
 import { sweepForClaim } from './lib/claims';
 import { answersTheQuestion, valueOf, isRangeRefusal, type Scope } from './lib/scope';
@@ -358,6 +360,18 @@ async function main() {
     );
     const invented = await heightForDigest(owner.provider!, key, '0x' + 'ab'.repeat(32));
     check('a digest no attestation carries resolves to nothing', !invented.exists);
+
+    // The oracle's own record of a Utuh append: three members appended in one transaction on
+    // 2026-09-05, three TransactionVerified rows in the network's indexer, keyed by that hash.
+    const appended = '0x5ccfb5293087ab3b1dfbbfe0e81c3c66e1e7dce35eef7bd64a79a27cda25fb25';
+    check(
+      "the network's indexer counts the three members of a three-member append",
+      (await verifiedIn(ATTESTATION_INDEXERS.testnet, [appended])) === 3,
+    );
+    check(
+      'and attributes nothing to a transaction that never verified anything',
+      (await verifiedIn(ATTESTATION_INDEXERS.testnet, ['0x' + 'cd'.repeat(32)])) === 0,
+    );
 
     // And the endpoint guard, which is only worth having if it fires. A Sepolia endpoint offered
     // under Ethereum mainnet's chain key is exactly the misconfiguration that would sweep the wrong
