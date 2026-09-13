@@ -299,8 +299,10 @@ async function main(): Promise<void> {
     ]);
     note(
       `at least ${QUOTED.verified} TransactionVerified events the network's indexer attributes to the listed addresses`,
-      `${mine} of ${total.toLocaleString()} ever recorded on CC3 Testnet (${((100 * mine) / total).toFixed(2)}%), across ${hashes.length} transactions; the registries themselves hold ${proven}`,
-      mine >= QUOTED.verified && BigInt(mine) >= proven,
+      `${mine} of ${total.toLocaleString()} ever recorded on CC3 Testnet (${((100 * mine) / total).toFixed(2)}%), across ` +
+        `${hashes.length} transactions; the registries hold ${proven} members and ${refuted} refutations, one ` +
+        `verification each, and the rest are proveControl bindings`,
+      mine >= QUOTED.verified && BigInt(mine) >= proven + BigInt(refuted),
     );
   } catch (e) {
     note(
