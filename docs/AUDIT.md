@@ -143,7 +143,7 @@ finding.
 git clone https://github.com/PugarHuda/utuh && cd utuh
 npm ci && forge build
 forge test            # 193 (`forge test --list` counts 203 functions; the summary counts each invariant contract once), no network, no key
-npm run puretest      # 46 assertions on the classifiers and payload reader, no key
+npm run puretest      # 93 assertions on the classifiers, payload reader and watcher rules, no key
 npm run judge         # every deployed claim measured live, no key
 npm run livetest      # the full live suite against CC3 — needs a funded testnet key
 ```

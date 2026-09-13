@@ -50,8 +50,9 @@ table cannot be used by accident.
 `prover.cc3-mainnet.creditcoin.network`, `proof-gen-api.cc3-mainnet.creditcoin.network` and
 `prover.creditcoin.network` do not resolve. Every proof on mainnet comes from `RawProofBuilder`
 over public Ethereum endpoints plus the ChainInfo precompile — the path `npm run provers` proves is
-byte-identical to the hosted one, and which as of 2026-09-10 runs in under a second on a block
-with receipts. `Prover.withDefaults(chainKey, budget, 'http://127.0.0.1:1')` is how the scripts
+byte-identical to the hosted one, and which takes 20–30 s per proof (29.9 s on mainnet, measured
+2026-09-13; an earlier note here saying "under a second" was measuring the hosted service under its
+second hostname). `Prover.withDefaults(chainKey, budget, 'http://127.0.0.1:1')` is how the scripts
 already run it with the hosted URL sent nowhere.
 
 The consequence for refuters: the independence argument stops being a fallback and becomes the

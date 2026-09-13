@@ -72,8 +72,8 @@ same as closing it, and an inclusion proof gives none of them a way to.
 
 ## What this uses of Creditcoin's, and what it deliberately does not
 
-`npm run doctor` (it reads `.env` for `PRIVATE_KEY` to report the balance, and signs nothing) ends
-by making a live request to every Creditcoin-owned surface this depends on, so the list below is
+`npm run doctor` (no key needed; given one it also reports the balance) ends by making a live
+request to every Creditcoin-owned surface this depends on, so the list below is
 checkable rather than asserted. A run on 2026-09-10:
 
 ```
@@ -620,6 +620,18 @@ npm run mcp     # the same server from this repo, for hacking on it
 { "mcpServers": { "utuh": { "command": "npx", "args": ["-y", "utuh-mcp"] } } }
 ```
 
+That entry is Claude Desktop's `claude_desktop_config.json` and Cursor's `.cursor/mcp.json`. VS
+Code's `.vscode/mcp.json` wants `{ "servers": { "utuh": { "type": "stdio", "command": "npx",
+"args": ["-y", "utuh-mcp"] } } }`, and Claude Code is `claude mcp add utuh -- npx -y utuh-mcp`.
+Add `"env": { "PRIVATE_KEY": "0x…" }` to the entry only if `refute_claim` should be able to send;
+the other four tools spend nothing. What npm serves today is **0.3.0** — five tools, one prompt,
+the resources — verified from a clean cache on 2026-09-13. Master is 0.4.0 and ships with the next
+`npm publish` (`dist-mcp/RELEASE.md`): every tool answers with `structuredContent` against an
+`outputSchema`, sweeps and audits narrate progress over `notifications/progress` and log over
+`notifications/message`, argument completion works for the resource templates, the server sends
+`instructions` at `initialize`, and a missing claim or a bad cursor comes back as an `isError`
+result rather than a thrown exception.
+
 Listed in the official [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp)
 as `io.github.PugarHuda/utuh-mcp`, so a client that does not know the package name can still find
 it. The registry hosts metadata only; it proves ownership by fetching the published tarball and
@@ -646,13 +658,17 @@ prose it has to re-read every turn. Claims are also **resources** — `utuh://ta
 re-read, carrying the scope a refuter needs and a `refutable` flag that answers the only question
 worth asking first. The watcher's job is a **prompt**, `hold_the_watcher_role`: sweep everything
 still inside its window, treat "no gap found" as provenance rather than proof, and bring a finding
-back rather than spending. And every tool carries its **annotations**, so a client can tell the four
+back rather than spending; a second prompt in 0.4.0, `weigh_a_refutation`, takes a deployment and
+a claim id, confirms the gap, lays out bond and reward, and sends only after an explicit yes. And
+every tool carries its **annotations**, so a client can tell the four
 that only read from the one that sends a transaction and slashes somebody's bond — the confirmation
 belongs on exactly one of the five, and now the server says which.
 
 `npm run mcp:test` builds that bundle and speaks the protocol to it — the three listings, a prompt
-fetched, the tally read live off Creditcoin, and `refute_claim` asked to spend with `confirm`
-withheld, which must refuse. Twenty-nine assertions, no key, and CI runs it on every push: what
+fetched, the tally read live off Creditcoin, a sweep of mainnet claim 1 (refuted on chain, so the
+sweep has to find the same gap), and `refute_claim` asked to spend with `confirm` withheld, which
+must refuse. Sixty-six assertions over the wire in about sixteen seconds, no key, and CI runs it
+on every push: what
 reaches a user is an esbuild bundle with the registry ABI and both deployment records baked in, and
 every one of those is a thing that can quietly stop being included.
 
@@ -1016,7 +1032,7 @@ npm run mcp                 # the watcher as an MCP server, so an agent can hold
                             # (--dry needs no PRIVATE_KEY at all — it is what CI runs hourly)
 npm run bait                # seal a deliberately short claim for the watcher to find
 npm run livetest            # 121 guards asserted against the live chain, refunds included
-npm run puretest            # the 46 of them that need no key and no chain — what CI runs
+npm run puretest            # 93 assertions that need no key and no chain — what CI runs
 
 npm run web                 # the console on http://127.0.0.1:5173 — read-only without a wallet
 npm run web:build           # bundle it; the server serves ABIs straight out of out/
@@ -1189,6 +1205,10 @@ sepolia block 11566420, 126 transaction(s)
 Both proofs carry the same continuity roots.
 The local path is 27x slower. Size the challenge window for it, not for the fast one.
 ```
+
+(That run is from August. On 2026-09-13, after the builder stopped re-fetching sibling
+transactions, the same comparison reads 0.9 s hosted against 20.0 s local on Sepolia and 29.9 s on
+mainnet — see Known limits for the wrong number that sat in between.)
 
 The test that matters is not the comparison but the outage. Plant an incomplete claim, then run
 the watcher with `PROVER_URL` pointed at a dead port:
@@ -1382,9 +1402,9 @@ uses. What is still uncovered is one line: `revert ClaimAlreadySpent` in `_apply
 cannot be reached because the `settledThrough` watermark refuses any spent repayment claim first —
 defence in depth, and `test_aCuredRepaymentClaimCannotBeSpentAgain` documents that it is.
 
-`npm run puretest` is the half of that suite which needs neither: 46 assertions about classifiers,
+`npm run puretest` is the half of that suite which needs neither: 71 assertions about classifiers,
 the payload reader, the gas model, and the difference between a prover saying "absent" and a prover
-saying nothing. They were written beside the live checks because that is where their callers are,
+saying nothing, plus 22 on the watcher's four retirement rules — 93 in all. They were written beside the live checks because that is where their callers are,
 and the cost was that CI never ran one of them — the whole file needed a funded wallet. It runs on
 every push now, in the job that holds no secrets at all, which is also the proof that it needs none.
 
@@ -1596,13 +1616,13 @@ they happen, recorded by the network rather than by us.
 
 The same indexer counts it. Its `transactionVerifieds` table is every `TransactionVerified` event
 `0x0FD2` has ever emitted, and on 2026-09-13 it held 139,838 rows for CC3 Testnet — 132,507 for
-chain key 3 and 7,331 for key 1, the three read in one request because the table grows while you
-ask; 224 of them were
-verified for Utuh's contracts — 202 through the mainnet-sourced registry, 20 through the
-Sepolia-sourced one, 2 through its credit contract, none through the mainnet-sourced credit,
-which `npm run credit` never writes to. Method: Blockscout's `/api/v2/addresses/{addr}/transactions?filter=to`
-for the hashes, then `transactionVerifieds(filter:{txHash:{in:[…]}}){totalCount}` on the GraphQL
-indexer. Spot check: `appendBatch` `0x5ccfb529…25fb25` has three rows there, and three members.
+chain key 3 and 7,331 for key 1 when read together (139,875 by the time `npm run judge` read it
+that evening; it grows with every attestation); 224 of them were verified for Utuh's contracts —
+202 through the mainnet-sourced registry, 20 through the Sepolia-sourced one, 2 through its credit
+contract, none through the mainnet-sourced credit, which `npm run credit` never writes to. The 224
+decompose exactly: 189 registry members, 33 refutation proofs, 2 control bindings. `npm run judge`
+reads the table (`offchain/lib/attestations.ts`) as an independent witness for the tally; the spot
+check is `appendBatch` `0x5ccfb529…25fb25`, three rows there and three members.
 
 ## Known limits
 
@@ -1624,17 +1644,18 @@ indexer. Spot check: `appendBatch` `0x5ccfb529…25fb25` has three rows there, a
   of them is lying — only that one of them is. It does not affect what a claim records, because
   that comes from bytes the Block Prover verified, but it is a signal an operator has to act on
   themselves.
-- **The independent proof path used to be slow enough to matter, and is now as fast as the
-  endpoint.** Building a proof locally cost tens of seconds against roughly one for the hosted
-  service, because the SDK's builder fetched the block with all its transactions and then asked
-  for every one of those transactions again, by hash, one at a time, with a sleep between. The
-  block it had already fetched carried all of them, so the block provider in `offchain/lib/proofs.ts`
-  now keeps them and answers the second ask from memory: 127 round trips became zero. Measured
-  2026-09-10 on Sepolia via publicnode — 1.2s local against 3.4s hosted on a 127-transaction block
-  before the change, 0.8s against 0.9s on an 81-transaction one after; the proofs are byte-identical
-  either way. What remains is the endpoint's own latency on one block-with-receipts call and the
-  continuity blocks, which is the floor. Still measure it for your own endpoints with
-  `npm run provers` before choosing a window: a slow endpoint is slow on that one call too.
+- **The independent proof path is twenty to thirty times slower than the hosted one, and a
+  paragraph here said otherwise for three days.** The SDK's builder fetched a block with all its
+  transactions and then asked for each of them again by hash, one at a time with a sleep between;
+  the block provider in `offchain/lib/proofs.ts` now answers the second ask from memory, and 127
+  round trips became zero. On 2026-09-10 this section then reported 0.8 s local against 0.9 s
+  hosted. That measurement was wrong: `npm run provers` was reaching the hosted service under its
+  second hostname and calling it local, because the SDK's `withDefaults` wires the alternate
+  hosted URL in even when the primary is a dead port. Fixed on 2026-09-13, the real local builder
+  produces byte-identical proofs in 20.0 s on Sepolia (hosted 0.9 s, 23×) and 29.9 s on mainnet
+  (35×). What remains is the endpoint's own latency on one block-with-receipts call and the
+  continuity blocks. Size a challenge window for the slow path, and measure it for your own
+  endpoints with `npm run provers` first.
 - A claimant watching the mempool can front-run an incoming refutation with their own, keeping half
   the bond and denying the watcher their reward. This is priced rather than prevented: the
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —
