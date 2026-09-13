@@ -126,6 +126,24 @@
         </p>
         <div id="registry-body" class="body">reading the registry…</div>
         <div id="actions" class="actions"></div>
+        <dl class="legend" aria-label="marks used on this page">
+          <div>
+            <dt><svg class="mark tick" aria-hidden="true"><use href="#m-tick" /></svg></dt>
+            <dd><b>Finalized.</b> Survived its challenge window in public; the bond went home.</dd>
+          </div>
+          <div>
+            <dt><svg class="mark wait" aria-hidden="true"><use href="#m-wait" /></svg></dt>
+            <dd><b>Sealed.</b> Inside its window: published, and still breakable by anyone.</dd>
+          </div>
+          <div>
+            <dt><svg class="mark exc" aria-hidden="true"><use href="#m-exc" /></svg></dt>
+            <dd><b>Refuted.</b> One in-scope event it left out was proven; the row is struck and stays on the schedule.</dd>
+          </div>
+          <div>
+            <dt><b>W/P</b></dt>
+            <dd><b>Working-paper reference</b> of each schedule, on the margin rule.</dd>
+          </div>
+        </dl>
       </section>
 
       <section data-frame="3">

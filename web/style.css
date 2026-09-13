@@ -40,7 +40,6 @@
   --blue-soft: #cbd7ec;
   --on-blue: #f4f7ee;
   --on-red: #f8efec;
-  --good: #2f6b3a;
   --bad: var(--red);
 
   --face: 'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -82,7 +81,6 @@
     --blue-soft: #1a2a48;
     --on-blue: #0f1512;
     --on-red: #0f1512;
-    --good: #8fca8f;
   }
 }
 
@@ -603,15 +601,17 @@ a.act:active {
   color: var(--on-blue);
 }
 
+/* The primary stamp is the same impression struck harder: a double rule in the same ink, never a
+   filled block. */
 button.act.primary,
 a.act.primary {
-  background: var(--blue);
-  color: var(--on-blue);
+  border: 3px double var(--blue);
+  padding: 0.4rem 0.9rem;
 }
 
 button.act.primary:hover:not(:disabled),
 a.act.primary:hover {
-  background: color-mix(in oklab, var(--blue) 85%, var(--ink));
+  background: var(--blue-soft);
 }
 
 select:hover,
@@ -687,7 +687,8 @@ button.danger:active:not(:disabled) {
 }
 
 .step.done {
-  opacity: 0.6;
+  color: var(--ink-soft);
+  border-style: dashed;
 }
 
 .step-title {
@@ -712,8 +713,9 @@ button.danger:active:not(:disabled) {
 
 /* ---------------------------------------------------------------- state */
 
+/* A confirmed state is the blue pencil, the same ink as a tick. There is no third pencil. */
 .good {
-  color: var(--good);
+  color: var(--blue);
 }
 
 .bad {
@@ -915,17 +917,32 @@ footer p {
   fill: none;
 }
 
-.strip text {
-  font-family: var(--data);
-  font-size: 10px;
-  fill: var(--ink-soft);
+.strip-wrap {
+  position: relative;
+  padding: 1.35rem 1rem 0.35rem;
 }
 
-.strip text.red {
-  fill: var(--red);
-  font-family: var(--face);
+.strip-wrap .strip {
+  padding: 0;
+}
+
+.strip-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-family: var(--data);
+  font-size: var(--t-edge);
+  color: var(--ink-soft);
+}
+
+.strip-exc {
+  position: absolute;
+  top: 0.2rem;
+  font-size: var(--t-edge);
   font-weight: 600;
   letter-spacing: 0.06em;
+  color: var(--red);
+  white-space: nowrap;
 }
 
 .schedule .finding {
@@ -1077,10 +1094,19 @@ footer p {
   color: var(--blue);
 }
 
-.signoff .print {
-  padding-bottom: 0.3rem;
-  border-bottom: 1px solid var(--rule);
+/* The field line of a sign-off box: a rule with "Prepared by" printed under it, beneath the
+   heading it belongs to. */
+.signoff .field {
+  order: 1;
+  margin-top: 0.4rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--rule-strong);
   font-weight: 500;
+}
+
+.signoff p,
+.signoff .snippet {
+  order: 2;
 }
 
 .snippet {
@@ -1137,6 +1163,12 @@ footer p {
   width: 1.1em;
   height: 1.1em;
   margin: 0;
+}
+
+section[data-frame] .legend {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--rule);
 }
 
 .landing .addresses {
@@ -1234,6 +1266,10 @@ footer p {
 
   .schedule .row {
     grid-template-columns: 6.5rem minmax(0, 1fr);
+  }
+
+  .schedule td:last-child {
+    white-space: normal;
   }
 
   .hero h1 {

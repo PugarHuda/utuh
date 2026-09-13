@@ -51,12 +51,12 @@ function out(href: string, text: string, className = 'addr'): HTMLAnchorElement 
 /// The claim's block range drawn to scale: a ruled axis, one blue tick per member, and a red
 /// circle where the omitted event sits. On a wide range the members bunch — that is the truth of
 /// the data, not a defect of the drawing.
-function strip(s: Schedule): SVGSVGElement {
+function strip(s: Schedule): HTMLElement {
   const W = 600;
-  const H = 62;
+  const H = 40;
   const left = 8;
   const right = W - 8;
-  const y = 30;
+  const y = 20;
   const span = Math.max(1, s.toBlock - s.fromBlock);
   const x = (block: number) => left + ((block - s.fromBlock) / span) * (right - left);
 
@@ -78,21 +78,25 @@ function strip(s: Schedule): SVGSVGElement {
   for (const b of s.memberBlocks) {
     root.appendChild(svg('line', { class: 'member', x1: x(b), x2: x(b), y1: y - 12, y2: y + 12 }));
   }
-  const from = svg('text', { x: left, y: H - 6 });
-  from.textContent = s.fromBlock.toLocaleString();
-  root.appendChild(from);
-  const to = svg('text', { x: right, y: H - 6, 'text-anchor': 'end' });
-  to.textContent = s.toBlock.toLocaleString();
-  root.appendChild(to);
+
+  // Labels are HTML, not SVG text: a viewBox scales its type with the strip, and on a phone that
+  // is six pixels. These stay the page's own size at every width.
+  const wrap = el('div', 'strip-wrap');
   if (s.refutation) {
     const ox = x(s.refutation.omittedBlock);
     root.appendChild(svg('circle', { class: 'omitted drawn', cx: ox, cy: y, r: 7 }));
-    const anchor = ox > W * 0.7 ? 'end' : ox < W * 0.3 ? 'start' : 'middle';
-    const label = svg('text', { class: 'red', x: ox, y: 11, 'text-anchor': anchor });
-    label.textContent = `EXC ${s.refutation.omittedBlock.toLocaleString()}`;
-    root.appendChild(label);
+    const pct = (ox / W) * 100;
+    const label = el('span', 'strip-exc', `EXC ${s.refutation.omittedBlock.toLocaleString()}`);
+    label.style.left = `calc(1rem + (100% - 2rem) * ${(pct / 100).toFixed(4)})`;
+    label.style.transform = pct > 70 ? 'translateX(-100%)' : pct < 30 ? 'none' : 'translateX(-50%)';
+    wrap.appendChild(label);
   }
-  return root;
+  wrap.appendChild(root);
+  const axis = el('div', 'strip-axis');
+  axis.appendChild(el('span', undefined, s.fromBlock.toLocaleString()));
+  axis.appendChild(el('span', undefined, s.toBlock.toLocaleString()));
+  wrap.appendChild(axis);
+  return wrap;
 }
 
 /// The members as the auditor lists them, with the omitted event printed as a row in its place.

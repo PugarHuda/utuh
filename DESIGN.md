@@ -16,7 +16,6 @@ colors:
   blue-soft: "#cbd7ec"
   on-blue: "#f4f7ee"
   on-red: "#f8efec"
-  good: "#2f6b3a"
   bad: "{colors.red}"
   dark-paper: "#0f1512"
   dark-sheet: "#151d18"
@@ -32,7 +31,6 @@ colors:
   dark-blue-soft: "#1a2a48"
   dark-on-blue: "#0f1512"
   dark-on-red: "#0f1512"
-  dark-good: "#8fca8f"
 typography:
   display:
     fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
@@ -89,10 +87,6 @@ typography:
     fontSize: "1.75rem"
     fontWeight: 500
     lineHeight: 1.1
-  strip:
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
-    fontSize: "10px"
-    fontWeight: 400
 rounded:
   default: "2px"
   pill: "999px"
@@ -109,8 +103,9 @@ components:
     rounded: "{rounded.default}"
     padding: "0.45rem 0.85rem"
   stamp-primary:
-    backgroundColor: "{colors.blue}"
-    textColor: "{colors.on-blue}"
+    backgroundColor: "transparent"
+    textColor: "{colors.blue}"
+    borderColor: "{colors.blue}"
   stamp-danger:
     backgroundColor: "transparent"
     textColor: "{colors.red}"
@@ -201,14 +196,15 @@ block; `margin` the ledger's red margin rule, and nothing else.
 
 `blue` is the auditor's tick and every action: links, the stamp, focus, selection, the caret.
 `red` is a finding: an exception, a struck row, a refutation, `.bad`, the danger stamp, and the
-one emphasised phrase in the display line. `good` exists for a borrow step that completed.
+one emphasised phrase in the display line. A confirmed state (`.good`, a borrow step that went
+through) is blue — the same ink as a tick. There is no third pencil.
 
 ### Named Rules
 
 - **Red is a finding, never emphasis.** If a red element is not an exception, an error, or a
   refutation, it is wrong.
-- **`on-blue` on the blue stamp, `on-red` on the red one.** Paper ink is 3.4:1 on blue in light;
-  the near-white tokens hold 7:1 in both scenes.
+- **`on-blue` and `on-red` exist for the pressed state only.** A stamp at rest is an outline; only
+  `:active` and the skip link fill, and the near-white tokens hold 7:1 on both inks in both scenes.
 - **The margin rule is one device pixel.** It is a rule, not a border-left accent.
 - **Body background:** light `#dfe7d5` (rgb 223,231,213), dark `#0f1512` (rgb 15,21,18).
 
@@ -234,7 +230,6 @@ measurement, never costume.
 | Print | 0.688rem | 600, width 84%, uppercase, 0.1em |
 | Data | 0.844rem | monospace, tabular |
 | Total | 1.75rem | monospace 500 — the footed figures only |
-| Strip | 10px | monospace, inside the range-strip SVG's own units |
 
 Fixed rem steps; only the display line is fluid, because it is the one line read from across a
 room.
@@ -273,9 +268,10 @@ recessed field by its darker one. No shadows anywhere.
 
 ### Stamps (`.act`)
 
-A rubber stamp: 1.5px border in one ink, uppercase, width 88%, tracked. Outline blue is the
-default; `.primary` fills blue with `on-blue`; `.danger` is the same shape in red. Hover tints
-with `blue-soft`/`red-soft`; active fills. Disabled drops to 0.5 opacity.
+A rubber stamp: an impression in one ink, never a filled block. 1.5px border, uppercase, width
+88%, tracked. `.primary` is the same impression struck harder — a 3px double rule in the same
+blue; `.danger` is the shape in red. Hover tints with `blue-soft`/`red-soft`; active fills with
+`on-blue`/`on-red` text. Disabled drops to 0.5 opacity.
 
 ### Schedules (`section[data-frame]`, `article.schedule`)
 
@@ -307,11 +303,19 @@ the id legible in red — a finding stays on the schedule.
 
 ### Sign-off block (`.signoff`)
 
-Three columns — Prepared by / Traced by / Reviewed by — for claimants, watchers, lenders.
+Three columns for claimants, watchers, lenders. The heading comes first; the field line —
+"Prepared by", "Traced by", "Reviewed by" — sits under it as a rule with print beneath, the way
+an initials line does. Never a label above the heading: that is a kicker.
 
 ### Legend (`.legend`)
 
-Every mark defined once, at the foot of the landing.
+Every mark defined once per page: at the foot of the landing, and under the claims register on
+the console (tick, wait, exception, the struck row, W/P).
+
+### Range strip labels
+
+The strip's labels are HTML beside the SVG, not `<text>` inside it, so they keep the page's own
+size on a phone instead of scaling down with the viewBox.
 
 ## Do's and Don'ts
 
