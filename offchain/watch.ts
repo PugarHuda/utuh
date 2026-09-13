@@ -10,6 +10,7 @@ import { Prover } from './lib/proofs';
 import { refuteClaim } from './lib/claims';
 import { isTransportFailure } from './lib/gasLimit';
 import { claimStatus } from './lib/status';
+import { byDeadline, conclude, decodeState, encodeState, startBlock, type Verdict } from './lib/watchState';
 import { confirmEndpoints } from './lib/attest';
 import { runScript } from './lib/cli';
 
@@ -41,10 +42,6 @@ const STATE_FILE = process.env.WATCH_STATE ?? '.watch-state.json';
 /// the same way the source-chain sweep is.
 const LOG_CHUNK = Number(process.env.WATCH_LOG_CHUNK ?? 2_000);
 
-/// What an inspection concluded. Only a terminal verdict retires a claim from the queue — a
-/// watcher that forgets a claim it failed to check is blind to it for good.
-type Verdict = 'settled' | 'refuted' | 'complete' | 'expired' | 'inconclusive';
-
 const NL = String.fromCharCode(10);
 
 /// Where to start reading ClaimSealed from.
@@ -58,34 +55,33 @@ const NL = String.fromCharCode(10);
 /// So it remembers. The state file is per registry, because pointing the watcher at a different
 /// one and resuming from the old one's progress would skip the new one's entire history.
 function resumeFrom(registry: string, head: number, pending: Set<string>): number {
+  let text = '';
   try {
-    const saved = JSON.parse(readFileSync(STATE_FILE, 'utf8')) as {
-      registry?: string;
-      lastScanned?: number;
-      pending?: string[];
-    };
-    if (saved.registry?.toLowerCase() === registry.toLowerCase() && Number.isInteger(saved.lastScanned)) {
-      // The unresolved queue comes back too. Without it the mark would advance past a claim that
-      // was still Sealed when the watcher stopped, and the restart would never look at it again —
-      // the same hole as the lookback, moved one step along.
-      for (const id of saved.pending ?? []) pending.add(id);
-      const behind = head - saved.lastScanned!;
-      const queued = pending.size > 0 ? `, ${pending.size} claim(s) still queued from last time` : '';
-      console.log(`resuming from block ${saved.lastScanned! + 1} (${behind} behind the head)${queued}`);
-      return Math.max(0, saved.lastScanned! + 1);
-    }
+    text = readFileSync(STATE_FILE, 'utf8');
   } catch {
-    // No state, or state for a different registry. Falling back is correct, and saying so matters:
-    // it is the difference between "caught up" and "started fresh and may have missed something".
+    // No state. Falling back is correct, and saying so matters: it is the difference between
+    // "caught up" and "started fresh and may have missed something".
   }
-  console.log(`no usable state for this registry — starting ${LOOKBACK} blocks back`);
-  return Math.max(0, head - LOOKBACK);
+  const saved = decodeState(text, registry);
+  if (saved) {
+    // The unresolved queue comes back too. Without it the mark would advance past a claim that
+    // was still Sealed when the watcher stopped, and the restart would never look at it again —
+    // the same hole as the lookback, moved one step along.
+    for (const id of saved.pending) pending.add(id);
+    const queued = pending.size > 0 ? `, ${pending.size} claim(s) still queued from last time` : '';
+    console.log(
+      `resuming from block ${saved.lastScanned + 1} (${head - saved.lastScanned} behind the head)${queued}`,
+    );
+  } else {
+    console.log(`no usable state for this registry — starting ${LOOKBACK} blocks back`);
+  }
+  return startBlock(saved, head, LOOKBACK);
 }
 
 /// Record progress only after a sweep that finished. A partial sweep must not advance the mark.
 function remember(registry: string, lastScanned: number, pending: Set<string>): void {
   try {
-    writeFileSync(STATE_FILE, JSON.stringify({ registry, lastScanned, pending: [...pending] }, null, 2) + NL);
+    writeFileSync(STATE_FILE, encodeState(registry, lastScanned, pending));
   } catch (e: any) {
     console.log(`  could not write ${STATE_FILE} — a restart will fall back to the lookback (${e.message})`);
   }
@@ -142,7 +138,7 @@ async function main() {
     from = to + 1;
     // Soonest deadline first. A claim with three blocks left cannot wait behind one with five
     // thousand just because it was discovered second.
-    return byDeadline(registry, [...pending]);
+    return soonestFirst(registry, [...pending]);
   }
 
   for (;;) {
@@ -168,18 +164,18 @@ async function main() {
 
     for (const claimId of queue) {
       tally.seen++;
-      let verdict: Verdict;
+      let outcome: Verdict | Error;
       try {
-        verdict = await inspect(registry, wallet, claimId, dry);
+        outcome = await inspect(registry, wallet, claimId, dry);
       } catch (e: any) {
         // A lost race, a reverted refutation, an endpoint failing mid-sweep. None of these are
         // reasons to stop watching, and none of them settle anything.
         const kind = isTransportFailure(e) ? 'an endpoint never answered' : 'inspection failed';
         console.log(`${NL}claim ${claimId}: ${kind} — ${e.shortMessage ?? e.message}`);
-        verdict = 'inconclusive';
+        outcome = e instanceof Error ? e : new Error(String(e));
       }
+      const verdict = conclude(pending, claimId, outcome);
       tally[verdict]++;
-      if (verdict !== 'inconclusive') pending.delete(String(claimId));
       remember(registryAddress, from - 1, pending);
     }
     tally.sweeps++;
@@ -207,12 +203,11 @@ async function main() {
 let incomplete = 0;
 
 /// Order a batch of claim ids by how soon their windows close.
-async function byDeadline(registry: Contract, ids: string[]): Promise<bigint[]> {
+async function soonestFirst(registry: Contract, ids: string[]): Promise<bigint[]> {
   const withUntil = await Promise.all(
     ids.map(async (id) => ({ id: BigInt(id), until: Number(await registry.challengeUntil(id)) })),
   );
-  withUntil.sort((a, b) => a.until - b.until);
-  return withUntil.map((x) => x.id);
+  return byDeadline(withUntil).map((x) => x.id);
 }
 
 /// The source endpoints for a chain key, minus any that will not say they are on that chain.

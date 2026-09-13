@@ -5,7 +5,7 @@ cache/
 broadcast/
 lcov.info
 lint.txt
-.watch-state.json
+.watch-*.json
 web/dist/
 playwright-report/
 test-results/
