@@ -13,11 +13,14 @@ import { expect, test } from '@playwright/test';
 /// this test exists to catch. The webfont joined it when the console got its own typeface, and it
 /// is self-hosted for the same reason the rest of this is: no third party is on the critical path.
 
-test('boots with no server behind it', async ({ page }) => {
+test('boots with no server behind it', async ({ page, baseURL }) => {
+  // Whatever port the suite was pointed at, not the default one: with `WEB_PORT` set this list
+  // came back empty and the assertion below read that as a page that never loaded.
+  const host = new URL(baseURL!).host;
   const asked: string[] = [];
   page.on('request', (r) => {
     const url = new URL(r.url());
-    if (url.host === '127.0.0.1:5173' || url.host === 'localhost:5173') asked.push(url.pathname);
+    if (url.host === host) asked.push(url.pathname);
   });
 
   const errors: string[] = [];

@@ -80,6 +80,10 @@ function main(): Promise<void> {
     throw new Error('web/whitepaper.html has changed since the PDF was rendered — npm run web:pdf');
   }
   copyFileSync(join(WEB, 'whitepaper.pdf'), join(DEST, 'whitepaper.pdf'));
+  // The deck, at an address next to the whitepaper's for the same reason. It is not stamped: the
+  // slides change with the story, and refusing to publish the console over a stale deck would hold
+  // the wrong thing hostage.
+  copyFileSync(join(WEB, 'deck.pdf'), join(DEST, 'deck.pdf'));
 
   // The one webfont, self-hosted. A page whose argument is that it needs no server should not open
   // a connection to a font CDN to render its own name, so the file ships with the page. The
@@ -136,6 +140,28 @@ function main(): Promise<void> {
     ].join(String.fromCharCode(10)),
   );
 
+  // What a crawler asks for first. Allow everything: the page is the argument, and the sitemap names
+  // the two files a search engine would not find by following links from it.
+  writeFileSync(join(DEST, 'robots.txt'), 'User-agent: *\nAllow: /\nSitemap: https://utuh.vercel.app/sitemap.xml\n');
+  writeFileSync(
+    join(DEST, 'sitemap.xml'),
+    [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+      '  <url><loc>https://utuh.vercel.app/</loc></url>',
+      '  <url><loc>https://utuh.vercel.app/whitepaper.pdf</loc></url>',
+      '  <url><loc>https://utuh.vercel.app/deck.pdf</loc></url>',
+      '  <url><loc>https://utuh.vercel.app/llms.txt</loc></url>',
+      '</urlset>',
+      '',
+    ].join(String.fromCharCode(10)),
+  );
+
+  // ERC-8004 agent card for the watcher, so an identity registration can point at an https URL
+  // rather than carry the JSON inline. Committed beside the page; what it says is checked in the
+  // judge suite against the MCP server it describes.
+  copyFileSync(join(WEB, 'agent-registration.json'), join(DEST, '.well-known', 'agent-registration.json'));
+
   // The convention agents read on arrival (llmstxt.org). Creditcoin's own Attestcoin docs publish
   // one, which is how this project found the file it needed to be legible to a machine.
   //
@@ -158,11 +184,21 @@ function main(): Promise<void> {
       'Presence stays cryptographic. Absence is refuted by presence, never proven. A claim of any',
       'size is settled by one proof, so refuting is cheap and claiming is not.',
       '',
-      '## For an agent arriving here',
-      '',
       'There is a role open to you, it pays, and it costs nothing to hold while you are only looking.',
       'A watcher sweeps the source chain for an event a sealed claim left out and proves it; the',
       'registry pays half the bond to whoever does. You need no account, no capital and no permission.',
+      '',
+      '**What is worth knowing before you act**',
+      '',
+      '- Only a **sealed** claim still inside its challenge window can be refuted. `utuh://claims/{deployment}`',
+      '  answers that per claim with a `refutable` flag.',
+      '- A refutation verifies itself. A fabricated one does not fail quietly — it fails to prove and',
+      '  costs you the gas, which is why the role can be open to strangers.',
+      '- "No gap found" is provenance, not proof: it is only as strong as the number of independent',
+      '  endpoints that saw the whole range, and the tools report that number rather than hiding it.',
+      '- Everything is Creditcoin CC3 Testnet. The contracts hold testnet CTC.',
+      '',
+      '## For an agent arriving here',
       '',
       '- [The watcher as an MCP server](https://www.npmjs.com/package/utuh-mcp): `npx utuh-mcp`.',
       '  Five tools — tally, list_claims, sweep_claim, refute_claim, audit_attestors. Claims are also',
@@ -174,20 +210,12 @@ function main(): Promise<void> {
       '- [This console](https://utuh.vercel.app/) does the same from a browser with no backend: its',
       '  Watch pane sweeps Ethereum across independent endpoints and sends the refutation itself.',
       '',
-      '## What is worth knowing before you act',
-      '',
-      '- Only a **sealed** claim still inside its challenge window can be refuted. `utuh://claims/{deployment}`',
-      '  answers that per claim with a `refutable` flag.',
-      '- A refutation verifies itself. A fabricated one does not fail quietly — it fails to prove and',
-      '  costs you the gas, which is why the role can be open to strangers.',
-      '- "No gap found" is provenance, not proof: it is only as strong as the number of independent',
-      '  endpoints that saw the whole range, and the tools report that number rather than hiding it.',
-      '- Everything is Creditcoin CC3 Testnet. The contracts hold testnet CTC.',
-      '',
       '## Source',
       '',
       '- [Repository](https://github.com/PugarHuda/utuh)',
       '- [Whitepaper](https://utuh.vercel.app/whitepaper.pdf)',
+      '- [Deck](https://utuh.vercel.app/deck.pdf)',
+      '- [Agent card, ERC-8004](https://utuh.vercel.app/.well-known/agent-registration.json)',
       '- [Security policy](https://github.com/PugarHuda/utuh/blob/master/SECURITY.md)',
       '',
     ].join(String.fromCharCode(10)),
