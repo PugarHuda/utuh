@@ -84,7 +84,7 @@ jobs:
         id: canonical
         run: |
           set -uo pipefail
-          files="index.html main.js style.css llms.txt og.png whitepaper.pdf deck.pdf robots.txt sitemap.xml"
+          files="index.html main.js style.css llms.txt llms-full.txt og.png whitepaper.pdf deck.pdf robots.txt sitemap.xml"
           built=""
           live=""
           for f in $files; do
