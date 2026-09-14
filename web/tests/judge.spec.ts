@@ -185,11 +185,11 @@ test('what a crawler, a link preview, an agent and a scanner each read is there'
     ['meta[property="og:type"]', /^website$/],
     ['meta[property="og:title"]', /Utuh/],
     ['meta[property="og:description"]', /complete/],
-    ['meta[property="og:url"]', /^https:\/\/utuh\.vercel\.app\/$/],
+    ['meta[property="og:url"]', /^https:\/\/utuh\.vercel\.app\/app\/$/],
     ['meta[property="og:image"]', /^https:\/\/utuh\.vercel\.app\/og\.png$/],
     ['meta[property="og:image:alt"]', /console/],
     ['meta[name="twitter:card"]', /^summary_large_image$/],
-    ['link[rel="canonical"]', /^https:\/\/utuh\.vercel\.app\/$/],
+    ['link[rel="canonical"]', /^https:\/\/utuh\.vercel\.app\/app\/$/],
     ['link[rel="icon"]', /^data:image\/svg\+xml/],
     ['meta[name="viewport"]', /width=device-width/],
   ] as const) {

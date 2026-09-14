@@ -64,7 +64,10 @@
     -->
     <svg hidden aria-hidden="true">
       <symbol id="m-tick" viewBox="0 0 16 16"><path d="M2.5 8.5l3.5 3.5 7.5-8" /></symbol>
-      <symbol id="m-exc" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" /><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" /></symbol>
+      <symbol id="m-exc" viewBox="0 0 16 16">
+        <circle cx="8" cy="8" r="6" />
+        <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" />
+      </symbol>
       <symbol id="m-foot" viewBox="0 0 16 16"><path d="M2 6.5h12M2 10.5h12" /></symbol>
     </svg>
     <nav class="skip" aria-label="skip links">
@@ -91,10 +94,10 @@
         <div>
           <h1>Attestcoin proves an event happened. Utuh bonds that <em>nothing was left out</em>.</h1>
           <p class="lead">
-            An inclusion proof vouches for what is there. It cannot speak about what is not, because whoever
-            submits the proofs chooses which to submit — and every one of them verifies. Utuh lets a claimant bond a
-            set of source-chain events as complete, and pays half the bond to anyone who proves one in-scope event
-            it left out.
+            An inclusion proof vouches for what is there. It cannot speak about what is not, because whoever submits
+            the proofs chooses which to submit — and every one of them verifies. Utuh lets a claimant bond a set of
+            source-chain events as complete, and pays half the bond to anyone who proves one in-scope event it left
+            out.
           </p>
           <p class="lead">
             Economic, not cryptographic: a bond makes lying expensive, not impossible. Then it underwrites
@@ -106,12 +109,23 @@
             <a href="https://github.com/PugarHuda/utuh">Source on GitHub</a>
           </div>
         </div>
-        <article class="schedule" id="schedule-sepolia-5" data-testid="schedule-sepolia-5" aria-label="claim 5, Sepolia">
+        <article
+          class="schedule"
+          id="schedule-sepolia-5"
+          data-testid="schedule-sepolia-5"
+          aria-label="claim 5, Sepolia"
+        >
           <p class="pending">reading claim 5 from the Sepolia-sourced registry…</p>
         </article>
       </div>
 
-      <section class="tally" id="tally" data-testid="tally" data-ready="false" aria-label="what the registries have done">
+      <section
+        class="tally"
+        id="tally"
+        data-testid="tally"
+        data-ready="false"
+        aria-label="what the registries have done"
+      >
         <div class="t"><b id="t-proven">…</b><span>events proven into claims</span></div>
         <div class="t"><b id="t-claims">…</b><span>claims sealed and challengeable</span></div>
         <div class="t struck-num"><b id="t-refuted">…</b><span>broken by someone who found the gap</span></div>
@@ -124,8 +138,8 @@
       <section class="plain">
         <h2>Two claims, each broken by one proof</h2>
         <p class="note">
-          Both were sealed, published, and refuted from a browser during their challenge window. The second is
-          the sentence every on-chain credit system needs — <em>this borrower has never been liquidated</em> — asserted
+          Both were sealed, published, and refuted from a browser during their challenge window. The second is the
+          sentence every on-chain credit system needs — <em>this borrower has never been liquidated</em> — asserted
           over 216,000 blocks of Ethereum mainnet, and false.
         </p>
         <div class="two">
@@ -136,12 +150,17 @@
               <span class="gloss">Sepolia · SettlementLedger events · the completed loop</span>
             </header>
             <p class="finding">
-              Three payments were appended and proven. A fourth, in scope and in range, was not. The sweep found it, one
-              proof broke the claim, and half the bond went to the refuter.
+              Three payments were appended and proven. A fourth, in scope and in range, was not. The sweep found it,
+              one proof broke the claim, and half the bond went to the refuter.
               <a class="act" href="app/?claim=5" data-testid="open-sepolia-5-again">Open claim 5</a>
             </p>
           </article>
-          <article class="schedule" id="schedule-mainnet-20" data-testid="schedule-mainnet-20" aria-label="claim 20, Ethereum mainnet">
+          <article
+            class="schedule"
+            id="schedule-mainnet-20"
+            data-testid="schedule-mainnet-20"
+            aria-label="claim 20, Ethereum mainnet"
+          >
             <p class="pending">reading claim 20 from the mainnet-sourced registry…</p>
           </article>
         </div>
@@ -197,8 +216,8 @@
             <span class="print field">Traced by</span>
             <p>
               Sweep a source chain for an in-scope event a sealed claim left out, and refute it for half the bond.
-              Adversarial, unpaid until you win, and the only reason the central claim holds. A watcher need not be
-              a person.
+              Adversarial, unpaid until you win, and the only reason the central claim holds. A watcher need not be a
+              person.
             </p>
             <div class="snippet">
               <pre><code>npx -y utuh-mcp</code></pre>
@@ -213,7 +232,9 @@
               Read a claim's standing before extending anything, or wire the registry into your own contract. The
               challenge window is your diligence window; half the bond is a rebate on work you had to do, not a wage.
             </p>
-            <p><a href="https://github.com/PugarHuda/utuh/blob/master/docs/INTEGRATING.md">Integrating the registry</a></p>
+            <p>
+              <a href="https://github.com/PugarHuda/utuh/blob/master/docs/INTEGRATING.md">Integrating the registry</a>
+            </p>
           </div>
         </div>
       </section>
@@ -223,20 +244,38 @@
         <p class="note">Every mark on this page, defined once.</p>
         <dl class="legend">
           <div>
-            <dt><svg class="mark tick" aria-hidden="true"><use href="#m-tick" /></svg></dt>
-            <dd><b>Traced.</b> The member was verified by the Block Prover on the way into the claim; the console links each one to its source block.</dd>
+            <dt>
+              <svg class="mark tick" aria-hidden="true"><use href="#m-tick" /></svg>
+            </dt>
+            <dd>
+              <b>Traced.</b> The member was verified by the Block Prover on the way into the claim; the console links
+              each one to its source block.
+            </dd>
           </div>
           <div>
-            <dt><svg class="mark exc" aria-hidden="true"><use href="#m-exc" /></svg></dt>
-            <dd><b>Exception.</b> An event in scope and in range that the claim does not contain — one proof of it is a refutation.</dd>
+            <dt>
+              <svg class="mark exc" aria-hidden="true"><use href="#m-exc" /></svg>
+            </dt>
+            <dd>
+              <b>Exception.</b> An event in scope and in range that the claim does not contain — one proof of it is a
+              refutation.
+            </dd>
           </div>
           <div>
-            <dt><svg class="mark" aria-hidden="true"><use href="#m-foot" /></svg></dt>
-            <dd><b>Footed.</b> A total under a double rule is summed across both registries as the page draws it, from the contracts themselves.</dd>
+            <dt>
+              <svg class="mark" aria-hidden="true"><use href="#m-foot" /></svg>
+            </dt>
+            <dd>
+              <b>Footed.</b> A total under a double rule is summed across both registries as the page draws it, from
+              the contracts themselves.
+            </dd>
           </div>
           <div>
             <dt><b>W/P</b></dt>
-            <dd><b>Working-paper reference.</b> S for the Sepolia-sourced registry, M for the mainnet-sourced one, then the claim id. The console opens any of them.</dd>
+            <dd>
+              <b>Working-paper reference.</b> S for the Sepolia-sourced registry, M for the mainnet-sourced one, then
+              the claim id. The console opens any of them.
+            </dd>
           </div>
         </dl>
       </section>
@@ -249,10 +288,38 @@
           to claim.
         </p>
         <div class="addresses">
-          <div><span class="print">Registry · Sepolia-sourced</span><a href="https://creditcoin-testnet.blockscout.com/address/0x26880c8980Cd54827543bD34c6c613253c69347b" class="addr">0x2688…347b</a></div>
-          <div><span class="print">Credit · Sepolia-sourced</span><a href="https://creditcoin-testnet.blockscout.com/address/0x0177aDb82152c8673a85271F7F06336B820324b6" class="addr">0x0177…24b6</a></div>
-          <div><span class="print">Registry · mainnet-sourced</span><a href="https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac" class="addr">0x8FA0…5Fac</a></div>
-          <div><span class="print">Credit · mainnet-sourced</span><a href="https://creditcoin-testnet.blockscout.com/address/0x89FB81b1e453b7Bd18ac1A6AF03C84A40Ce10C57" class="addr">0x89FB…0C57</a></div>
+          <div>
+            <span class="print">Registry · Sepolia-sourced</span
+            ><a
+              href="https://creditcoin-testnet.blockscout.com/address/0x26880c8980Cd54827543bD34c6c613253c69347b"
+              class="addr"
+              >0x2688…347b</a
+            >
+          </div>
+          <div>
+            <span class="print">Credit · Sepolia-sourced</span
+            ><a
+              href="https://creditcoin-testnet.blockscout.com/address/0x0177aDb82152c8673a85271F7F06336B820324b6"
+              class="addr"
+              >0x0177…24b6</a
+            >
+          </div>
+          <div>
+            <span class="print">Registry · mainnet-sourced</span
+            ><a
+              href="https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac"
+              class="addr"
+              >0x8FA0…5Fac</a
+            >
+          </div>
+          <div>
+            <span class="print">Credit · mainnet-sourced</span
+            ><a
+              href="https://creditcoin-testnet.blockscout.com/address/0x89FB81b1e453b7Bd18ac1A6AF03C84A40Ce10C57"
+              class="addr"
+              >0x89FB…0C57</a
+            >
+          </div>
         </div>
       </section>
     </main>
@@ -264,7 +331,9 @@
         <a href="deck.pdf">Deck (PDF)</a>
         <a href="https://github.com/PugarHuda/utuh">GitHub</a>
         <a href="https://www.npmjs.com/package/utuh-mcp">utuh-mcp on npm</a>
-        <a href="https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications">Creditcoin's verification dashboard</a>
+        <a href="https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications"
+          >Creditcoin's verification dashboard</a
+        >
         <a href="llms.txt">llms.txt</a>
       </nav>
       <p>

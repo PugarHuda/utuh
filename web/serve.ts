@@ -38,6 +38,7 @@ const PUBLISHED_ONLY = [
   '/llms.txt',
   '/whitepaper.pdf',
   '/deck.pdf',
+  '/logo.png',
   '/robots.txt',
   '/sitemap.xml',
   '/.well-known/security.txt',
