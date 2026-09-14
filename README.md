@@ -1824,9 +1824,11 @@ check is `appendBatch` `0x5ccfb529…25fb25`, three rows there and three members
   members already in the published claims, proves each with both builders, compares every field
   (the endpoint digest, every continuity root, height, transaction bytes, Merkle root, every sibling,
   the log index), and exits 1 on any byte of difference or on a member either builder could not
-  prove within `PROVERS_DEADLINE_MS` (20 minutes by default). Its first measured member shows the slow
-  path is minutes on a busy block, not seconds: Sepolia claim 13's member 11582696/107/0 came back
-  identical in 5.0 s hosted and 400.1 s local. The SDK fetches all 100 continuity blocks whole, with
+  prove within `PROVERS_DEADLINE_MS` (20 minutes by default). Its two measured members, one per
+  source chain, show the slow path is minutes on a busy block, not seconds. Mainnet claim 71's member
+  25969575/195/5 came back identical across 26 continuity roots and 8 siblings, in 4.3 s hosted and
+  350.2 s local (`--sample 1`, exit 0, 2026-09-14). Sepolia claim 13's member 11582696/107/0 came
+  back identical in 5.0 s hosted and 400.1 s local. The SDK fetches all 100 continuity blocks whole, with
   receipts and a hardcoded 500 ms pause, and Sepolia endpoints refuse some receipts as too large.
   The nightly `live precompile` job in `ci.yml` runs `--sample 1` (9c7fbbe), on the daily schedule
   and on manual dispatch: one member, because a busy block's local proof has measured 400 s, and a
