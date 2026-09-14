@@ -1,35 +1,16 @@
 # Utuh
 
-**A completeness layer for the Attestcoin Protocol, and undercollateralized credit built on it.**
+**Utuh bonds the claim that a set of events is complete, pays half the bond to anyone who proves
+one event was left out, and lends CTC undercollateralized against the claims that survive.**
 
-_utuh_ — Indonesian: whole, intact, with nothing missing.
+_utuh_ — Indonesian: whole, intact, with nothing missing. A completeness layer for the Attestcoin
+Protocol, built for BUIDL CTC 2026 Fall and deployed on Creditcoin CC3 Testnet.
 
-Any registry on this protocol can tell you what it holds. Ask one whether a borrower has ever been
-liquidated and it can only answer with what someone chose to submit — and the borrower will not be
-submitting that. Utuh bonds the claim that a set is all of them, and pays half the bond to anyone
-who proves one event was left out.
-
-Built for BUIDL CTC 2026 Fall on Creditcoin.
-
-**Whitepaper (PDF):** https://utuh.vercel.app/whitepaper.pdf — 15 pages, rendered from
-[`web/whitepaper.html`](web/whitepaper.html). **Deck:** [`web/deck.pdf`](web/deck.pdf), 12 slides.
-
-Deployed and verified on Creditcoin CC3 Testnet. **[utuh.vercel.app](https://utuh.vercel.app/)**
-is live: the landing page reads both registries from Creditcoin as it draws — the two refuted
-claims with their block-range strips, the tally (proven, sealed, broken, burned), the deployed
-addresses — and the console at **[utuh.vercel.app/app/](https://utuh.vercel.app/app/)** reads the
-chain from your own browser, lets anyone sweep Ethereum and break an incomplete claim, and lets a
-borrower be underwritten end to end without cloning anything. `npm run web` serves both locally.
-
-Two claims, live, one click each — the landing page reads both refuted claims from Creditcoin as
-it draws, and each link opens the console on the claim with its verdict first:
-a claim **[sealed one event short and broken from a browser](https://utuh.vercel.app/?claim=5)**,
-and a false _"never liquidated"_ claim over 216,000 blocks of Ethereum mainnet
-**[refuted by one liquidation proof](https://utuh.vercel.app/?deployment=mainnet&claim=20)**.
-Every verification behind them is on Creditcoin's own oracle dashboard, which nobody here can
-write to: [transaction-verifications](https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications).
-
-What it looks like, photographed from the published site against the live chain:
+- **Live:** [utuh.vercel.app](https://utuh.vercel.app/) (landing, read from Creditcoin as it draws)
+  and the console at [utuh.vercel.app/app/](https://utuh.vercel.app/app/) (sweep, refute, borrow;
+  no server, no clone).
+- **Two refuted claims, one click each:** [claim 5, sealed one event short and broken from a browser](https://utuh.vercel.app/?claim=5)
+  · [claim 20, a false _"never liquidated"_ over 216,000 Ethereum mainnet blocks, refuted by one liquidation proof](https://utuh.vercel.app/?deployment=mainnet&claim=20)
 
 | | |
 | --- | --- |
@@ -38,23 +19,75 @@ What it looks like, photographed from the published site against the live chain:
 | ![The same landing page in the dark colour scheme](docs/img/landing-dark.png) | ![Claim 5 in the console after a browser sweep: four Sepolia endpoints each answered 4 events, the union holds 4, and the verdict reads INCOMPLETE: 1 event(s) the claim does not contain](docs/img/console-claim-5-sweep.png) |
 | Dark scheme | A sweep of claim 5 from the browser, with its provenance |
 
+- **Verify every number yourself:** `npm run judge` — no key. It re-measures every number this
+  repository and the submission quote against the live chain and exits non-zero on any that no
+  longer holds. On 2026-09-14, 23 of 23 held.
+- **Hold the watcher role from an agent:** `npx -y utuh-mcp` — 0.4.0 on npm and in the official
+  [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp).
+- **Demo video (3 min):** https://youtu.be/HwSnv3E4tzo · **Whitepaper:** [PDF](https://utuh.vercel.app/whitepaper.pdf), from [`web/whitepaper.html`](web/whitepaper.html)
+  · **Deck:** [`web/deck.pdf`](web/deck.pdf)
+
+What is on-chain, all verified on Blockscout and Sourcify ([every address and read](#deployed-on-cc3-testnet-chain-id-102031)):
+
+| On CC3 Testnet (chain 102031) | Address | What it holds |
+| --- | --- | --- |
+| `UtuhRegistry`, Ethereum-mainnet-sourced | [`0x8FA0…5Fac`](https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac?tab=contract) | 71 claims over real Ethereum mainnet history; 32 refuted, claim 20 among them |
+| `UtuhRegistry`, Sepolia-sourced | [`0x2688…347b`](https://creditcoin-testnet.blockscout.com/address/0x26880c8980Cd54827543bD34c6c613253c69347b?tab=contract) | 13 claims, the completed borrow-and-repay loop; claims 3 and 5 refuted |
+| `UtuhCredit`, Sepolia-sourced | [`0x0177…24b6`](https://creditcoin-testnet.blockscout.com/address/0x0177aDb82152c8673a85271F7F06336B820324b6?tab=contract) | lines 1–3 opened, drawn, repaid on Sepolia and settled; lines 2 and 3 entirely from the console |
+| `SettlementLedger`, on Sepolia | [`0xC8C9…575B`](https://eth-sepolia.blockscout.com/address/0xC8C9053C4E2c0590df684c12e5f2610EFeC9575B?tab=contract) | the source-chain repayments those lines settled on |
+| Creditcoin's own oracle record | [transaction-verifications](https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications) | 248 `TransactionVerified` rows are Utuh's: 212 claim members, 34 refutations, the rest control bindings |
+
+## Contents
+
+[The short version](#the-short-version) ·
+[The problem](#the-problem) ·
+[What this uses of Creditcoin's](#what-this-uses-of-creditcoins-and-what-it-deliberately-does-not) ·
+[Next to Creditcoin's own example](#where-this-sits-next-to-creditcoins-own-example) ·
+[What Utuh does](#what-utuh-does) ·
+[Built on Ethereum mainnet](#built-on-ethereum-mainnet-not-sepolia) ·
+[UtuhCredit](#utuhcredit) ·
+[Deployed on CC3 Testnet](#deployed-on-cc3-testnet-chain-id-102031) ·
+[Two demonstrations](#two-demonstrations-and-why-there-are-two) ·
+[The watcher as an MCP server](#the-watcher-as-an-mcp-server-and-why-an-agent-can-hold-the-role) ·
+[The console](#the-console-and-why-the-watcher-belongs-in-a-browser) ·
+[Layout](#layout) ·
+[Running it](#running-it) ·
+[On testing](#on-testing) ·
+[What the tools say](#what-the-tools-say) ·
+[Before you build on this](#one-thing-worth-knowing-before-you-build-on-this) ·
+[Attestcoin surface used](#attestcoin-surface-used) ·
+[Known limits](#known-limits) ·
+[License](#license)
+
+Elsewhere: **[docs/INTEGRATING.md](docs/INTEGRATING.md)** (use the registry from your own
+contract) · **[docs/COMPLETENESS.md](docs/COMPLETENESS.md)** (does what you built have this gap?) ·
+**[docs/ROADMAP.md](docs/ROADMAP.md)** (what is gated on whom) · [docs/AUDIT.md](docs/AUDIT.md) ·
+[docs/MAINNET.md](docs/MAINNET.md) · [SECURITY.md](SECURITY.md) · 한국어 요약:
+**[docs/README.ko.md](docs/README.ko.md)**
+
+## The short version
+
+Any registry on this protocol can tell you what it holds. Ask one whether a borrower has ever been
+liquidated and it can only answer with what someone chose to submit — and the borrower will not be
+submitting that. Utuh bonds the claim that a set is all of them, and pays half the bond to anyone
+who proves one event was left out.
+
+The landing page reads both registries from Creditcoin as it draws — the two refuted claims with
+their block-range strips, the tally (proven, sealed, broken, burned), the deployed addresses — and
+each deep link above opens the console on the claim with its verdict first. The console reads the
+chain from your own browser, lets anyone sweep Ethereum and break an incomplete claim, and lets a
+borrower be underwritten end to end without cloning anything. `npm run web` serves both locally.
+Every verification behind the two refuted claims is on Creditcoin's own oracle dashboard, which
+nobody here can write to.
+
 Two things a reader with a clone and no key can check first. `npm run judge` re-measures every
 number this repository and the submission quote — the contracts and their verification, the tally,
 both linked claims, the explorer counters, npm, the MCP Registry, the published build, the sixteen
 protocol entry points, the test and commit counts — and exits non-zero on any that no longer
-holds; late on 2026-09-13, after `utuh-mcp` 0.4.0 was published, 23 of 23 held. And a bond here
-stands behind a specific line, not behind
-nothing: `UtuhCredit.openLine` reaches a claim only through `UtuhRegistry.isUsable(claimId,
-exposure)`, the finalized claim is spent by the line it opens, `underwrittenThrough` consumes the
-history range, and the limit is capped at ten times the enforceable loss. Exposure is gated by the
-bond and consumed by the draw.
-
-Building something else on Creditcoin that needs a sentence about events that did _not_ happen?
-The registry is usable on its own — see **[docs/INTEGRATING.md](docs/INTEGRATING.md)**. Not sure
-whether what you have already built has this gap in it?
-**[docs/COMPLETENESS.md](docs/COMPLETENESS.md)** is three questions and a worked example from
-Creditcoin's own reference loan flow. Where this goes next, and what is gated on whom:
-**[docs/ROADMAP.md](docs/ROADMAP.md)**. 한국어 요약: **[docs/README.ko.md](docs/README.ko.md)**.
+holds. And a bond here stands behind a specific line, not behind nothing: `UtuhCredit.openLine`
+reaches a claim only through `UtuhRegistry.isUsable(claimId, exposure)`, the finalized claim is
+spent by the line it opens, `underwrittenThrough` consumes the history range, and the limit is
+capped at ten times the enforceable loss. Exposure is gated by the bond and consumed by the draw.
 
 ---
 
