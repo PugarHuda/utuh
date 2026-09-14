@@ -306,6 +306,15 @@ jobs:
       - name: hosted and local proofs still agree
         run: npm run provers
 
+      # The step above proves a fresh transaction. This one proves the newest member of a published
+      # claim, one the Block Prover already accepted, with both the hosted and the local builder, and
+      # fails on any byte of difference or on a member either builder could not prove within
+      # PROVERS_DEADLINE_MS (20 minutes). A local proof of a busy block has measured 400 seconds, so the
+      # sample is one member, with a step timeout just above the deadline.
+      - name: both builders agree on a member of a published claim
+        timeout-minutes: 25
+        run: npm run provers -- --sample 1
+
       - name: what the registry has cost
         run: npm run gas
       # Every sentence the submission quotes a number in, measured again. A sentence that was
