@@ -12,6 +12,14 @@ on:
     # Daily, so a dead endpoint or a changed precompile surfaces on its own.
     - cron: '17 6 * * *'
 
+# A newer push to dev or to a pull request makes the run for the older commit worthless. The console
+# job alone is about fifty minutes of three browsers against public endpoints, and two runs at once
+# earn rate limits instead of results. Master queues rather than cancels, so every commit that
+# publishes keeps its own verdict, and the nightly schedule has a group of its own.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 jobs:
   contracts:
     name: contracts
