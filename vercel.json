@@ -25,6 +25,15 @@
           "value": "DENY"
         }
       ]
+    },
+    {
+      "source": "/((?!.+\\.(?:pdf|png|txt|xml|json|woff2|js|css)$).*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'none'; script-src 'self' 'sha256-6jdd9oby6YxJF0wyL886AGjTOSQZmYTkznVuCuYU/bc='; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://rpc.cc3-testnet.creditcoin.network https://creditcoin-testnet.blockscout.com https://rpc.cc3-mainnet.creditcoin.network https://attestations-graphql.cc3-testnet.creditcoin.network https://attestations-graphql.cc3-mainnet-usc.creditcoin.network https://prover.cc3-testnet.creditcoin.network https://proof-gen-api.cc3-testnet.creditcoin.network https://gateway.tenderly.co https://sepolia.gateway.tenderly.co https://0xrpc.io https://ethereum-sepolia-rpc.publicnode.com https://rpc.sepolia.ethpandaops.io; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'"
+        }
+      ]
     }
   ],
   "functions": {
