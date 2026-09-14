@@ -1256,10 +1256,20 @@ function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repa
         attestation indexer's own table of every <code>TransactionVerified</code> event the Block
         Prover has emitted holds 142,712 rows for CC3 Testnet, and 248 of them are this project's
         &mdash; 212 members, 34 refutations, 2 control bindings. Blockscout counts 376 transactions
-        and 155.7M gas into the three listed contracts. <code>npm run judge</code> re-measures every
+        and 156.6M gas into the three listed contracts. <code>npm run judge</code> re-measures every
         one of these numbers against the chain, the explorer, npm and the MCP Registry with no key,
         and exits non-zero on any that no longer holds; 25 of 25 held on branch dev, where two checks read
         the deployed example gate, and master's 23 of 23 all held.
+      </p>
+      <p>
+        The contracts' own tests, on branch dev and pending merge (master has 193 tests and 98.08% of
+        branches): <code>forge test</code> passes 211 tests, and <code>forge coverage</code> over
+        <code>src/</code> reaches 100% of branches (104/104) and lines (432/432). Mutation testing
+        (gambit 0.2.1, 738 mutants) killed 99.1%, 730 of 737; the 7 survivors are equivalent mutants,
+        each explained in <code>test/MUTATION.md</code>, and the score was 93.9% before the 38 missing
+        assertions it found got tests. A 30-minute medusa campaign passed all 22 properties and
+        assertion tests over 639,295 calls, and caught both bugs planted in scratch copies of
+        <code>src/</code>, shrunk to 7 and 16 calls.
       </p>
     </div>
   </section>
@@ -1285,7 +1295,8 @@ function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repa
   </section>
 
   <div class="footer">
-    <span>197 forge tests, 10 fuzz, 16 invariants, branches 98.08%</span>
+    <span>211 forge tests, 10 fuzz, 16 invariants, 100% of branches and lines</span>
+    <span>99.1% of mutants killed</span>
     <span>34 refuted, 34 CTC burned</span>
     <span>121 guards asserted live</span>
     <span>Slither 0, halmos 5 proofs</span>
