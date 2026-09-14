@@ -792,6 +792,14 @@ which the daily CI probe caught. So the page's reads fail over to Blockscout's `
 the same chain, the one second way onto CC3 that exists; its batch ceiling and burst rationing were
 measured before being coded around (`web/chain.ts` has the numbers).
 
+**On branch dev, pending merge:** the scripts fail over the same way (e726fd8). In node,
+`eth_call`, `eth_getLogs` and `eth_blockNumber` retry against the proxy when the primary does not
+answer, and writes and reverts never retry. The proxy was measured before it was trusted: it takes
+5-call batches and answers 413 to six, rejects the `finalized` tag the SDK reads ChainInfo at, and
+omits logs for a null-then-set topic filter, so those filters stay on the primary and a 1000-log
+answer counts as truncated. With the primary pointed at a dead port, `npm run probe` verified 24
+mainnet events through the proxy alone.
+
 The sweep is the daemon's own function, imported rather than reimplemented — `scanScopeUnion` in
 `offchain/lib/scope.ts`, bundled into the page. A browser cannot conclude that a claim is complete
 on different reasoning than the daemon would.
@@ -1614,7 +1622,7 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 | `find_highest_attested_before` on `0x0FD3`       | the newest settled attestation — where a claim's range ends                      |
 | `find_lowest_attested_after` on `0x0FD3`         | the height a not-yet-provable event becomes provable at                          |
 | `get_latest_checkpoint_height_and_hash`          | how far behind the settled view is, which only checkpoints answer                |
-| `get_checkpoint_for_height` on `0x0FD3`          | confirming a reported checkpoint is one, by digest                               |
+| `get_checkpoint_for_height` on `0x0FD3`          | confirming a reported checkpoint is one, by digest; on dev, pending merge, also classifying a claim's end as checkpointed, attested only or unattested (`npm run doctor`) |
 | `get_attestation_height_for_digest` on `0x0FD3`  | the leg that checks the attestation indexer against the chain itself             |
 | `PrecompileChainInfoProvider`                    | waiting for attestation without asking a hosted service                          |
 | `RawProofBuilder` over source RPCs               | proofs built locally when the hosted Proof Builder is down                      |
