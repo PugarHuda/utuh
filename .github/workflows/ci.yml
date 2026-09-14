@@ -50,8 +50,12 @@ jobs:
           forge lint src/ 2>&1 | tee lint.txt
           if grep -qE '^(warning|error)\[' lint.txt; then echo "::error::forge lint found something in src/"; exit 1; fi
 
+      # The size gate is for what ships. A harness under test/ is deployed by its own tool, not to a
+      # chain, and test/medusa/UtuhProperties.sol went over EIP-170 without being anything anyone
+      # deploys. `--skip test` would not have caught it, because it only matches .t.sol names. Building
+      # src/ alone sizes exactly the contracts and their imports. The steps below compile the rest.
       - name: build
-        run: forge build --sizes
+        run: forge build src --sizes
 
       - name: tests
         run: forge test -vv
