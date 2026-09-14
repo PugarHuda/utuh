@@ -1,0 +1,162 @@
+name: preview
+
+# `dev` is where changes prove themselves before master publishes them, which means that on dev
+# the site gets tested as it is actually served, not as serve.ts serves it on a laptop.
+#
+# The Vercel project has no Git integration: production is `vercel deploy --prod` from pages.yml,
+# and a push to dev makes no preview by itself. So this makes the preview itself, then runs the
+# browser suites and Lighthouse against that URL. It also listens for `deployment_status` in case
+# a Git integration is connected later; its Preview deployments are tested the same way.
+#
+# Nothing here can reach production. The deploy step refuses to run a command that says
+# --prod, --target or alias, and refuses a result whose target is production.
+on:
+  push:
+    branches: [dev]
+  deployment_status:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Vercel's free tier allows 100 deployments a day. Rapid pushes to dev replace each other rather
+# than each spending one.
+concurrency:
+  group: preview-dev
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: deploy a preview
+    if: github.event_name != 'deployment_status'
+    runs-on: ubuntu-latest
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: 1.8.0
+
+      - run: npm ci
+
+      - name: build artifacts
+        run: forge build
+
+      - name: build the console
+        run: npm run web:static
+
+      - name: deploy a preview, never production
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_NdlwQPgRp4Fn2WzyuKh1BLB2
+          VERCEL_PROJECT_ID: prj_ax7c7Tmvo59dozvBUZRo8nxZYFPS
+        run: |
+          set -euo pipefail
+          test -n "$VERCEL_TOKEN" || { echo "::error::no VERCEL_TOKEN secret, so no preview can be made"; exit 1; }
+          cmd='npx --yes vercel@59 deploy .vercel-deploy --yes --format json --token "$VERCEL_TOKEN"'
+          if grep -qE -- '--prod|--target|alias' <<<"$cmd"; then
+            echo "::error::the preview command would touch production: $cmd"; exit 1
+          fi
+          rm -rf .vercel-deploy && cp -r web/static .vercel-deploy && cp vercel.json .vercel-deploy/
+          eval "$cmd" > deploy.json
+          url=$(jq -r .url deploy.json)
+          target=$(jq -r .target deploy.json)
+          test "$target" != production || { echo "::error::Vercel made a production deployment"; exit 1; }
+          case "$url" in https://*.vercel.app) ;; *) echo "::error::no preview URL in: $(cat deploy.json)"; exit 1 ;; esac
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "### Preview for \`${GITHUB_SHA::7}\`: $url" >> "$GITHUB_STEP_SUMMARY"
+
+  browsers:
+    name: browsers and lighthouse on the preview
+    needs: deploy
+    if: >-
+      !cancelled() && (needs.deploy.result == 'success' ||
+      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success' &&
+      github.event.deployment_status.environment == 'Preview'))
+    runs-on: ubuntu-latest
+    env:
+      URL: ${{ needs.deploy.outputs.url || github.event.deployment_status.environment_url }}
+      BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Previews sit behind Vercel Authentication. The automation bypass secret buys a cookie for
+      # this one deployment. It goes to Playwright as a storage state, not as an extra header,
+      # because an extra header rides along on every cross-origin RPC call and makes the browser
+      # send CORS preflights that public endpoints refuse.
+      - name: reach the preview
+        id: reach
+        run: |
+          set -euo pipefail
+          URL="${URL%/}"
+          echo "BASE=$URL" >> "$GITHUB_ENV"
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/")
+          if [ "$code" = 200 ]; then
+            echo "open=true" >> "$GITHUB_OUTPUT"; echo "query=" >> "$GITHUB_OUTPUT"
+          elif [ -n "$BYPASS" ]; then
+            curl -s -c jar.txt -o /dev/null -H "x-vercel-protection-bypass: $BYPASS" -H "x-vercel-set-bypass-cookie: true" "$URL/"
+            jwt=$(awk '$6 == "_vercel_jwt" { print $7 }' jar.txt)
+            test -n "$jwt" || { echo "::error::the bypass secret was refused by $URL (HTTP $code without it)"; exit 1; }
+            echo "::add-mask::$jwt"
+            jq -n --arg v "$jwt" --arg d "${URL#https://}" \
+              '{cookies: [{name: "_vercel_jwt", value: $v, domain: $d, path: "/", expires: -1, httpOnly: true, secure: true, sameSite: "Lax"}], origins: []}' \
+              > "$RUNNER_TEMP/preview-state.json"
+            echo "PW_STORAGE_STATE=$RUNNER_TEMP/preview-state.json" >> "$GITHUB_ENV"
+            echo "open=true" >> "$GITHUB_OUTPUT"
+            echo "query=?x-vercel-protection-bypass=$BYPASS&x-vercel-set-bypass-cookie=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "open=false" >> "$GITHUB_OUTPUT"
+            echo "The preview answers HTTP $code (Vercel Authentication), and the repository has no VERCEL_AUTOMATION_BYPASS_SECRET, so nothing was tested against it." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: browser
+        if: steps.reach.outputs.open == 'true'
+        run: npx playwright install --with-deps chromium
+
+      # Every suite that is not live. The live ones skip themselves without UTUH_LIVE_UI, and the
+      # ones that need serve.ts skip themselves when PUBLISHED_URL is set.
+      - name: browser suites against the preview
+        if: steps.reach.outputs.open == 'true'
+        run: PUBLISHED_URL="$BASE/" npx playwright test --project=chromium
+
+      # Mobile emulation with simulated throttling, Lighthouse's default. On a protected preview the
+      # first request is the bypass redirect that sets the cookie, and its round trip counts
+      # against LCP, so a pass here is a pass with a little to spare.
+      - name: lighthouse budgets
+        if: ${{ !cancelled() && steps.reach.outputs.open == 'true' }}
+        env:
+          QUERY: ${{ steps.reach.outputs.query }}
+        run: npx --yes @lhci/cli@0.15.1 autorun --config=.github/lighthouserc.json --collect.url="$BASE/$QUERY" --collect.url="$BASE/app/$QUERY"
+
+      # The reports carry the URLs they measured, and those carry the bypass secret.
+      - name: keep the secret out of the reports
+        if: always()
+        run: |
+          test -z "$BYPASS" || grep -rlF "$BYPASS" .lighthouseci test-results 2>/dev/null | xargs -r sed -i "s/$BYPASS/REDACTED/g" || true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: preview-reports
+          path: |
+            .lighthouseci/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
