@@ -70,8 +70,10 @@
       </symbol>
       <symbol id="m-foot" viewBox="0 0 16 16"><path d="M2 6.5h12M2 10.5h12" /></symbol>
     </svg>
+    <!-- tabindex="0" on a link that is already focusable: Safari leaves links out of the Tab order
+         unless its user changed a setting, and a skip link nobody can Tab to skips nothing. -->
     <nav class="skip" aria-label="skip links">
-      <a href="#console-link" data-skip="console-link">Skip to the console</a>
+      <a href="#console-link" data-skip="console-link" tabindex="0">Skip to the console</a>
     </nav>
     <header class="head">
       <a class="wordmark" href="./">Utuh <small>whole, intact, nothing missing</small></a>
@@ -128,7 +130,10 @@
       >
         <div class="t"><b id="t-proven">…</b><span>events proven into claims</span></div>
         <div class="t"><b id="t-claims">…</b><span>claims sealed and challengeable</span></div>
-        <div class="t struck-num"><b id="t-refuted">…</b><span>broken by someone who found the gap</span></div>
+        <div class="t struck-num">
+          <b id="t-refuted">…</b
+          ><span>broken by a proof of an omitted event<span id="t-refuters"></span></span>
+        </div>
         <div class="t"><b id="t-burned">…</b><span>bond slashed from claimants who were short</span></div>
       </section>
       <p id="invitation" class="invitation" data-testid="invitation">

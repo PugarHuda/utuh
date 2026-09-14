@@ -116,7 +116,7 @@ function main(): Promise<void> {
       .replace('href="/style.css"', `href="${prefix}style.css"`)
       .replace(
         '<script type="module" src="/dist/main.js"></script>',
-        `<script>window.__UTUH__ = ${JSON.stringify(baked)};</script>\n` +
+        `<script type="application/json" id="utuh-baked">${JSON.stringify(baked).replace(/</g, '\\u003c')}</script>\n` +
           `    <script type="module" src="${prefix}main.js"></script>`,
       );
   writeFileSync(join(DEST, 'index.html'), bake('index.html', './'));

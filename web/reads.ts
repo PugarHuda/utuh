@@ -14,6 +14,10 @@ export interface Tally {
   sealed: number;
   refuted: number;
   burned: bigint;
+  /// How many different addresses sent the refutations counted in `refuted`. Undefined when any one
+  /// of them could not be read: a partial count would understate who has refuted, and this number
+  /// exists to say plainly whether anyone but the operators has.
+  refuters?: number;
   /// The newest claim a stranger could still break, and where it lives.
   openNow?: { which: DeploymentName; id: number; blocksLeft: number };
 }
@@ -36,6 +40,7 @@ export async function readTally(abis: Abis): Promise<Tally> {
   const tally: Tally = { proven: 0n, sealed: 0, refuted: 0, burned: 0n };
   const head = await within(30_000, 'block number', cc3.getBlockNumber());
 
+  const broken: { registry: Contract; id: number; sealedAt: number; challengeWindow: number }[] = [];
   for (const [at, registry] of registries.entries()) {
     if (!registry) continue;
     const which = names[at]!;
@@ -52,13 +57,18 @@ export async function readTally(abis: Abis): Promise<Tally> {
             id: i,
             status: Number(c.status),
             until: Number(c.sealedAt) + Number(c.challengeWindow),
+            sealedAt: Number(c.sealedAt),
+            challengeWindow: Number(c.challengeWindow),
             members: await within(30_000, `memberCount ${i}`, registry.memberCount(i) as Promise<bigint>),
           };
         }),
       );
       for (const c of slice) {
         tally.proven += c.members;
-        if (claimStatus(c.status) === 'Refuted') tally.refuted += 1;
+        if (claimStatus(c.status) === 'Refuted') {
+          tally.refuted += 1;
+          broken.push({ registry, id: c.id, sealedAt: c.sealedAt, challengeWindow: c.challengeWindow });
+        }
         if (claimStatus(c.status) === 'Sealed' && c.until > head) {
           const left = c.until - head;
           if (!tally.openNow || left > tally.openNow.blocksLeft)
@@ -66,6 +76,25 @@ export async function readTally(abis: Abis): Promise<Tally> {
         }
       }
     }
+  }
+
+  // Who broke them, from each registry's own ClaimRefuted record, in batches like the claims above.
+  try {
+    const who = new Set<string>();
+    for (let from = 0; from < broken.length; from += CLAIM_BATCH) {
+      const found = await Promise.all(
+        broken
+          .slice(from, from + CLAIM_BATCH)
+          .map((b) => readRefutation(b.registry, b.id, b.sealedAt, b.challengeWindow)),
+      );
+      for (const r of found) {
+        if (!r) throw new Error('a refuted claim has no ClaimRefuted record in its window');
+        who.add(r.refuter.toLowerCase());
+      }
+    }
+    tally.refuters = who.size;
+  } catch {
+    /* left undefined: the page then says nothing about who refuted, rather than a wrong number */
   }
   return tally;
 }
@@ -162,4 +191,12 @@ export async function readSchedule(
     bondPosted: c.bondPosted,
     ...(refutation ? { refutation } : {}),
   };
+}
+
+/// Beside the refuted count: how many different addresses sent those refutations. Every one so far
+/// came from this project's own keys, and a tally that let "refuted" imply strangers would be spin;
+/// the count says it, and turns into the first sign of an outside watcher the day one appears.
+export function refuters(n: number | undefined): void {
+  const at = document.getElementById('t-refuters');
+  if (at) at.textContent = n === undefined ? '' : ` — sent from ${n} distinct address${n === 1 ? '' : 'es'}`;
 }

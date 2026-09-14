@@ -94,10 +94,13 @@ test('a wallet whose owner says no leaves the page usable and says what happened
   const send = page.locator('[data-testid=send-commitment]');
   await expect(send).toBeVisible({ timeout: 60_000 });
   await send.click();
-  // ethers reports MetaMask's 4001 as "user rejected action"; the page passes that through.
-  await expect(page.locator('[data-testid=borrow-log]')).toContainText(/could not send it: .*(rejected|denied)/i, {
-    timeout: 60_000,
-  });
+  // MetaMask's 4001 is the person's decision, and the page says so as one, not as ethers' dump.
+  await expect(page.locator('[data-testid=borrow-log]')).toContainText(
+    /could not send it: you declined it in your wallet/,
+    {
+      timeout: 60_000,
+    },
+  );
   await expect(send).toBeEnabled();
 });
 

@@ -1,7 +1,7 @@
 import { formatEther } from 'ethers';
 import { CHAIN_NAME, SOURCE_EXPLORER, requireChainKey, type DeploymentName } from '../offchain/lib/networks';
 import { cc3, EXPLORER, loadAbis, shortAddress, within, type Abis } from './chain';
-import { readSchedule, readTally, type Schedule } from './reads';
+import { readSchedule, readTally, refuters, type Schedule } from './reads';
 
 /// The landing page.
 ///
@@ -186,7 +186,10 @@ function finding(s: Schedule): HTMLElement {
   return p;
 }
 
-async function renderSchedule(abis: Abis, which: DeploymentName, id: number): Promise<void> {
+/// `level` is the heading the schedule's title takes where it sits: the hero's claim comes straight
+/// after the page's h1, so it is an h2 there, and the claim under "Two claims…" is an h3 under that
+/// section's h2. A skipped level is a screen reader's outline with a hole in it.
+async function renderSchedule(abis: Abis, which: DeploymentName, id: number, level: 'h2' | 'h3'): Promise<void> {
   const box = $(`schedule-${which}-${id}`);
   try {
     const s = await readSchedule(abis, which, id);
@@ -194,7 +197,7 @@ async function renderSchedule(abis: Abis, which: DeploymentName, id: number): Pr
     const ex = SOURCE_EXPLORER[requireChainKey(s.chainKey)];
 
     const header = el('header');
-    const h = el('h3');
+    const h = el(level);
     h.textContent = `Claim ${s.id} — ${chain}, ${s.members} member(s) over ${(s.toBlock - s.fromBlock + 1).toLocaleString()} blocks`;
     header.appendChild(h);
     header.appendChild(el('span', 'ref', `W/P ${which === 'mainnet' ? 'M' : 'S'}-${s.id}`));
@@ -240,6 +243,12 @@ export async function landing(): Promise<void> {
     $('live-chain').textContent = String((await cc3.getNetwork()).chainId);
   };
 
+  // Back from the console, a page restored out of the back/forward cache still shows the block it
+  // read minutes ago. The chips are the page's claim to be live, so they read again.
+  addEventListener('pageshow', (e) => {
+    if (e.persisted) void chips().catch(() => undefined);
+  });
+
   let abis: Abis;
   try {
     [abis] = await Promise.all([loadAbis(), chips()]);
@@ -260,6 +269,7 @@ export async function landing(): Promise<void> {
       $('t-claims').textContent = t.sealed.toLocaleString();
       $('t-refuted').textContent = t.refuted.toLocaleString();
       $('t-burned').textContent = `${formatEther(t.burned)} CTC`;
+      refuters(t.refuters);
       const box = $('invitation');
       if (t.openNow) {
         const hours = (t.openNow.blocksLeft * 15) / 3600;
@@ -288,6 +298,6 @@ export async function landing(): Promise<void> {
     }
   })();
 
-  await Promise.all([renderSchedule(abis, 'sepolia', 5), renderSchedule(abis, 'mainnet', 20)]);
+  await Promise.all([renderSchedule(abis, 'sepolia', 5, 'h2'), renderSchedule(abis, 'mainnet', 20, 'h3')]);
   document.body.dataset.state = 'ready';
 }

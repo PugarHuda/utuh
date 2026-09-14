@@ -69,8 +69,8 @@
       </symbol>
     </svg>
     <nav class="skip" aria-label="skip links">
-      <a href="#sweep" data-skip="sweep">Skip to the watcher</a>
-      <a href="#borrow-body" data-skip="borrow-body">Skip to borrowing</a>
+      <a href="#sweep" data-skip="sweep" tabindex="0">Skip to the watcher</a>
+      <a href="#borrow-body" data-skip="borrow-body" tabindex="0">Skip to borrowing</a>
     </nav>
     <header class="head">
       <a class="wordmark" href="../">Utuh <small>whole, intact, nothing missing</small></a>
@@ -112,7 +112,10 @@
     <section id="tally" class="tally" data-testid="tally" data-ready="false" aria-label="what this registry has done">
       <div class="t"><b id="t-proven">…</b><span>events proven into claims</span></div>
       <div class="t"><b id="t-claims">…</b><span>claims sealed and challengeable</span></div>
-      <div class="t struck-num"><b id="t-refuted">…</b><span>broken by someone who found the gap</span></div>
+      <div class="t struck-num">
+        <b id="t-refuted">…</b
+        ><span>broken by a proof of an omitted event<span id="t-refuters"></span></span>
+      </div>
       <div class="t"><b id="t-burned">…</b><span>bond slashed from claimants who were short</span></div>
     </section>
 

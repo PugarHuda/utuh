@@ -16,8 +16,11 @@
 @font-face {
   font-family: 'Archivo';
   src: url('./fonts/archivo.woff2') format('woff2-variations');
+  /* The file is cut to the axes the page draws — weights 400 to 700, widths 84% to 100% — which
+     takes it from 90 KB to 53 KB and a slow phone's first readable paint with it. A new weight or
+     width outside that range needs the full face back from the font's release. */
   font-weight: 400 700;
-  font-stretch: 62% 125%;
+  font-stretch: 84% 100%;
   font-style: normal;
   font-display: swap;
 }
@@ -1329,5 +1332,58 @@ section[data-frame] .legend {
   *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------- print
+
+   A working paper is a thing people print. On paper the controls do nothing, the live chips are a
+   moment that has passed, and a reader in dark mode still wants dark ink on white stock: the light
+   palette comes back whatever the screen was set to, and a schedule is never split across a page. */
+@media print {
+  :root {
+    --paper: #fff;
+    --sheet: #fff;
+    --well: #f3f6ef;
+    --rule: #b3c4ab;
+    --rule-strong: #5f7a5e;
+    --margin: #c43a2b;
+    --ink: #16201a;
+    --ink-soft: #445244;
+    --red: #b52d1d;
+    --blue: #234f9e;
+    color-scheme: light;
+  }
+
+  body {
+    padding: 0;
+  }
+
+  .skip,
+  .head nav,
+  .chip-row,
+  #copy-mcp,
+  .invitation,
+  .actions,
+  .schedule .finding a.act {
+    display: none;
+  }
+
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    padding-block: 0 1rem;
+  }
+
+  .schedule,
+  .programme li,
+  .signoff,
+  .legend div,
+  .tally {
+    break-inside: avoid;
+  }
+
+  h2,
+  h3 {
+    break-after: avoid;
   }
 }

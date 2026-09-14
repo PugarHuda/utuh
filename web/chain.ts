@@ -18,6 +18,8 @@ import {
   requireChainKey,
   type DeploymentName,
 } from '../offchain/lib/networks';
+import { explainRevert } from '../offchain/lib/revert';
+import { sendWithFailover } from '../offchain/lib/failover';
 
 /// Everything the console needs to talk to Creditcoin, and nothing it needs a server for.
 ///
@@ -80,21 +82,24 @@ async function sendTo(url: string, payload: JsonRpcPayload | JsonRpcPayload[], t
 /// can push the retry past the bell, and then the pane says so rather than waiting.
 class FailoverProvider extends JsonRpcProvider {
   override async _send(payload: JsonRpcPayload | JsonRpcPayload[]) {
-    try {
-      return await sendTo(CC3_RPC_DEFAULT, payload, 7_000);
-    } catch {
-      fellBack();
+    // Which reads may fail over, in what batch size, and which filter shapes the proxy answers
+    // wrongly (a gap in the topics, no address, past its silent 1,000-log cap) is one rule shared
+    // with the node scripts, in `offchain/lib/failover.ts`. A read the proxy would mis-answer stays on
+    // the primary and fails as unanswered: an empty answer is exactly what an absence looks like here.
+    return sendWithFailover(
+      Array.isArray(payload) ? payload : [payload],
+      (batch) => sendTo(CC3_RPC_DEFAULT, batch, 7_000),
       // 15s, not 10: the proxy rations bursts by *holding* the excess, not by refusing it —
       // measured, a parked request is answered within ~12s of being sent. A 10s deadline was
       // aborting requests moments before their answer arrived. The second attempt is for the
       // request parked past even that: the ration refills on a ~10s cycle, so a retry that
       // rejoins the queue almost always lands in the next window.
-      try {
-        return await gated(() => sendTo(CC3_RPC_FALLBACK, payload, 15_000));
-      } catch {
-        return await gated(() => sendTo(CC3_RPC_FALLBACK, payload, 15_000));
-      }
-    }
+      (batch) =>
+        gated(() => sendTo(CC3_RPC_FALLBACK, batch, 15_000)).catch(() =>
+          gated(() => sendTo(CC3_RPC_FALLBACK, batch, 15_000)),
+        ),
+      () => fellBack(),
+    );
   }
 }
 
@@ -167,8 +172,16 @@ export function deploymentName(): DeploymentName {
   return asked === 'mainnet' ? 'mainnet' : 'sepolia';
 }
 
+/// A JSON data block rather than an inline script: the browser never executes it, so a
+/// Content-Security-Policy with no 'unsafe-inline' still lets the page read it, and its hash does not
+/// have to change every time a deployment record does.
+let bakedCache: Baked | null | undefined;
 function baked(): Baked | undefined {
-  return (globalThis as { __UTUH__?: Baked }).__UTUH__;
+  if (bakedCache === undefined) {
+    const node = typeof document === 'undefined' ? null : document.getElementById('utuh-baked');
+    bakedCache = node?.textContent ? (JSON.parse(node.textContent) as Baked) : null;
+  }
+  return bakedCache ?? undefined;
 }
 
 async function json<T>(path: string): Promise<T> {
@@ -286,21 +299,60 @@ const CC3_PARAMS = {
   blockExplorerUrls: ['https://creditcoin-testnet.blockscout.com'],
 };
 
+/// Did the person say no in their wallet? EIP-1193's 4001, or ethers' name for it, at whatever depth
+/// the wallet and ethers between them nested it.
+export function declined(e: unknown): boolean {
+  for (
+    let at = e as { code?: unknown; error?: unknown; info?: { error?: unknown } } | undefined, i = 0;
+    at && i < 4;
+    i++
+  ) {
+    if (at.code === 4001 || at.code === 'ACTION_REJECTED') return true;
+    at = (at.error ?? at.info?.error) as typeof at;
+  }
+  return false;
+}
+
+/// Why a write did not happen, in one sentence. A refusal is the person's own decision and is said
+/// as one; anything else is the contract's or the wallet's reason, decoded.
+export function why(e: unknown, interfaces: Parameters<typeof explainRevert>[1] = []): string {
+  return declined(e) ? 'you declined it in your wallet, so nothing was sent' : explainRevert(e, interfaces);
+}
+
 /// Connect a wallet and make sure it is pointed at CC3, adding the network if it has never seen it.
-export async function connect(which?: Eip1193Provider): Promise<{ signer: Signer; address: string }> {
+///
+/// A wallet on another chain is said out loud before it is asked to move — `onWrongChain` hears the
+/// chain it was on — and a wallet that declines to move is not connected: every write on this page
+/// goes to CC3, and a signer on Sepolia would send them to the wrong chain.
+export async function connect(
+  which?: Eip1193Provider,
+  onWrongChain?: (chainId: number) => void,
+): Promise<{ signer: Signer; address: string }> {
   const eth = which ?? wallets()[0]?.provider;
   if (!eth) throw new Error('no wallet in this browser');
   chosen = eth;
   const provider = new BrowserProvider(eth, 'any');
   await provider.send('eth_requestAccounts', []);
 
-  const net = await provider.getNetwork();
-  if (Number(net.chainId) !== CC3_CHAIN_ID) {
+  const was = Number(await provider.send('eth_chainId', []));
+  if (was !== CC3_CHAIN_ID) {
+    onWrongChain?.(was);
     try {
       await provider.send('wallet_switchEthereumChain', [{ chainId: CC3_PARAMS.chainId }]);
-    } catch {
+    } catch (e) {
+      // A refusal is an answer. Offering to add the chain after the person said no would be asking
+      // twice.
+      if (declined(e)) {
+        throw new Error(
+          `this wallet is on chain ${was}, not Creditcoin CC3 Testnet (${CC3_CHAIN_ID}), and the switch was declined`,
+        );
+      }
       // 4902 and its many spellings: the wallet does not know this chain yet.
       await provider.send('wallet_addEthereumChain', [CC3_PARAMS]);
+    }
+    const now = Number(await provider.send('eth_chainId', []));
+    if (now !== CC3_CHAIN_ID) {
+      throw new Error(`this wallet is still on chain ${now}; switch it to Creditcoin CC3 Testnet (${CC3_CHAIN_ID})`);
     }
   }
 

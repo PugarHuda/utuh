@@ -1,7 +1,7 @@
 import { BrowserProvider, formatEther, parseEther, type Signer } from 'ethers';
 import { CHAIN_NAME, SOURCE_CHAIN_ID, SOURCE_RPC_DEFAULT, requireChainKey } from '../offchain/lib/networks';
 import { claimStatus } from '../offchain/lib/status';
-import { cc3, type Wired, walletProvider } from './chain';
+import { cc3, type Wired, walletProvider, why } from './chain';
 import {
   bindingFor,
   buildClaim,
@@ -25,7 +25,6 @@ import {
 } from './borrow';
 import { lineStatus } from '../offchain/lib/status';
 import { sameScope } from '../offchain/lib/specs';
-import { explainRevert } from '../offchain/lib/revert';
 import type { Interface } from 'ethers';
 import type { Scope } from '../offchain/lib/scope';
 import { sourceEndpoints } from './chain';
@@ -664,7 +663,7 @@ async function guard(say: (line: string) => void, work: () => Promise<void>): Pr
 let known: Interface[] = [];
 
 function message(e: unknown): string {
-  return explainRevert(e, known);
+  return why(e, known);
 }
 
 /// Send the control commitment on the source chain, with the wallet the visitor already has.

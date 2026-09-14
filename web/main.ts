@@ -1,6 +1,6 @@
 import { Contract, formatEther, parseEther, toUtf8String, type Signer } from 'ethers';
 import { claimStatus, lineStatus } from '../offchain/lib/status';
-import { CLAIM_BATCH, readRefutation, readTally } from './reads';
+import { CLAIM_BATCH, readRefutation, readTally, refuters } from './reads';
 import { landing } from './landing';
 import {
   ATTESTATION_INDEXERS,
@@ -20,6 +20,7 @@ import {
   shortAddress,
   sourceEndpoints,
   wallets,
+  why,
   wire,
   within,
   type Wired,
@@ -27,7 +28,6 @@ import {
 import { refute, sweepClaim, type Sweep } from './watch';
 import { renderBorrow } from './borrowPane';
 import { abandonClaim } from './borrow';
-import { explainRevert } from '../offchain/lib/revert';
 import { attestorCount, attestorKeys, recentAttestations } from '../offchain/lib/attestations';
 import { CC3_CHAIN_ID, CHAIN_KEY } from '../offchain/lib/networks';
 import { attestationBefore, checkpointLag, heightForDigest, latestAttestation } from '../offchain/lib/attest';
@@ -281,6 +281,7 @@ async function renderTally(): Promise<void> {
     $('t-claims').textContent = t.sealed.toLocaleString();
     $('t-refuted').textContent = t.refuted.toLocaleString();
     $('t-burned').textContent = `${formatEther(t.burned)} CTC`;
+    refuters(t.refuters);
     renderInvitation(t.openNow);
     strip.dataset.ready = 'true';
   } catch (e) {
@@ -523,7 +524,7 @@ async function send(button: HTMLButtonElement, work: () => Promise<{ wait: () =>
     say(`sent ${tx.hash}`);
     await refresh();
   } catch (e) {
-    say(`failed: ${explainRevert(e, [wired.registry.interface, wired.credit.interface])}`);
+    say(`failed: ${why(e, [wired.registry.interface, wired.credit.interface])}`);
   } finally {
     button.textContent = was;
     button.disabled = false;
@@ -1170,9 +1171,7 @@ function renderRefuteButton(): void {
       say(`refuted — ${hash}`);
       await refresh();
     } catch (e) {
-      say(
-        `refutation failed: ${(e as { shortMessage?: string; message?: string }).shortMessage ?? (e as Error).message}`,
-      );
+      say(`refutation failed: ${why(e, [wired.registry.interface])}`);
     } finally {
       b.disabled = false;
     }
@@ -1206,7 +1205,9 @@ async function main(): Promise<void> {
   const connectWith = async (which?: Eip1193Provider) => {
     choice.replaceChildren();
     try {
-      const c = await connect(which);
+      const c = await connect(which, (was) =>
+        say(`this wallet is on chain ${was}; asking it to switch to Creditcoin CC3 Testnet (${CC3_CHAIN_ID})`),
+      );
       signer = c.signer;
       account = c.address;
       connectButton.textContent = shortAddress(account);
@@ -1214,7 +1215,7 @@ async function main(): Promise<void> {
       await refresh();
       renderRefuteButton();
     } catch (e) {
-      say(`connect failed: ${explainRevert(e, [])}`);
+      say(`connect failed: ${why(e)}`);
     }
   };
   if (!hasWallet()) {
@@ -1241,18 +1242,6 @@ async function main(): Promise<void> {
 
   ($('sweep') as HTMLButtonElement).onclick = () => void doSweep();
 
-  // A skip link moves focus, not just the scroll: the fragment alone leaves the next Tab landing
-  // after the target rather than on it.
-  for (const a of document.querySelectorAll<HTMLAnchorElement>('.skip a')) {
-    a.onclick = (e) => {
-      e.preventDefault();
-      const target = document.getElementById(a.dataset.skip ?? '');
-      if (!target) return;
-      if (!target.hasAttribute('tabindex') && target.tagName !== 'BUTTON') target.tabIndex = -1;
-      target.focus();
-      target.scrollIntoView({ block: 'center' });
-    };
-  }
   ($('claim-select') as HTMLSelectElement).onchange = () => {
     // The address bar follows the pick, so what is on screen is what the URL says — copy it and
     // the next person lands on the same claim.
@@ -1301,9 +1290,30 @@ async function main(): Promise<void> {
     return;
   }
 
+  // A page restored from the back/forward cache keeps its last head block; read it again rather than
+  // show a number from before the visitor left.
+  addEventListener('pageshow', (e) => {
+    if (e.persisted) void renderHeader().catch(() => undefined);
+  });
+
   void renderTally();
   await Promise.all([renderAttestcoin(), renderRegistry(), renderCredit(), renderBorrowPane(), renderAttestors()]);
   document.body.dataset.state = 'ready';
+}
+
+// A skip link moves focus, not just the scroll: the fragment alone leaves the next Tab landing
+// after the target rather than on it. Both pages have one, so it is wired before either boots —
+// the landing's went unwired for a release, and a keyboard reader pressing Enter on it stayed put.
+// Focusable targets (a link, a button) keep their own tab order; anything else takes focus once.
+for (const a of document.querySelectorAll<HTMLAnchorElement>('.skip a')) {
+  a.onclick = (e) => {
+    e.preventDefault();
+    const target = document.getElementById(a.dataset.skip ?? '');
+    if (!target) return;
+    if (!target.matches('a[href], button, select, input, [tabindex]')) target.tabIndex = -1;
+    target.focus();
+    target.scrollIntoView({ block: 'center' });
+  };
 }
 
 // One bundle, two pages. The landing reads the same chain through the same code; only its DOM

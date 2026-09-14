@@ -41,17 +41,30 @@ function chains(privateKey: string): Record<string, { rpc: string; wallet: Walle
 /// `rejectSends` makes it a wallet whose owner presses "Reject" on every signature — error 4001,
 /// the way MetaMask reports it — which is how the page's every write path gets exercised for what
 /// it does when the person says no.
+///
+/// `chainId` starts the wallet on another chain (hex), the way a MetaMask left on Sepolia arrives;
+/// `rejectSwitch` is its owner declining the page's request to move. Every method the page asks for
+/// is recorded in `window.__utuhWalletCalls`, so a test can say what the page requested, not only
+/// what it showed.
 export async function injectWallet(
   page: Page,
   privateKey: string,
-  opts: { rejectSends?: boolean; announce?: string; noLegacy?: boolean } = {},
+  opts: {
+    rejectSends?: boolean;
+    announce?: string;
+    noLegacy?: boolean;
+    chainId?: string;
+    rejectSwitch?: boolean;
+  } = {},
 ): Promise<string> {
   const known = chains(privateKey);
   const address = await new Wallet(privateKey).getAddress();
 
   await page.exposeFunction('__utuhSign', async (chainIdHex: string, tx: Record<string, string>) => {
+    // A thrown error loses its `code` crossing into the page, and the code is what a real wallet's
+    // refusal is recognised by, so the refusal comes back as data and the page side throws it.
     if (opts.rejectSends) {
-      throw Object.assign(new Error('MetaMask Tx Signature: User denied transaction signature.'), { code: 4001 });
+      return { error: { code: 4001, message: 'MetaMask Tx Signature: User denied transaction signature.' } };
     }
     const chain = known[chainIdHex.toLowerCase()];
     if (!chain) throw new Error(`the test wallet has no key for chain ${chainIdHex}`);
@@ -60,7 +73,7 @@ export async function injectWallet(
       data: tx.data ?? '0x',
       ...(tx.value ? { value: BigInt(tx.value) } : {}),
     });
-    return sent.hash;
+    return { hash: sent.hash };
   });
 
   const rpcs = Object.fromEntries(Object.entries(known).map(([id, c]) => [id, c.rpc]));
@@ -72,7 +85,8 @@ export async function injectWallet(
   const init = `(() => {
     const account = ${JSON.stringify(address)};
     const rpcs = ${JSON.stringify(rpcs)};
-    let current = ${JSON.stringify('0x' + CC3_CHAIN_ID.toString(16))};
+    let current = ${JSON.stringify(opts.chainId ?? '0x' + CC3_CHAIN_ID.toString(16))};
+    const calls = (window.__utuhWalletCalls = []);
     const passthrough = async (method, params) => {
       const res = await fetch(rpcs[current], {
         method: 'POST',
@@ -88,6 +102,7 @@ export async function injectWallet(
     const provider = {
       isUtuhTestWallet: true,
       request: async ({ method, params = [] }) => {
+        calls.push({ method, params });
         switch (method) {
           case 'eth_requestAccounts':
           case 'eth_accounts':
@@ -97,6 +112,9 @@ export async function injectWallet(
           case 'net_version':
             return String(parseInt(current, 16));
           case 'wallet_switchEthereumChain': {
+            if (${JSON.stringify(opts.rejectSwitch === true)}) {
+              throw Object.assign(new Error('User rejected the request.'), { code: 4001 });
+            }
             const wanted = String(params[0].chainId).toLowerCase();
             if (!rpcs[wanted]) throw Object.assign(new Error('unknown chain'), { code: 4902 });
             current = wanted;
@@ -105,8 +123,11 @@ export async function injectWallet(
           }
           case 'wallet_addEthereumChain':
             return null;
-          case 'eth_sendTransaction':
-            return window.__utuhSign(current, params[0]);
+          case 'eth_sendTransaction': {
+            const signed = await window.__utuhSign(current, params[0]);
+            if (signed.error) throw Object.assign(new Error(signed.error.message), { code: signed.error.code });
+            return signed.hash;
+          }
           default:
             return passthrough(method, params);
         }
