@@ -893,6 +893,12 @@ live chain, and asks its host for nothing but its `index.html`, `main.js`, `styl
 they use. A GitHub Actions workflow builds it from each commit's own artifacts, so the ABI the
 page carries is the ABI the contracts were compiled with.
 
+**On branch dev, pending merge:** `vercel.json` makes the canonical host send HSTS,
+`X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, a
+`Permissions-Policy` that denies camera, microphone and geolocation, and `X-Frame-Options: DENY`,
+and the production deploy in `pages.yml` uploads it beside the build and compares the live headers
+with it. Production today, deployed from master, sends only the HSTS header Vercel adds itself.
+
 More files are written beside those and never requested by the page, because they are for other
 readers. `.well-known/security.txt` is RFC 9116, for a researcher who found the deployment rather
 than the repository. `whitepaper.pdf` and `deck.pdf` are the documents. `robots.txt` and
