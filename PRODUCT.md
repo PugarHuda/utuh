@@ -4,7 +4,9 @@
 
 ## Platform
 
-web
+web — a landing page at `/` and the console at `/app/`, one static bundle.
+
+![The landing page: the thesis beside claim 5 as a working paper, read live from Creditcoin, with the omitted event circled](docs/img/landing-light.png)
 
 ## Users
 
@@ -43,9 +45,9 @@ The sentence every on-chain credit system needs — *this borrower has never bee
 statement about events that do not exist, and an inclusion proof can only speak about events that
 do. Utuh is the layer that makes absence assertable, then builds undercollateralized credit on it.
 A neighbouring project cannot truthfully copy this by adding another score: **about forty of the
-145** entries on the hackathon's final board compute a score, passport or cross-chain credit line
-over facts the chain already shows — a keyword count taken 2026-09-13 (twenty of eighty-one on
-2026-09-10). Every one of them inherits the hole. Two entrants come nearest and neither closes it:
+145** entries audited on 2026-09-13 compute a score, passport or cross-chain credit line over
+facts the chain already shows — a keyword count (twenty of eighty-one on 2026-09-10; the board
+had grown to 199 BUIDLs by 2026-09-14, and the newest were not re-audited). Every one of them inherits the hole. Two entrants come nearest and neither closes it:
 CoverageExchange bonds that nothing happened in a window but ships no sweeper — its README says
 automated counterexample search is out of scope — and Clearbook quotes the thesis and concedes it
 "cannot prevent that, so it measures it".

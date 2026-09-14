@@ -145,3 +145,5 @@ reads both from Creditcoin as it draws, and each link opens the console on the c
   <https://utuh.vercel.app/?claim=5>
 - A false "never liquidated" claim over 216,000 blocks of Ethereum mainnet, refuted by one
   liquidation proof: <https://utuh.vercel.app/?deployment=mainnet&claim=20>
+
+![Claim 5 in the console after a sweep from the browser: three members verified by the Block Prover, four Sepolia endpoints that each answered 4 in-scope events, and the verdict INCOMPLETE: 1 event(s) the claim does not contain](img/console-claim-5-sweep.png)

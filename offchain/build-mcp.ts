@@ -123,7 +123,9 @@ stdin and stdout. It is listed in the official MCP Registry as \`io.github.Pugar
 
 ## What it serves
 
-Five tools, each the same function the daemon and the [live console](https://utuh.vercel.app/) run:
+![The live console's Watch pane on claim 5: four Sepolia endpoints each answered 4 events, and the verdict INCOMPLETE: 1 event(s) the claim does not contain — the same sweep sweep_claim runs](https://raw.githubusercontent.com/PugarHuda/utuh/master/docs/img/watch.png)
+
+Five tools, each the same function the daemon and the [live console](https://utuh.vercel.app/app/) run:
 
 - **tally** — what both registries have done, read live from Creditcoin CC3 Testnet
 - **list_claims** — a page of claims with status, bond, and remaining challenge window; pass the

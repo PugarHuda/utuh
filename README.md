@@ -29,6 +29,15 @@ and a false _"never liquidated"_ claim over 216,000 blocks of Ethereum mainnet
 Every verification behind them is on Creditcoin's own oracle dashboard, which nobody here can
 write to: [transaction-verifications](https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications).
 
+What it looks like, photographed from the published site against the live chain:
+
+| | |
+| --- | --- |
+| ![The landing page at utuh.vercel.app: the thesis beside claim 5 read live from the Sepolia-sourced registry — three members verified by the Block Prover and the omitted in-scope event at Sepolia block 11,575,983 struck through and circled, with the refutation that took 1.0 of its 2.0 CTC bond](docs/img/landing-light.png) | ![The console at utuh.vercel.app/app/ on the mainnet-sourced registry, claim 20: "Refuted by one proof of an in-scope event at source block 25640810 that the claim left out — 1.0 CTC of the 2.0 CTC bond paid to 0x5057…4748, the rest burned"](docs/img/console-mainnet-20.png) |
+| The landing page, claim 5 as a working paper | The console, claim 20 opened verdict first |
+| ![The same landing page in the dark colour scheme](docs/img/landing-dark.png) | ![Claim 5 in the console after a browser sweep: four Sepolia endpoints each answered 4 events, the union holds 4, and the verdict reads INCOMPLETE: 1 event(s) the claim does not contain](docs/img/console-claim-5-sweep.png) |
+| Dark scheme | A sweep of claim 5 from the browser, with its provenance |
+
 Two things a reader with a clone and no key can check first. `npm run judge` re-measures every
 number this repository and the submission quote — the contracts and their verification, the tally,
 both linked claims, the explorer counters, npm, the MCP Registry, the published build, the sixteen
@@ -317,6 +326,8 @@ Every number in the demos comes from Ethereum mainnet.
 An undercollateralized credit line on Creditcoin, underwritten on Ethereum. Nothing bridges: the
 history stays on Ethereum, the credit is issued in CTC on Creditcoin, repayment happens back on
 Ethereum. The only thing that crosses is proof.
+
+![The console's Borrow pane for the key that ran the browser test, reading only: the address is bound (controllerOf names this account), and line 3 was opened, drawn and settled from the page — limit 5.0 CTC, drawn 1.0 CTC](docs/img/borrow.png)
 
 Underwriting rests on two claims that are adversarial in **opposite** directions, which is what
 makes the pair sound:
@@ -703,6 +714,8 @@ Both read through `web/reads.ts`, so the two pages cannot disagree about what th
 The visual world, in [DESIGN.md](DESIGN.md), is the auditor's working paper: paper and ink, red
 pencil for exceptions, blue for links, light and dark.
 
+<img src="docs/img/landing-mobile.png" alt="The landing page at 390 pixels wide: the navigation, the live chain id and CC3 block, and the thesis, with nothing scrolling sideways" width="260" />
+
 Everything on either page is read from CC3 Testnet as it draws. No server holds a key, no
 indexer stands in between, and there is no seeded state to fall back on — if the chain is
 unreachable the page says so rather than showing the last thing it knew. The ABIs come out of
@@ -725,6 +738,8 @@ The console makes it true for whoever opens a page:
   is not the same claim as "no gap found" from two;
 - it checks each event against the claim with `contains`, on chain;
 - and if the claim is short, it fetches one proof from the Proof Builder and sends the refutation.
+
+![The Watch pane on claim 5: the scope rebuilt from the registry, source blocks 11573192..11576192 swept from four endpoints that each answered 4, a union of 4 in-scope events, and INCOMPLETE: 1 event(s) the claim does not contain — beside the refutation button for the event at block 11575983](docs/img/watch.png)
 
 That is possible only because the pieces are CORS-open and public: `rpc.cc3-testnet.creditcoin.network`,
 the source-chain endpoints, and the hosted Proof Builder all answer a browser directly. Nothing
@@ -782,8 +797,14 @@ published registries, the same union across independent endpoints the daemon and
 and a red run if a sealed claim is short of an event. The same hour, the same workflow opens the
 published console in a real browser and asks what a visitor would: it loads, it says which chain it
 is on, the block it shows is this hour's, both deployments read, no pane is broken, and the page
-asked its host for nothing but its own four files. Pages can serve a stale or broken build with
+the console asked its host for nothing but its own four files. Pages can serve a stale or broken build with
 nothing else in CI noticing; this notices.
+
+Each hourly run picks up where the last one stopped. The watcher records how far it has read in
+`WATCH_STATE`, and a fresh runner has no such file, so it is carried between runs in the Actions
+cache — saved under the run's own id, restored by prefix — and the run's summary says whether it
+resumed or started over. Without that, a claim sealed and short-changed between two runs would
+have been swept only if it happened to fall inside the lookback.
 
 It holds no key. `npm run watch -- --dry` reads and never signs, so it no longer asks for one, and a
 public repository can run it with nothing in its secrets. The red run is the alert: somebody sealed
@@ -832,10 +853,11 @@ on. It is still the record peers read, so whoever notices may write it.
 
 ### Published without a server
 
-`npm run web:static` bakes the ABIs and the deployment record into the page and writes four files.
-There is no server in the published build at all, and the browser tests assert exactly that: the
-page boots, reads the live chain, and asks its host for nothing but `index.html`, `main.js`,
-`style.css` and the font they use. A GitHub Actions workflow builds it from each commit's own artifacts, so the ABI the
+`npm run web:static` bakes the ABIs and the deployment record into one bundle and writes the two
+pages around it — `index.html` at the root, `app/index.html` for the console. There is no server in
+the published build at all, and the browser tests assert exactly that: the console boots, reads the
+live chain, and asks its host for nothing but its `index.html`, `main.js`, `style.css` and the font
+they use. A GitHub Actions workflow builds it from each commit's own artifacts, so the ABI the
 page carries is the ABI the contracts were compiled with.
 
 More files are written beside those and never requested by the page, because they are for other
@@ -999,7 +1021,7 @@ web/
   og.png                    the page, photographed by tests/shots.ts in the same run as the
                             screenshots — what a link preview shows, and what it used to be a
                             week behind because the copy was made by hand
-  build-static.ts           the published build: four files and a picture, no server, ABIs baked in
+  build-static.ts           the published build: two pages on one bundle, no server, ABIs baked in
                             — plus security.txt, the whitepaper and llms.txt, which the page never
                             asks for because they are for other readers
   whitepaper.html           the whitepaper, and the source the submitted PDF is rendered from
@@ -1065,7 +1087,7 @@ npm run puretest            # 93 assertions that need no key and no chain — wh
 
 npm run web                 # landing page on http://127.0.0.1:5173, console at /app/ — read-only without a wallet
 npm run web:build           # bundle it; the server serves ABIs straight out of out/
-npm run web:static          # the published build: four files, no server
+npm run web:static          # the published build: landing page and console, one bundle, no server
 npm run web:pdf             # web/whitepaper.html -> whitepaper.pdf, the submitted document
 npm run web:test            # Playwright, in a real browser, against the live chain
 
@@ -1644,9 +1666,9 @@ Sepolia log there is where the full-flow run's settlements and its repayment sho
 they happen, recorded by the network rather than by us.
 
 The same indexer counts it. Its `transactionVerifieds` table is every `TransactionVerified` event
-`0x0FD2` has ever emitted, and late on 2026-09-13 it held 139,988 rows for CC3 Testnet (earlier that
-day 139,838 — 132,507 for chain key 3 and 7,331 for key 1 when read together; it grows with every
-attestation); 248 of them, 0.18%, were verified for Utuh's contracts across 374 transactions — none
+`0x0FD2` has ever emitted, and on 2026-09-14 it held 142,712 rows for CC3 Testnet (on the 13th,
+139,838 — 132,507 for chain key 3 and 7,331 for key 1 when read together; it grows with every
+attestation); 248 of them, 0.17%, were verified for Utuh's contracts across 376 transactions — none
 through the mainnet-sourced credit, which `npm run credit` never writes to. The 248 decompose
 exactly: 212 registry members, 34 refutation proofs, 2 control bindings. `npm run judge`
 reads the table (`offchain/lib/attestations.ts`) as an independent witness for the tally; the spot
@@ -1661,7 +1683,8 @@ check is `appendBatch` `0x5ccfb529…25fb25`, three rows there and three members
   incremental Merkle root per claim, with the refuter supplying an adjacency proof of the two
   members bracketing the gap — is built and tested on branch `merkle-claims` and is **not** on
   master or deployed, because it changes storage and a redeploy renumbers every claim this file
-  links. [docs/ROADMAP.md](docs/ROADMAP.md) says why and when.
+  links. CI runs the branch's 165 tests on every push to master, weekly and on request
+  (`.github/workflows/merkle.yml`). [docs/ROADMAP.md](docs/ROADMAP.md) says why and when.
 - Writability is still in third-party audit and not on testnet, so Utuh is read-side only. A
   default is recorded on Creditcoin; enforcing consequences back on Ethereum waits for outbound
   messaging.

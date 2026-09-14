@@ -66,6 +66,8 @@ Count members rather than reading the aggregate when you mean "nothing happened"
 scope over an adverse event that happened to carry a zero amount would sum to nothing while the
 event sat in the set.
 
+![The console on claim 20 of the mainnet-sourced registry: an empty set asserted over 216,000 blocks of Ethereum mainnet, refuted by one proof of an in-scope event at source block 25640810 — what a consumer reads as memberCount 0 and a status that is not Finalized](img/console-mainnet-20.png)
+
 ### 3. Size it against `enforceableLoss`, not the bond
 
 This is the step consumers get wrong.
