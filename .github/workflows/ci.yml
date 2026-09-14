@@ -164,8 +164,9 @@ jobs:
     name: console
     runs-on: ubuntu-latest
     # Three engines against live endpoints take a while, but not hours. Without a ceiling, a browser
-    # that hangs holds a runner for GitHub's six-hour default before anyone hears about it.
-    timeout-minutes: 60
+    # that hangs holds a runner for GitHub's six-hour default before anyone hears about it. Measured on
+    # ce47503: chromium 16.5 minutes, firefox 15, webkit comparable, so about 50 before retries.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
