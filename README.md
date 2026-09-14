@@ -21,7 +21,8 @@ Protocol, built for BUIDL CTC 2026 Fall and deployed on Creditcoin CC3 Testnet.
 
 - **Verify every number yourself:** `npm run judge` — no key. It re-measures every number this
   repository and the submission quote against the live chain and exits non-zero on any that no
-  longer holds. On 2026-09-14, 23 of 23 held.
+  longer holds. On 2026-09-14 it printed 25 of 25 on branch dev, where two checks read the example
+  gate below, and master's 23 of 23 all held.
 - **Hold the watcher role from an agent:** `npx -y utuh-mcp` — 0.4.0 on npm and in the official
   [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp). A remote URL for
   clients that cannot run a command is on branch dev, pending merge ([below](#the-watcher-as-an-mcp-server-and-why-an-agent-can-hold-the-role)).
