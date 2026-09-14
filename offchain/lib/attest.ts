@@ -221,6 +221,77 @@ export async function checkpointLag(provider: Provider, chainKey: number): Promi
   };
 }
 
+/// How settled a claim's range is: the question `get_checkpoint_for_height` exists to answer.
+///
+/// A claim can only open over an attested range, so every sealed claim is at least *optimistic*:
+/// its end is at or below the attestation frontier. It is *settled* once a checkpoint covers the
+/// end as well — checkpoints land every hundred source blocks (measured: 25,972,300, …200, …100
+/// answer `exists: true`, anything between them `false`), and the checkpoint is the view that
+/// continuity proofs are bounded by and that nothing later rewrites. A claim finalized while its
+/// end is only attested was finalized on the optimistic view, and a lender reading it should know.
+///
+/// Pure, so the three cases are pinned by `npm run puretest` rather than by waiting for a chain to
+/// be in each of them.
+export type Settlement = 'settled' | 'optimistic' | 'unattested';
+
+export function settlementOf(toBlock: number, attestationHeight: number, checkpointHeight: number | null): Settlement {
+  if (toBlock > attestationHeight) return 'unattested';
+  return checkpointHeight !== null && toBlock <= checkpointHeight ? 'settled' : 'optimistic';
+}
+
+/// Checkpoints are exactly every this many source blocks, on both chains CC3 Testnet attests.
+export const CHECKPOINT_INTERVAL = 100;
+
+/// How far back the exact lookup still answers. Measured 2026-09-14 by bisection: the oldest
+/// checkpoint `get_checkpoint_for_height` confirms is 785,300 source blocks behind the newest on
+/// Ethereum mainnet (key 3) and 936,600 on Sepolia (key 1); older ones answer `exists: false`
+/// although they were checkpointed. The smaller of the two, so a miss inside it is a real miss.
+export const CHECKPOINT_LOOKUP_DEPTH = 785_000;
+
+export interface ClaimSettlement {
+  settlement: Settlement;
+  toBlock: number;
+  attestationHeight: number;
+  checkpointHeight: number | null;
+  /// The checkpoint that covers `toBlock`: the first multiple of a hundred at or above it.
+  covering: number;
+  /// For a settled end: whether the precompile's exact lookup confirms the covering checkpoint.
+  /// Null when there is nothing to confirm (not settled) or it is past the lookup's depth.
+  confirmed: boolean | null;
+}
+
+export async function claimSettlement(provider: Provider, chainKey: number, toBlock: number): Promise<ClaimSettlement> {
+  const lag = await checkpointLag(provider, chainKey);
+  const checkpointHeight = lag.exists ? lag.checkpointHeight : null;
+  const settlement = settlementOf(toBlock, lag.attestationHeight, checkpointHeight);
+  const covering = Math.ceil(toBlock / CHECKPOINT_INTERVAL) * CHECKPOINT_INTERVAL;
+  let confirmed: boolean | null = null;
+  if (settlement === 'settled' && checkpointHeight! - covering <= CHECKPOINT_LOOKUP_DEPTH) {
+    confirmed = Boolean((await precompile(provider).get_checkpoint_for_height(chainKey, covering)).exists);
+  }
+  return { settlement, toBlock, attestationHeight: lag.attestationHeight, checkpointHeight, covering, confirmed };
+}
+
+/// The sentence the watcher and the doctor print for a claim's end.
+export function describeSettlement(s: ClaimSettlement): string {
+  if (s.settlement === 'unattested') {
+    return `end ${s.toBlock} is past the attestation frontier ${s.attestationHeight} — nothing about it is proven yet`;
+  }
+  if (s.settlement === 'optimistic') {
+    return (
+      `end ${s.toBlock} is attested (frontier ${s.attestationHeight}) but not yet checkpointed — the optimistic ` +
+      `view; checkpoint ${s.covering} settles it (last checkpoint ${s.checkpointHeight ?? 'none'})`
+    );
+  }
+  const how =
+    s.confirmed === true
+      ? `confirmed by get_checkpoint_for_height(${s.covering})`
+      : s.confirmed === false
+        ? `but get_checkpoint_for_height(${s.covering}) does NOT confirm it`
+        : `older than the lookup's ${CHECKPOINT_LOOKUP_DEPTH.toLocaleString()}-block depth`;
+  return `end ${s.toBlock} is checkpointed — the settled view, covered by checkpoint ${s.covering}, ${how}`;
+}
+
 /// Which source height an attestation digest belongs to, according to the chain itself.
 ///
 /// This is the leg that was missing from the attestor audit. The audit reads attestations from the

@@ -1,6 +1,5 @@
-import { JsonRpcProvider } from 'ethers';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, CHAIN_KEY, USDC, TRANSFER_SIG, source } from './config';
+import { CHAIN_KEY, USDC, TRANSFER_SIG, cc3 as cc3Provider, source } from './config';
 import { chainInfoAt, blockProverAt } from './lib/chain';
 import { scopeFor, scanScope, Metric, type ScopedEvent } from './lib/scope';
 import { isPayloadTooLarge } from './lib/gasLimit';
@@ -26,7 +25,7 @@ const BLOCK_PROVER = '0x0000000000000000000000000000000000000FD2';
 /// to the single-query entrypoint fails with "Merkle root mismatch" for any query outside the
 /// first block — which is why UtuhRegistry.appendBatch calls the array form.
 async function main() {
-  const cc3 = new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
+  const cc3 = cc3Provider();
   const ck = CHAIN_KEY.mainnet;
 
   const chainInfo = chainInfoAt(cc3);

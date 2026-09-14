@@ -1,8 +1,10 @@
 import { JsonRpcProvider, FetchRequest } from 'ethers';
 import 'dotenv/config';
+import { FailoverProvider } from './lib/chain';
 import {
   CC3_CHAIN_ID,
   CC3_RPC_DEFAULT,
+  CC3_RPC_FALLBACK,
   CHAIN_KEY,
   PROVER_URL_DEFAULT,
   SOURCE_CHAIN_ID,
@@ -43,7 +45,15 @@ export const SOURCE_RPC: Record<ChainKey, string> = {
   [CHAIN_KEY.sepolia]: process.env.SEPOLIA_RPC ?? SOURCE_RPC_DEFAULT[CHAIN_KEY.sepolia],
 };
 
-export const cc3 = () => new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
+/// Where CC3 reads go when `CC3_RPC` does not answer. Blockscout's proxy serves CC3 Testnet only,
+/// so a `CC3_RPC` pointed at any other network gets no fallback unless `CC3_RPC_FALLBACK` names
+/// one — failing over to a different chain would answer every read, wrongly. An empty
+/// `CC3_RPC_FALLBACK` turns it off.
+export const CC3_READ_FALLBACK: string | null =
+  (process.env.CC3_RPC_FALLBACK ?? (CC3_RPC === CC3_RPC_DEFAULT ? CC3_RPC_FALLBACK : '')) || null;
+
+/// Every CC3 provider a script builds: reads fail over (see `FailoverProvider`), writes do not.
+export const cc3 = (): JsonRpcProvider => new FailoverProvider(CC3_RPC, CC3_READ_FALLBACK, CC3_CHAIN_ID);
 export const source = (chainKey: number) => {
   const key = requireChainKey(chainKey);
   return new JsonRpcProvider(rpcRequest(SOURCE_RPC[key]), SOURCE_CHAIN_ID[key], { staticNetwork: true });
@@ -131,6 +141,13 @@ export async function withDeadline<T>(ms: number, work: Promise<T>): Promise<T> 
 
 export function requirePrivateKey(): string {
   const pk = process.env.PRIVATE_KEY;
-  if (!pk) throw new Error('PRIVATE_KEY missing. Copy .env.example to .env and fill it in.');
+  if (!pk) {
+    throw new Error(
+      'this command signs transactions and PRIVATE_KEY is not set — copy .env.example to .env and put a ' +
+        'CC3 Testnet key in it (free CTC: https://discord.gg/creditcoin, #token-faucet, see ' +
+        'https://docs.creditcoin.org/wallets/using-testnet-faucet). Read-only commands such as ' +
+        '`npm run doctor`, `npm run judge` and `npm run watch -- --dry` need no key.',
+    );
+  }
   return pk.startsWith('0x') ? pk : `0x${pk}`;
 }

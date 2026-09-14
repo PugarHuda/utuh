@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Contract, ContractFactory, Wallet, JsonRpcProvider, formatEther } from 'ethers';
+import { CC3_CHAIN_ID, CC3_RPC, cc3 } from '../config';
 
 const ROOT = join(__dirname, '..', '..');
 const OUT = join(ROOT, 'out');
@@ -58,14 +59,18 @@ export async function deploy(
 }
 
 export function signer(rpc: string, chainId: number, privateKey: string): Wallet {
-  const provider = new JsonRpcProvider(rpc, chainId, { staticNetwork: true });
+  // Every caller passes CC3_RPC, and that one gets reads that survive the primary going away.
+  const provider = rpc === CC3_RPC && chainId === CC3_CHAIN_ID ? cc3() : new JsonRpcProvider(rpc, chainId, { staticNetwork: true });
   return new Wallet(privateKey, provider);
 }
 
 /// Where testnet CTC comes from, said once. `npm run balance` prints it for an empty account and
 /// every script that is about to post a bond prints it for a short one.
 export function faucetHint(address: string): string {
-  return `Testnet CTC is free: in the Creditcoin Discord #token-faucet channel run\n  /faucet address:${address}`;
+  return (
+    `Testnet CTC is free: join https://discord.gg/creditcoin and in #token-faucet run\n  /faucet address:${address}\n` +
+    '  (walkthrough: https://docs.creditcoin.org/wallets/using-testnet-faucet)'
+  );
 }
 
 /// The sentence a stranger reads when their key cannot pay for what the script is about to do, or

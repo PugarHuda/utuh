@@ -10,8 +10,7 @@
 /// providers and do not all destroy them, and a command that has printed its answer should not
 /// then sit there. `npm run watch` is the exception and never returns from `main` at all.
 ///
-/// The error path prints the stack when there is one, because these fail against a live chain and
-/// the line number is usually the whole story.
+/// The error path prints a refusal as its sentence and a bug with its stack — see `sentenceFor`.
 ///
 /// The success path exits with `process.exitCode`, not with 0, and the difference is not academic.
 /// `liveTest.ts` ends with `if (failed > 0) process.exitCode = 1` and then returns normally, having
@@ -31,6 +30,28 @@
 /// reaches into a script for something, they get a sentence explaining it instead of a race.
 let running = false;
 
+/// What a failed script says, or null when the failure is a bug and deserves its stack.
+///
+/// Every refusal here is a plain `Error` whose message is the whole story — no key, no funds, a
+/// usage line — and a stranger running `npm run balance` before writing a `.env` used to get that
+/// sentence buried under ten frames of `node:internal`. A `TypeError` or its kin is a mistake in
+/// this code, and there the line number is the story. ethers errors carry a `shortMessage`, which
+/// drops the kilobyte of transaction hex a raw one prints; running out of gas money names the
+/// account and the faucet.
+export function sentenceFor(e: unknown): string | null {
+  const err = e as { code?: string; shortMessage?: string; message?: string; transaction?: { from?: string } };
+  if (err?.code === 'INSUFFICIENT_FUNDS') {
+    const who = err.transaction?.from ?? 'the sending account';
+    return (
+      `${who} cannot pay for this transaction — it holds too little CTC on CC3 Testnet. ` +
+      `Free CTC: join https://discord.gg/creditcoin and in #token-faucet run /faucet address:${who}`
+    );
+  }
+  if (typeof err?.shortMessage === 'string') return err.shortMessage;
+  if (e instanceof Error && Object.getPrototypeOf(e) === Error.prototype) return e.message;
+  return null;
+}
+
 export function runScript(main: () => Promise<unknown>): void {
   if (running) {
     throw new Error(
@@ -44,7 +65,9 @@ export function runScript(main: () => Promise<unknown>): void {
     .then(() => process.exit(Number(process.exitCode ?? 0)))
     .catch((e: unknown) => {
       const err = e as { stack?: string; message?: string };
-      console.error('\n' + (err?.stack ?? err?.message ?? String(e)));
+      // CI keeps the stack for every failure, and so does anyone who asks for it.
+      const sentence = process.env.CI || process.env.UTUH_STACK ? null : sentenceFor(e);
+      console.error('\n' + (sentence ?? err?.stack ?? err?.message ?? String(e)));
       process.exit(1);
     });
 }

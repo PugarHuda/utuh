@@ -25,6 +25,7 @@ import {
   heightForDigest,
   latestAttestation,
   provable,
+  settlementOf,
   tightestEnd,
 } from './lib/attest';
 import { registryAt, creditAt, signer, readDeployments, requireFunds, shortfall } from './lib/contracts';
@@ -36,9 +37,9 @@ import { answersTheQuestion, valueOf, isRangeRefusal, type Scope } from './lib/s
 import { supportedChains, verifyChainKeys } from './lib/chain';
 import { Prover, isAbsence, waitVerdict } from './lib/proofs';
 import { calldataGas, modelledGas, isChainRejection, isTransportFailure, isPayloadTooLarge } from './lib/gasLimit';
-import { waitForBlock } from './lib/chain';
+import { FALLBACK_BATCH, PROXY_LOG_CAP, sendWithFailover, waitForBlock } from './lib/chain';
 import { claimStatus } from './lib/status';
-import { runScript } from './lib/cli';
+import { runScript, sentenceFor } from './lib/cli';
 
 /// The half of the registry that unit tests cannot reach.
 ///
@@ -804,6 +805,163 @@ async function pureChecks(): Promise<void> {
         console.log(`  FAIL  ${name} → ${got ? 'the chain refused' : 'we failed to ask'}, expected the opposite`);
       }
     }
+  }
+
+  // ------------------------------------------------------------------
+  // A claim's end, against the two views the ChainInfo precompile keeps. Every sealed claim is at
+  // least attested; only a checkpoint makes it settled, and the difference is what a lender reading a
+  // finalized claim is told.
+  console.log('');
+  console.log('whether a claim stands on the settled view or the optimistic one');
+  {
+    check(
+      'an end at or below the last checkpoint is settled',
+      settlementOf(25_972_300, 25_972_460, 25_972_300) === 'settled',
+    );
+    check(
+      'an end past the checkpoint but attested is optimistic',
+      settlementOf(25_972_301, 25_972_460, 25_972_300) === 'optimistic',
+    );
+    check(
+      'the attestation frontier itself is optimistic',
+      settlementOf(25_972_460, 25_972_460, 25_972_300) === 'optimistic',
+    );
+    check(
+      'an end past the frontier is unattested',
+      settlementOf(25_972_461, 25_972_460, 25_972_300) === 'unattested',
+    );
+    check('a chain with no checkpoint yet is never settled', settlementOf(10, 1_000, null) === 'optimistic');
+    check('and past its frontier still unattested', settlementOf(1_001, 1_000, null) === 'unattested');
+  }
+
+  // ------------------------------------------------------------------
+  // CC3 reads fail over to Blockscout's proxy; writes, reverts and a missing fallback do not.
+  console.log('');
+  console.log('which CC3 requests fail over, and how');
+  {
+    const reads = (n: number, method = 'eth_call') =>
+      Array.from({ length: n }, (_, id) => ({ jsonrpc: '2.0' as const, id, method, params: [] }));
+    const dead = async (): Promise<never> => {
+      throw makeError('request timeout', 'TIMEOUT');
+    };
+    const seen: number[] = [];
+    const proxy = async (b: { id: number }[]) => {
+      seen.push(b.length);
+      return b.map((p) => ({ id: p.id, result: '0x1' }));
+    };
+
+    const got = await sendWithFailover(reads(12), dead, proxy);
+    check('a read the primary never answered is answered by the fallback', got.length === 12);
+    check(
+      `and asked in batches the proxy accepts (at most ${FALLBACK_BATCH})`,
+      seen.join() === '5,5,2' && seen.every((n) => n <= FALLBACK_BATCH),
+    );
+
+    seen.length = 0;
+    const revert = [{ id: 0, error: { code: -32603, message: 'VM Exception while processing transaction: revert' } }];
+    const reverted = await sendWithFailover(reads(1), async () => revert as never, proxy);
+    check('a revert is an answer: returned as it came', reverted === (revert as never));
+    check('and the fallback is never asked for a second opinion', seen.length === 0);
+
+    const refuses = async (payload: ReturnType<typeof reads>, fallback: typeof proxy | null) => {
+      try {
+        await sendWithFailover(payload, dead, fallback);
+        return false;
+      } catch {
+        return true;
+      }
+    };
+    check('a write stays on the primary and fails there', await refuses(reads(1, 'eth_sendRawTransaction'), proxy));
+    check(
+      'a batch holding one write stays on the primary',
+      await refuses([...reads(2), ...reads(1, 'eth_getTransactionCount')], proxy),
+    );
+    check('nothing tried the fallback for either', seen.length === 0);
+    check('with no fallback configured a read fails as it did', await refuses(reads(1, 'eth_blockNumber'), null));
+
+    const logs = (topics: unknown[], address: string | null = '0x8FA0BD5301D998Be873E31453E53d114929a5Fac') => [
+      {
+        jsonrpc: '2.0' as const,
+        id: 0,
+        method: 'eth_getLogs',
+        params: [{ ...(address ? { address } : {}), fromBlock: '0x1', toBlock: '0x2', topics }],
+      },
+    ];
+    const T = '0x' + 'aa'.repeat(32);
+    const X = '0x' + '00'.repeat(31) + '14';
+    seen.length = 0;
+    check(
+      'a log filter with an address and no topic gaps fails over',
+      (await sendWithFailover(logs([T, X]), dead, proxy)).length === 1,
+    );
+    check(
+      'and so does one whose only nulls trail',
+      (await sendWithFailover(logs([T, null]), dead, proxy)).length === 1,
+    );
+    seen.length = 0;
+    check(
+      'a null topic before a set one stays on the primary — the proxy answers it with nothing',
+      await refuses(logs([null, X]) as never, proxy),
+    );
+    check(
+      'a null between set topics stays on the primary — the proxy ignores what follows',
+      await refuses(logs([T, null, X]) as never, proxy),
+    );
+    check(
+      'a filter with no address stays on the primary — the proxy refuses it',
+      await refuses(logs([T], null) as never, proxy),
+    );
+    check('none of the three reached the fallback', seen.length === 0);
+    let capped = false;
+    try {
+      await sendWithFailover(logs([T]), dead, async (b) =>
+        b.map((p) => ({ id: p.id, result: new Array(PROXY_LOG_CAP).fill({}) })),
+      );
+    } catch {
+      capped = true;
+    }
+    check(`a fallback answer of ${PROXY_LOG_CAP} logs is truncated, so unknown, never complete`, capped);
+
+    let tag: unknown;
+    const tagged = [{ jsonrpc: '2.0' as const, id: 0, method: 'eth_call', params: [{ to: '0x0fd3' }, 'finalized'] }];
+    await sendWithFailover(tagged, dead, async (b) => {
+      tag = (b[0]!.params as unknown[])[1];
+      return [{ id: 0, result: '0x' }];
+    });
+    check(
+      "the SDK's `finalized` reaches the proxy as `latest`, the one tag it accepts for that block",
+      tag === 'latest',
+    );
+    check("and the caller's own request is left as it was", tagged[0]!.params[1] === 'finalized');
+  }
+
+  // ------------------------------------------------------------------
+  // What a stranger reads when a script refuses. A refusal is its sentence; a bug keeps its stack.
+  console.log('');
+  console.log('what a failed script prints');
+  {
+    const who = '0x97708560a7EDe27252D6201e11fFC61Cf25140F6';
+    check(
+      'a refusal prints as its own sentence',
+      sentenceFor(new Error('PRIVATE_KEY is not set')) === 'PRIVATE_KEY is not set',
+    );
+    check('a TypeError is a bug and keeps its stack', sentenceFor(new TypeError('x is undefined')) === null);
+    const broke = Object.assign(
+      makeError('insufficient funds for intrinsic transaction cost', 'INSUFFICIENT_FUNDS'),
+      {
+        transaction: { from: who },
+      },
+    );
+    const told = sentenceFor(broke) ?? '';
+    check(
+      'an empty account is named, with the faucet',
+      told.includes(who) && told.includes('https://discord.gg/creditcoin'),
+    );
+    check('and without the transaction hex ethers would print', !told.includes('0x02f9'));
+    check(
+      'an ethers failure prints its short message',
+      sentenceFor(makeError('request timeout', 'TIMEOUT')) === 'request timeout',
+    );
   }
 
   // ------------------------------------------------------------------

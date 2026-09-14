@@ -7,14 +7,25 @@ import {
   SOURCE_CHAIN_ID,
   type ChainKey,
   PROVER_URL,
+  CC3_READ_FALLBACK,
   SOURCE_TIMEOUT_MS,
   sources,
   withDeadline,
   requirePrivateKey,
 } from './config';
-import { signer, readDeployments, creditAt, faucetHint } from './lib/contracts';
+import { signer, readDeployments, creditAt, faucetHint, registryAt } from './lib/contracts';
 import { chainInfoAt, supportedChains, verifyChainKeys } from './lib/chain';
-import { checkpointLag, confirmEndpoints, latestAttestation } from './lib/attest';
+import {
+  checkpointLag,
+  claimSettlement,
+  confirmEndpoints,
+  describeSettlement,
+  latestAttestation,
+} from './lib/attest';
+import { FALLBACK_BATCH } from './lib/chain';
+import { claimStatus } from './lib/status';
+import sepoliaRecord from '../deployments.full.json';
+import mainnetRecord from '../deployments.json';
 import { Prover } from './lib/proofs';
 import { ATTESTATION_INDEXERS, ORACLE_DASHBOARD, chunkFor, type AttestationIndexer } from './lib/networks';
 import { runScript } from './lib/cli';
@@ -197,8 +208,11 @@ async function main() {
   const wallet = signer(CC3_RPC, CC3_CHAIN_ID, key ?? Wallet.createRandom().privateKey);
   const cc3 = wallet.provider as JsonRpcProvider;
   try {
+    // The primary itself, not `cc3`: every read through `cc3` fails over to Blockscout, and a doctor
+    // that asked through the failover would call a dead primary healthy.
+    const primary = new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
     const [block, balance, net] = await Promise.all([
-      cc3.getBlockNumber(),
+      primary.getBlockNumber(),
       key ? cc3.getBalance(wallet.address) : Promise.resolve(null),
       cc3.getNetwork(),
     ]);
@@ -215,6 +229,40 @@ async function main() {
   } catch (e: any) {
     problems++;
     console.log(`  FAIL  ${CC3_RPC}  ${e.shortMessage ?? e.message}`);
+  }
+
+  // The read fallback, asked directly and in the shape the failover uses: a full batch of
+  // FALLBACK_BATCH calls, which is the proxy's measured ceiling. Not a problem when it is down and the
+  // primary is up — only the day the primary goes too.
+  if (CC3_READ_FALLBACK) {
+    try {
+      const res = await fetch(CC3_READ_FALLBACK, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(
+          Array.from({ length: FALLBACK_BATCH }, (_, id) => ({
+            jsonrpc: '2.0',
+            id,
+            method: 'eth_blockNumber',
+            params: [],
+          })),
+        ),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const body = res.ok ? ((await res.json()) as { result?: string }[]) : [];
+      const answered = Array.isArray(body) ? body.filter((r) => r.result).length : 0;
+      console.log(
+        `  ${answered === FALLBACK_BATCH ? 'ok   ' : 'WARN '} read fallback ${new URL(CC3_READ_FALLBACK).host} ` +
+          `answered ${answered}/${FALLBACK_BATCH} of a batch (HTTP ${res.status})` +
+          (answered
+            ? `, block ${Number(body.find((r) => r.result)!.result)}`
+            : ' — reads have nowhere to go if the primary fails'),
+      );
+    } catch (e: any) {
+      console.log(`  WARN  read fallback ${new URL(CC3_READ_FALLBACK).host}: ${(e.message ?? e).slice(0, 60)}`);
+    }
+  } else {
+    console.log('  ...   no read fallback — CC3_RPC is not the default and CC3_RPC_FALLBACK is unset');
   }
 
   const chainInfo = chainInfoAt(cc3);
@@ -264,6 +312,13 @@ async function main() {
             `behind the frontier${lag.confirmed ? '' : ' — the precompile did not confirm it by digest'}`,
         );
         if (!lag.confirmed) problems++;
+        // A claim ending at the frontier right now would stand on the optimistic view until the next
+        // checkpoint. Asked live, so the optimistic branch is exercised on every run, not only on paper.
+        const edge = await claimSettlement(cc3, key, frontier);
+        console.log(
+          `  ${edge.settlement === 'unattested' ? 'FAIL ' : 'ok   '} a claim ending now: ${describeSettlement(edge)}`,
+        );
+        if (edge.settlement === 'unattested') problems++;
       }
     } catch (e: any) {
       problems++;
@@ -501,6 +556,35 @@ async function main() {
         problems++;
         console.log(`  FAIL  credit does not answer REGISTRY(): ${(e.shortMessage ?? e.message ?? '').slice(0, 60)}`);
       }
+    }
+  }
+
+  // Whether the claims people read are standing on the settled view or the optimistic one — the
+  // newest sealed or finalized claim on each published registry, classified against the checkpoints.
+  console.log('');
+  console.log('claim ends: checkpointed or only attested');
+  for (const [name, record] of [
+    ['sepolia', sepoliaRecord],
+    ['mainnet', mainnetRecord],
+  ] as const) {
+    try {
+      const registry = registryAt(record.registry, wallet);
+      const newest = Number(await registry.nextClaimId()) - 1;
+      let shown = false;
+      for (let id = newest; id >= Math.max(1, newest - 20) && !shown; id--) {
+        const c = await registry.claim(id);
+        const status = claimStatus(c.status);
+        if (status !== 'Sealed' && status !== 'Finalized') continue;
+        const s = await claimSettlement(cc3, Number(c.scope.chainKey), Number(c.toBlock));
+        const bad = s.settlement === 'unattested' || s.confirmed === false;
+        if (bad) problems++;
+        console.log(`  ${bad ? 'FAIL' : 'ok  '}  ${name} claim ${id} (${status}): ${describeSettlement(s)}`);
+        shown = true;
+      }
+      if (!shown) console.log(`  ...   ${name}: no sealed or finalized claim among the newest 21`);
+    } catch (e: any) {
+      problems++;
+      console.log(`  FAIL  ${name} claims: ${(e.shortMessage ?? e.message ?? '').slice(0, 70)}`);
     }
   }
 
