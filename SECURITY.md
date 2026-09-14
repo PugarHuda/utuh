@@ -22,7 +22,8 @@ will get an answer within a week, and credit in the fix.
 - The published site — the landing page at https://utuh.vercel.app/ and the console at
   https://utuh.vercel.app/app/ — and its mirror at https://pugarhuda.github.io/utuh/.
   The response headers the canonical host sends are set in `vercel.json` (on branch dev, pending
-  merge, Content-Security-Policy included; until then production sends only Vercel's default HSTS). A header missing from a response
+  merge, with a Content-Security-Policy still to come; until then production sends only Vercel's
+  default HSTS). A header missing from a response
   there after the merge is in scope.
 
 ## What is already known
