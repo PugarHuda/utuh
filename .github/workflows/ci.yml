@@ -5,7 +5,7 @@ name: ci
 # opens a pull request, so they stay manual and the README says which they are.
 on:
   push:
-    branches: [master]
+    branches: [master, dev]
   pull_request:
   workflow_dispatch:
   schedule:
@@ -174,7 +174,7 @@ jobs:
         run: forge build
 
       - name: browser
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: console tests
         run: npm run web:test

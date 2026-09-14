@@ -13,7 +13,7 @@ name: merkle-claims
 # itself for the reason above; a push there is picked up by the next master push or the schedule.
 on:
   push:
-    branches: [master]
+    branches: [master, dev]
   schedule:
     - cron: '52 5 * * 2'
   workflow_dispatch:

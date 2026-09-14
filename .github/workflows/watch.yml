@@ -118,4 +118,4 @@ jobs:
       - name: smoke the published console
         env:
           PUBLISHED_URL: https://utuh.vercel.app/
-        run: npx playwright test published
+        run: npx playwright test published --project=chromium
