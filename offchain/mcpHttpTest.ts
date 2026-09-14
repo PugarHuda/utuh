@@ -320,31 +320,34 @@ async function main(): Promise<void> {
       `${progress.length} progress, ${logs.length} log`,
     );
 
-    // The budget, locally, where it can be made short: a 216,002-block sweep given six seconds must
-    // come back inside a reasonable margin of them, say how far it got, and claim nothing about the rest.
+    // The budget, locally, where it can be made to run out for certain. It used to be six seconds on
+    // the premise that 216,002 blocks cannot be swept in six — and a GitHub runner swept them in 4.2,
+    // so the check measured the network rather than the server. One millisecond has always expired by
+    // the time the endpoints are confirmed, on any machine, so the answer must be inconclusive, must
+    // say it swept nothing, and must claim nothing about the range.
     if (!deployment) {
       const wideClaim = parse(
         (await client.rpc('resources/read', { uri: `utuh://claim/${WIDE.deployment}/${WIDE.claimId}` })).result.result
           ?.contents?.[0]?.text,
       );
-      process.env.UTUH_MCP_BUDGET_MS = '6000';
+      process.env.UTUH_MCP_BUDGET_MS = '1';
       t0 = Date.now();
       const wide = await client.call('sweep_claim', WIDE);
       const took = Date.now() - t0;
       delete process.env.UTUH_MCP_BUDGET_MS;
       const w = wide.result.result?.structuredContent;
       check(
-        `a sweep over budget answers inconclusive instead of timing out (${(took / 1000).toFixed(1)}s for a 6s budget)`,
+        `a sweep over budget answers inconclusive instead of running on (${(took / 1000).toFixed(1)}s for a 1ms budget)`,
         w?.inconclusive === true && w?.complete === false && w?.omitted === null && took < 40_000,
         JSON.stringify(w ?? wide.result).slice(0, 200),
       );
       check(
-        'and says how far it got',
-        typeof w?.sweptThrough === 'number' &&
-          w.sweptThrough < wideClaim?.toBlock &&
-          w.sweptThrough >= wideClaim?.fromBlock &&
-          /^INCONCLUSIVE/.test(wide.result.result?.content?.[0]?.text ?? ''),
-        `swept through ${w?.sweptThrough} of ${wideClaim?.fromBlock}..${wideClaim?.toBlock}`,
+        'and says how far it got: not one block, and vouches for nothing',
+        w?.sweptThrough === wideClaim?.fromBlock - 1 &&
+          w?.provenance?.vouched === 0 &&
+          /^INCONCLUSIVE: .* before any of source blocks/.test(wide.result.result?.content?.[0]?.text ?? ''),
+        `swept through ${w?.sweptThrough} of ${wideClaim?.fromBlock}..${wideClaim?.toBlock}: ` +
+          (wide.result.result?.content?.[0]?.text ?? '').slice(0, 120),
       );
     } else {
       t0 = Date.now();

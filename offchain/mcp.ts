@@ -396,10 +396,13 @@ export function createServer({ transport, budgetMs }: ServeOptions): McpServer {
         ? `INCOMPLETE: claim ${claimId} does not contain the event at source block ${gap.blockNumber}, ` +
           `tx #${gap.txIndex}, log #${gap.logIndexInTx} (ordering key ${eventKey(gap)}).\n${provenance}\n${next}`
         : inconclusive
-          ? `INCONCLUSIVE: the ${Math.round((budgetMs ?? 0) / 1000)}s budget ran out after source blocks ` +
-            `${c.fromBlock}..${sweep.sweptThrough} of ${c.fromBlock}..${c.toBlock}. Every event found in that part ` +
-            `is in the claim; blocks ${sweep.sweptThrough + 1}..${c.toBlock} were not looked at, so nothing is ` +
-            `concluded about them.\n${provenance}\nA sweep with no budget covers the whole range: run \`npx -y utuh-mcp\`.`
+          ? `INCONCLUSIVE: the ${(budgetMs ?? 0) / 1000}s budget ran out ` +
+            (sweep.sweptThrough < Number(c.fromBlock)
+              ? `before any of source blocks ${c.fromBlock}..${c.toBlock} was swept, so nothing is concluded about them.`
+              : `after source blocks ${c.fromBlock}..${sweep.sweptThrough} of ${c.fromBlock}..${c.toBlock}. Every ` +
+                `event found in that part is in the claim; blocks ${sweep.sweptThrough + 1}..${c.toBlock} were not ` +
+                'looked at, so nothing is concluded about them.') +
+            `\n${provenance}\nA sweep with no budget covers the whole range: run \`npx -y utuh-mcp\`.`
           : `complete as far as these endpoints saw: every swept event is in the claim.\n${provenance}\n` +
             `"No gap found" is only as strong as the endpoints that looked; it is provenance, not proof.`;
       return answer(text, {
