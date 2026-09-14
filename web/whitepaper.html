@@ -404,7 +404,7 @@
       whether a borrower has <em>ever been liquidated</em> and it can only answer with what someone
       chose to submit &mdash; and the borrower will not be submitting that.
     </p>
-    <p class="eyebrow">BUIDL CTC 2026 Fall &nbsp;·&nbsp; Creditcoin CC3 Testnet &nbsp;·&nbsp; Ethereum mainnet</p>
+    <p class="eyebrow">BUIDL CTC 2026 Fall &nbsp;·&nbsp; Creditcoin CC3 Testnet &nbsp;·&nbsp; Ethereum mainnet &nbsp;·&nbsp; <a href="https://utuh.vercel.app/">utuh.vercel.app</a></p>
   </header>
 
   <section>
@@ -531,7 +531,7 @@
         spanning ten thousand events is broken by a single proof or by none at all.
         <em>Building</em> one is not. <code>npm run gas</code> finds every transaction the registry
         has ever seen from the registry's own logs, reads the receipts and fits a cost model — no
-        explorer involved. Across the four registries deployed so far, 139 transactions:
+        explorer involved. Across the four registries deployed by 2026-08-28, when this fit was taken, 139 transactions:
       </p>
     </div>
     <div class="table-wrap" tabindex="0" role="group" aria-label="Measured gas per operation, scrollable">
@@ -901,6 +901,18 @@ claim 9: sealed with 3 member(s), bond 2.0 CTC
         &mdash; the negative case is exactly as strong as the endpoints that looked, and saying so
         is the only honest option.
       </p>
+      <p>
+        Nobody has to run that watcher. The console at
+        <a href="https://utuh.vercel.app/app/">utuh.vercel.app/app/</a> runs the same sweep from a
+        browser &mdash; the daemon's own function, bundled into the page &mdash; and sends the
+        refutation from the visitor's wallet. A GitHub Actions workflow sweeps both published
+        registries every hour with no key, goes red if a sealed claim is short, and carries the
+        watcher's read position between runs in the Actions cache so a claim sealed between two
+        runs is not skipped. And <code>npx utuh-mcp</code> puts the role behind the Model Context
+        Protocol: version 0.4.0 on npm and in the official MCP Registry, and a one-click
+        <code>utuh-mcp.mcpb</code> on GitHub release v0.4.0 &mdash; five tools, claims as
+        resources, and a confirmation demanded before the one tool that spends.
+      </p>
     </div>
   </section>
 
@@ -1175,11 +1187,30 @@ function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repa
         </li>
         <li>
           <b>Large claims are expensive to build.</b> Not because of storage, but because every
-          proven transaction is carried, decoded and hashed at roughly twice its calldata gas. A ten-thousand-event claim is thirty
-          blocks' worth of gas. Keys live in a storage array so refutation stays a binary search the
-          chain runs itself, with no witness a claimant could withhold; past the point where that
-          array is affordable, it becomes an incremental Merkle root and the refuter supplies an
-          adjacency proof of the two members bracketing the gap.
+          proven transaction is carried, decoded and hashed at roughly twice its calldata gas. A ten-thousand-event claim is about
+          thirty-three full blocks of gas. Keys live in a storage array so refutation stays a binary
+          search the chain runs itself, with no witness a claimant could withhold. The replacement
+          &mdash; an incremental Merkle root per claim, the refuter supplying an adjacency proof of the
+          two members bracketing the gap &mdash; is built and tested on branch
+          <code>merkle-claims</code>, 165 tests run in CI on every push to master, and it is not
+          deployed: a redeploy renumbers every claim this document cites.
+        </li>
+        <li>
+          <b>One finalized claim can back a line at every lender at once.</b> The registry's
+          <code>isUsable</code> is stateless and <code>claimSpent</code> belongs to one
+          <code>UtuhCredit</code> deployment, so the same pair opens a full line at each lender that
+          accepts it. Each lender's cap holds for its own line; nothing bounds the sum, while a liar
+          loses the burn once. A registry-level reservation closes it, and is an ABI change.
+        </li>
+        <li>
+          <b>A lender can deploy terms nobody can meet.</b> The constructor does not check the
+          repayment window against the registry's challenge floor; set below it, every draw defaults.
+          The published policy is 5,760 blocks against a floor of 25.
+        </li>
+        <li>
+          <b>An overdue line can still be drawn.</b> <code>draw</code> checks the limit and the slot,
+          not the deadline, so an unmarked overdue line can be drawn up to its limit &mdash; exposure
+          stays bounded by that limit. Each of these three is pinned by a test so nobody rediscovers it.
         </li>
         <li>
           <b>Read-side only.</b> Writability is still in third-party audit and not on testnet, so a
@@ -1195,6 +1226,32 @@ function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repa
           price; the lender fixes the rate at deployment where anyone can see and judge it.
         </li>
       </ul>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Read it back</p>
+    <h2 class="col">Nothing here needs to be taken on trust</h2>
+    <div class="col stack">
+      <p>
+        The landing page at <a href="https://utuh.vercel.app/">utuh.vercel.app</a> reads both
+        registries from Creditcoin as it draws, and the console at
+        <a href="https://utuh.vercel.app/app/">utuh.vercel.app/app/</a> opens any claim by address:
+        <a href="https://utuh.vercel.app/app/?claim=5">/app/?claim=5</a> is the claim sealed one event
+        short and broken from a browser, and
+        <a href="https://utuh.vercel.app/app/?deployment=mainnet&amp;claim=20">/app/?deployment=mainnet&amp;claim=20</a>
+        the false clean claim over 216,000 mainnet blocks, each opening with its verdict.
+      </p>
+      <p>
+        Measured on 2026-09-14: 212 events proven into 84 claims on the two published registries,
+        34 of those claims refuted by someone who found the gap, and 34 CTC of bond burned. The
+        attestation indexer's own table of every <code>TransactionVerified</code> event the Block
+        Prover has emitted holds 142,712 rows for CC3 Testnet, and 248 of them are this project's
+        &mdash; 212 members, 34 refutations, 2 control bindings. Blockscout counts 361 transactions
+        and 155.3M gas into the three listed contracts. <code>npm run judge</code> re-measures every
+        one of these numbers against the chain, the explorer, npm and the MCP Registry with no key,
+        and exits non-zero on any that no longer holds; 23 of 23 held.
+      </p>
     </div>
   </section>
 
@@ -1219,7 +1276,8 @@ function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repa
   </section>
 
   <div class="footer">
-    <span>193 forge tests, 10 fuzz, 12 invariants</span>
+    <span>193 forge tests, 10 fuzz, 12 invariants, branches 98.08%</span>
+    <span>34 refuted, 34 CTC burned</span>
     <span>121 guards asserted live</span>
     <span>Slither 0, halmos 5 proofs</span>
     <span>Source chains: Ethereum mainnet and Sepolia</span>

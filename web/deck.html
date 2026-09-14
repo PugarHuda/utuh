@@ -439,7 +439,7 @@ function markLoanAsExpired(uint256 loanId)
       <div class="cols wide-right fill" style="align-items: center">
         <div style="display: flex; flex-direction: column; gap: 20px">
           <p style="font-size: 19px">
-            The console sweeps Ethereum across independent endpoints, takes the union rather than a vote, checks
+            The console at /app/ sweeps Ethereum across independent endpoints, takes the union rather than a vote, checks
             every event against the claim on-chain, and sends the refutation itself. No server, no key to look, no
             indexer. Four files.
           </p>
@@ -448,11 +448,11 @@ function markLoanAsExpired(uint256 loanId)
             <div><b>false clean</b> ?deployment=mainnet&amp;claim=20</div>
           </div>
           <p style="font-size: 17px; color: var(--ink-faint)">
-            Both open on arrival, refuted. Asserted hourly against the published build, so a dead link is red
+            Both open the console on the claim, verdict first. Asserted hourly against the published build, so a dead link is red
             rather than quiet.
           </p>
         </div>
-        <div class="shot-crop"><img src="static/shots/watch.png" alt="the console mid-sweep, reporting a claim incomplete" /></div>
+        <div class="shot-crop"><img src="../docs/img/console-claim-5-sweep.png" alt="claim 5 in the console after a browser sweep: four Sepolia endpoints each answered 4 events, INCOMPLETE, 1 event the claim does not contain" /></div>
       </div>
       <div class="foot"><span>04 / evidence</span><span>Utuh</span></div>
     </section>
@@ -474,7 +474,7 @@ function markLoanAsExpired(uint256 loanId)
           </p>
           <p><span class="pill">Ethereum mainnet, chainKey 3</span> <span class="pill">not Sepolia</span></p>
         </div>
-        <div class="shot-crop"><img src="static/shots/borrow.png" alt="the Borrow pane connected to a wallet" /></div>
+        <div class="shot-crop"><img src="../docs/img/borrow.png" alt="the Borrow pane, reading only: address bound, line 3 opened, drawn and settled from the page" /></div>
       </div>
       <div class="foot"><span>05 / what it is for</span><span>Utuh</span></div>
     </section>
@@ -615,7 +615,7 @@ function markLoanAsExpired(uint256 loanId)
         <div style="display: flex; flex-direction: column; gap: 18px">
           <div class="card">
             <h3>Economic, not cryptographic</h3>
-            <p>A bond makes lying expensive. It does not make it impossible. That distinction is load-bearing.</p>
+            <p>A bond makes lying expensive, not impossible. And one finalized claim can back a line at every lender at once.</p>
           </div>
           <div class="card">
             <h3>Read-side only, for now</h3>
@@ -631,7 +631,7 @@ function markLoanAsExpired(uint256 loanId)
             <p>
               Members are a storage array, so refutation is a binary search the chain runs itself with no witness
               a claimant can withhold. Past ~10,000 events that stops being affordable; the replacement — an
-              incremental Merkle root with an adjacency proof — is specified, not researched.
+              incremental Merkle root with an adjacency proof — is built on a branch, 165 tests in CI, not deployed.
             </p>
           </div>
           <div class="card">
@@ -649,33 +649,33 @@ function markLoanAsExpired(uint256 loanId)
       <h2>All of it is on a public chain, and none of it was written by us.</h2>
       <div class="stats">
         <div class="stat">
-          <div class="v">189</div>
+          <div class="v">212</div>
           <div class="k">events proven into claims, through the Block Prover</div>
         </div>
         <div class="stat">
-          <div class="v">82</div>
+          <div class="v">84</div>
           <div class="k">claims sealed on the two published registries</div>
         </div>
         <div class="stat">
-          <div class="v" style="color: var(--accent)">33</div>
+          <div class="v" style="color: var(--accent)">34</div>
           <div class="k">broken by somebody who found the gap</div>
         </div>
         <div class="stat">
-          <div class="v">33 CTC</div>
+          <div class="v">34 CTC</div>
           <div class="k">bond actually slashed, not modelled</div>
         </div>
       </div>
       <div class="cols fill" style="align-items: center; gap: 40px">
         <p style="font-size: 19px">
           193 Foundry tests, 121 guards asserted against the live chain, symbolic proofs over every input rather
-          than 256 samples, Slither at zero findings across 97 detectors. 361 transactions and 148.6M gas into
+          than 256 samples, Slither at zero findings across 97 detectors. 361 transactions and 155.3M gas into
           deployed contracts, every one verified on Blockscout and matched on Sourcify. CI re-proves the two
           proof builders agree byte-for-byte daily and smokes the published console hourly.
         </p>
         <div class="links">
-          <div><b>console</b> utuh.vercel.app</div>
+          <div><b>site</b> utuh.vercel.app · console /app/</div>
           <div><b>code</b> github.com/PugarHuda/utuh</div>
-          <div><b>watcher</b> npx utuh-mcp</div>
+          <div><b>watcher</b> npx utuh-mcp · 0.4.0</div>
           <div><b>oracle</b> dashboard.cc3-testnet.creditcoin.network</div>
         </div>
       </div>
