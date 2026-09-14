@@ -13,6 +13,8 @@ import { expect, test } from '@playwright/test';
 /// this test exists to catch. The webfont joined it when the console got its own typeface, and it
 /// is self-hosted for the same reason the rest of this is: no third party is on the critical path.
 
+test.skip(!!process.env.PUBLISHED_URL, 'the /static/ mirror exists only on the local server');
+
 test('boots with no server behind it', async ({ page, baseURL }) => {
   // Whatever port the suite was pointed at, not the default one: with `WEB_PORT` set this list
   // came back empty and the assertion below read that as a page that never loaded.

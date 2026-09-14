@@ -119,6 +119,7 @@ test('has no WCAG A/AA violations, one h1, and no sideways scroll at 390px', asy
 });
 
 test('the static build of the landing asks its host for nothing but its files', async ({ page }) => {
+  test.skip(!!process.env.PUBLISHED_URL, 'the /static/ mirror exists only on the local server');
   const asked: string[] = [];
   page.on('request', (r) => {
     const url = new URL(r.url());

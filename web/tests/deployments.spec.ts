@@ -8,6 +8,7 @@ import { expect, test } from '@playwright/test';
 /// open a claim to its members, and sweep one of them from the browser against Ethereum mainnet.
 
 test('switches to the mainnet-sourced deployment and reads the right registry', async ({ page }) => {
+  test.skip(!!process.env.PUBLISHED_URL, 'the deployment record and ABIs are served only by the local server');
   await page.goto('/app/?deployment=mainnet');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 
@@ -45,6 +46,7 @@ test('pages through a registry with more claims than fit on one screen', async (
 });
 
 test('switching deployments is a navigation, and the other way back', async ({ page }) => {
+  test.skip(!!process.env.PUBLISHED_URL, 'the deployment record and ABIs are served only by the local server');
   await page.goto('/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
   await page.locator('[data-testid=deployment]').selectOption('mainnet');

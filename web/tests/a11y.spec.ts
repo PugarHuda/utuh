@@ -21,6 +21,7 @@ test('the rendered console has no WCAG A/AA violations', async ({ page }) => {
 });
 
 test('the published build passes the same audit', async ({ page }) => {
+  test.skip(!!process.env.PUBLISHED_URL, 'the /static/ mirror exists only on the local server');
   await page.goto('/static/app/');
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 

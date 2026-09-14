@@ -57,6 +57,7 @@ test('reads what Creditcoin can attest straight off the ChainInfo precompile', a
 });
 
 test('shows the deployment the server actually serves', async ({ page }) => {
+  test.skip(!!process.env.PUBLISHED_URL, 'the deployment record and ABIs are served only by the local server');
   await boot(page);
   const record = await (await page.request.get('/deployments.json')).json();
 
@@ -140,6 +141,7 @@ test('is honest about what it cannot do without a wallet', async ({ page }) => {
 });
 
 test('serves the ABI forge built, and nothing else out of the build directory', async ({ page }) => {
+  test.skip(!!process.env.PUBLISHED_URL, 'the deployment record and ABIs are served only by the local server');
   const abi = await (await page.request.get('/abi/UtuhRegistry.json')).json();
   const names = abi.filter((f: { type: string }) => f.type === 'function').map((f: { name: string }) => f.name);
   for (const required of ['refute', 'appendBatch', 'enforceableLoss', 'isUsable', 'challengeUntil']) {
