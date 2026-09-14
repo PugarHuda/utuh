@@ -1019,7 +1019,11 @@ slashing a real bond.
 
 **On branch dev, pending merge (b6194c2):** the suites run as three Playwright projects, Chromium,
 Firefox and WebKit, and `ci.yml` is set to run all three on every push to master and dev, on pull requests and
-daily. No per-browser pass counts are quoted here yet. Firefox and WebKit skip the tests that only mean something on Chromium, and there are two
+daily. CI run 34805675016 on 9e4261f (2026-09-14, against a local static server) passed with every
+job green: 272 browser tests passed across the three engines, 33 were skipped, and 1 was flaky. The
+flaky one is WebKit's `/?claim=5` deep-link test in `web/tests/judge.spec.ts`, which failed once and
+passed on retry. The run before it, on 7460f7a, had two WebKit failures in `flows.spec.ts` (the
+keyboard-only sweep and back/forward), fixed on the test side in 9e4261f. Firefox and WebKit skip the tests that only mean something on Chromium, and there are two
 kinds: the two slow-3G LCP and CLS tests, which throttle the network through the Chrome DevTools
 Protocol, and six screenshot comparisons whose baselines Chromium renders.
 
