@@ -974,6 +974,15 @@ need not be a person, leaving nothing at its own URL for a machine to read, is a
 a screenshot. `static.spec.ts` checks that every tool it advertises is one the server actually has,
 and that the package it points at is really published under the name it gives.
 
+**On branch dev, pending merge (adae297):** the build also writes `llms-full.txt`, this README and
+every `docs/*.md` in one file, for an agent that wants the whole argument without following links.
+And the landing's "Check it yourself" section (`/#check`, where the hero's "Check every claim
+yourself" link points) replaces "On the record" and keeps its sentence about who has used this. It
+lists each contract with its Blockscout page, Sourcify full match and role; the claim 5 and claim
+20 refutation transactions and their refuter; the oracle dashboard; the live count of refuted claims
+and how many distinct addresses sent them; and `npx -y utuh-mcp` and `npm run judge`, each with a
+copy button.
+
 `web/tests/borrow.live.spec.ts` is the test that makes the Borrow pane a claim rather than a hope.
 A fresh key — derived from the operator's, holding nothing but a little Sepolia ETH and a little
 CTC — pays a lender three times on Sepolia, then, **through the page**: sends the control commitment
