@@ -118,6 +118,14 @@ Ranked by what a bug there would cost.
   `Active` line nobody has marked can still be drawn up to its limit. Exposure stays bounded by
   the limit.
 
+- **Two comments in `src/` are stale. Neither is a bug.** `src/UtuhCredit.sol:791-792` says a
+  defaulted line still holds the subject's one slot when `cure` runs, but `markDefault` already gave
+  the slot back (`:873`). The `@dev` on `defaultsOf` (`:234-235`) describes a borrower with two
+  defaulted lines, which one lender cannot reach, because no line opens while a default stands. Both
+  stay because `src/` is frozen: a comment changes the metadata hash, and every published address is
+  a full Sourcify match against this tree. They are exactly why four of the seven equivalent mutants
+  in `test/MUTATION.md` are equivalent.
+
 Anything that makes one of these *worse than described* is a finding. Verified sound and pinned
 by tests on the same day, so a reviewer need not re-derive them: reentrancy on every CTC path
 (`refute`, `withdraw`, `abandon`, `draw`) pays a reentrant caller once; the window boundaries are
@@ -131,11 +139,14 @@ and `proveControl`. There are no `unchecked` blocks in `src/`.
 ## What the tools already say
 
 `npm run check`: Slither at 0 findings across 10 contracts and 97 detectors, with five detectors
-off and four line-level suppressions each explained beside the code; `forge lint`; 197 Foundry
+off and four line-level suppressions each explained beside the code; `forge lint`; 211 Foundry
 tests (10 fuzzed, 16 invariants — 5 on the registry, 7 on the credit contract, 4 across both in
 `test/UtuhProperties.t.sol`); halmos over the
 ordering key and the roundings, 5 of 5 checks passing (the deep rounding proof takes about five
-minutes). Branch coverage over `src/` is 98.08%, lines 99.77%, on 2026-09-13. `README.md` § What
+minutes). Line and branch coverage over `src/` are 100% (432/432 and 104/104) on 2026-09-14, on branch dev.
+Mutation testing (Certora gambit 0.2.1) kills 730 of 737 mutants, 99.1%; the other 7 are equivalent,
+each argued in `test/MUTATION.md`, and a reviewer who can kill one has a finding. A 30-minute medusa
+campaign passed its 22 checks over 639,295 calls and caught both bugs planted in scratch copies of `src/`. `README.md` § What
 the tools say lists every suppression and why. A reviewer disagreeing with a suppression is a
 finding.
 
@@ -144,9 +155,10 @@ finding.
 ```
 git clone https://github.com/PugarHuda/utuh && cd utuh
 npm ci && forge build
-forge test            # 197 (`forge test --list` counts 210 functions; the summary counts each invariant contract once), no network, no key
+forge test            # 211 (`forge test --list` counts 224 functions; the summary counts each invariant contract once), no network, no key
 npm run puretest      # 93 assertions on the classifiers, payload reader and watcher rules, no key
 npm run judge         # every deployed claim measured live, no key
+SOLC=<solc-0.8.28> WORKERS=4 bash test/mutation/run.sh <outdir>   # 738 gambit mutants, hours, not in CI
 npm run livetest      # the full live suite against CC3 — needs a funded testnet key
 ```
 

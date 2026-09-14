@@ -26,8 +26,8 @@ Protocol, built for BUIDL CTC 2026 Fall and deployed on Creditcoin CC3 Testnet.
 - **Hold the watcher role from an agent:** `npx -y utuh-mcp` — 0.4.0 on npm and in the official
   [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp). A remote URL for
   clients that cannot run a command is on branch dev, pending merge ([below](#the-watcher-as-an-mcp-server-and-why-an-agent-can-hold-the-role)).
-- **Measured:** 197 Foundry tests with 16 invariants · 98.08% branch coverage · Slither 0 findings ·
-  halmos 5 of 5 · every contract verified on Blockscout and matched on Sourcify · 248
+- **Measured:** 211 Foundry tests with 16 invariants, 100% line and branch coverage and 99.1% of 737
+  mutants killed (on branch dev, pending merge) · Slither 0 findings · halmos 5 of 5 · every contract verified on Blockscout and matched on Sourcify · 248
   `TransactionVerified` events on CC3's own indexer.
 - **Demo video (3 min):** https://youtu.be/HwSnv3E4tzo · **Whitepaper:** [PDF](https://utuh.vercel.app/whitepaper.pdf), from [`web/whitepaper.html`](web/whitepaper.html)
   · **Deck:** [`web/deck.pdf`](web/deck.pdf)
@@ -1009,8 +1009,8 @@ that is genuinely short, and refutes it — a real transaction, verified by the 
 slashing a real bond.
 
 **On branch dev, pending merge (b6194c2):** the suites run as three Playwright projects, Chromium,
-Firefox and WebKit, and CI runs all three on every push to master and dev, on pull requests and
-daily. Firefox and WebKit skip the tests that only mean something on Chromium, and there are two
+Firefox and WebKit, and `ci.yml` is set to run all three on every push to master and dev, on pull requests and
+daily. No per-browser pass counts are quoted here yet. Firefox and WebKit skip the tests that only mean something on Chromium, and there are two
 kinds: the two slow-3G LCP and CLS tests, which throttle the network through the Chrome DevTools
 Protocol, and six screenshot comparisons whose baselines Chromium renders.
 
@@ -1160,8 +1160,8 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 197 forge tests, sixteen of them invariants (`forge test --list` counts
-                            # 210 functions, one per invariant; the summary counts each invariant contract once)
+npm run test                # 211 forge tests, sixteen of them invariants (`forge test --list` counts
+                            # 224 functions, one per invariant; the summary counts each invariant contract once)
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -1420,9 +1420,9 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-197 tests, 10 of them fuzzed and 16 of them invariants over random sequences. Everything below runs
-with `forge test`, no key and no network. (`forge test --list` counts 210 functions; the run summary
-prints 197 because forge reports each invariant contract as a single test.)
+211 tests, 10 of them fuzzed and 16 of them invariants over random sequences. Everything below runs
+with `forge test`, no key and no network. (`forge test --list` counts 224 functions; the run summary
+prints 211 because forge reports each invariant contract as a single test.)
 
 Most of them cover the part that runs in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
@@ -1465,13 +1465,16 @@ exists to `openLine`, `settle` and `cure`, and after every move it checks four p
 suite can check alone: bonds are conserved, no line exceeds ten times the enforceable loss behind
 it, no refuted claim backs a line, and the watermarks only advance. It also walks every move once,
 so the harness cannot pass vacuously. The same four are properties in `test/medusa/UtuhProperties.sol`
-for the medusa fuzzer, and they were checked against bugs planted on purpose in scratch copies of
-`src/`, never committed: medusa caught both. `isUsable` without its Finalized check broke
+for the medusa fuzzer, and on branch dev, pending merge, a 30-minute medusa 1.5.1 campaign (`medusa fuzz --config
+test/medusa/medusa.json --timeout 1800 --workers 3`) passed all 22 checks, the 4 properties and 18
+assertion tests, over 639,295 calls and 6,391 sequences, reaching 2,730 branches. They were also
+checked against bugs planted on purpose in scratch copies of `src/`, never committed: medusa caught
+both, shrunk to 7 and 16 calls. `isUsable` without its Finalized check broke
 `property_noRefutedClaimBacksALine`, and counting the whole bond as burned while still paying the
 refuter broke `property_bondsAreConserved`.
 
 CI also refuses a push that drops line coverage under 90% or branch coverage under 70%; they read
-99.77% and 98.08% on 2026-09-13, and the table below is those numbers. The floors stay where they
+100% and 100% on 2026-09-14 on branch dev, and the table below is those numbers. The floors stay where they
 are as regression guards, not as a description of the coverage.
 
 The branch floor was added the day it was needed. Lines had been the only gate, and lines are easy
@@ -1536,18 +1539,21 @@ identical, measured — and the contracts already verified on Blockscout were bu
 tree that has this line in it.
 
 `forge coverage --no-match-test invariant --no-match-coverage "test|script" --report summary` — the
-CI command, forge 1.8.0 — read this on 2026-09-13 (the two interface files are omitted: they declare
-the precompile ABIs and hold no logic):
+CI command, forge 1.8.0 — read this on 2026-09-14 on branch dev, after the mutation pass below (the two
+interface files are left out of the rows but counted in forge's total: they declare the precompile ABIs
+and hold no logic):
 
 | File                              | Lines            | Branches       | Functions       |
 | --------------------------------- | ---------------- | -------------- | --------------- |
-| `src/UtuhCredit.sol`              | 99.58% (237/238) | 96.61% (57/59) | 100.00% (35/35) |
+| `src/UtuhCredit.sol`              | 100.00% (238/238) | 100.00% (59/59) | 100.00% (35/35) |
 | `src/UtuhRegistry.sol`            | 100.00% (157/157) | 100.00% (35/35) | 100.00% (21/21) |
 | `src/lib/EventScope.sol`          | 100.00% (25/25)  | 100.00% (7/7)  | 100.00% (6/6)   |
 | `src/source/SettlementLedger.sol` | 100.00% (8/8)    | 100.00% (3/3)  | 100.00% (2/2)   |
-| **Total**                         | **99.77%**       | **98.08%**     | **100.00%**     |
+| **Total**                         | **100.00% (432/432)** | **100.00% (104/104)** | **100.00% (66/66)** |
 
-Before the 2026-09-13 audit pass the same command read 99.54% of lines and 75.96% of branches, with
+On 2026-09-13 it read 99.77% of lines and 98.08% of branches; the last two branches in `UtuhCredit`
+closed on 2026-09-14, one of them the `claimSpent` check at `src/UtuhCredit.sol:820`, which a
+single subject never reaches because the watermark refuses first. Before the 2026-09-13 audit pass the same command read 99.54% of lines and 75.96% of branches, with
 `UtuhCredit` at 67.80% and `UtuhRegistry` at 82.86%. `test/Audit.t.sol` closed the gap: every
 refusal in `openLine`, `draw`, `settle`, `cure`, `closeLine`, `markDefault`, `appendBatch` and
 `refute` now has a test that makes it fire.
@@ -1583,7 +1589,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 197 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 211 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings** across 10 contracts and 97 detectors, which is only worth stating
 alongside what it was allowed to look for.
 
@@ -1634,6 +1640,19 @@ rounding proofs in about five minutes (`check_backingIsNeverShortOfTheLimit` alo
 property the solver could not decide — that `backingFor` never overshoots by more than a unit — is
 written down as undecided in `CreditRounding.symbolic.t.sol` and left to the fuzzer, rather than
 quietly dropped.
+
+**Mutation testing, on branch dev, pending merge.** Certora gambit 0.2.1 wrote 738 mutants of
+`UtuhRegistry`, `UtuhCredit` and `EventScope` (243, 410 and 85; one did not compile). Against the
+suite as it stood that morning, 692 of 737 died, 93.9%. Each of the 45 survivors was either a test
+that did not assert enough or a mutant no execution can tell apart from the original. The 38 of
+the first kind now each have a test that passes on the contract and fails on the mutant, and the
+score is 730 of 737, 99.1%, which is every killable mutant. The 7 left are equivalent, each with the
+argument in `test/MUTATION.md`: four of them exist only because two comments in `src/` describe
+states the deployed contract cannot reach (`docs/AUDIT.md` names both). `SOLC=<solc-0.8.28> WORKERS=4
+bash test/mutation/run.sh <outdir>` reproduces it. CI does not run it, because it takes hours. It
+found one thing about the toolchain as well: under forge 1.8.0, `vm.expectRevert` followed by a `new`
+whose constructor reverts ends the test at that line, so three constructor tests written as several
+such pairs had been checking only their first case. They now deploy through an external call.
 
 solc also suggests two functions could be `pure`. They could not: both read through a `storage`
 pointer parameter, which the mutability checker does not track. Accepting the suggestion compiles
