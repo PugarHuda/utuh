@@ -958,6 +958,12 @@ async function pureChecks(): Promise<void> {
       told.includes(who) && told.includes('https://discord.gg/creditcoin'),
     );
     check('and without the transaction hex ethers would print', !told.includes('0x02f9'));
+    const deploying =
+      sentenceFor(makeError('insufficient funds for intrinsic transaction cost', 'INSUFFICIENT_FUNDS')) ?? '';
+    check(
+      'a deployment, which carries no sender, points at npm run balance instead of inventing an address',
+      deploying.includes('npm run balance') && !deploying.includes('undefined'),
+    );
     check(
       'an ethers failure prints its short message',
       sentenceFor(makeError('request timeout', 'TIMEOUT')) === 'request timeout',

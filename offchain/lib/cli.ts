@@ -41,10 +41,11 @@ let running = false;
 export function sentenceFor(e: unknown): string | null {
   const err = e as { code?: string; shortMessage?: string; message?: string; transaction?: { from?: string } };
   if (err?.code === 'INSUFFICIENT_FUNDS') {
-    const who = err.transaction?.from ?? 'the sending account';
+    // A contract deployment reaches here without `transaction.from`, so the address is only named when ethers had it.
+    const who = err.transaction?.from;
     return (
-      `${who} cannot pay for this transaction — it holds too little CTC on CC3 Testnet. ` +
-      `Free CTC: join https://discord.gg/creditcoin and in #token-faucet run /faucet address:${who}`
+      `${who ?? 'the PRIVATE_KEY account'} cannot pay for this transaction — it holds too little CTC on CC3 Testnet. ` +
+      `Free CTC: join https://discord.gg/creditcoin and in #token-faucet run /faucet address:${who ?? '<its address, from npm run balance>'}`
     );
   }
   if (typeof err?.shortMessage === 'string') return err.shortMessage;
