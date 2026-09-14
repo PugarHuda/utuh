@@ -1811,6 +1811,15 @@ check is `appendBatch` `0x5ccfb529…25fb25`, three rows there and three members
   (35×). What remains is the endpoint's own latency on one block-with-receipts call and the
   continuity blocks. Size a challenge window for the slow path, and measure it for your own
   endpoints with `npm run provers` first.
+  **On branch dev, pending merge:** `npm run provers -- --sample N` (294cb04) takes the newest N
+  members already in the published claims, proves each with both builders, compares every field
+  (the endpoint digest, every continuity root, height, transaction bytes, Merkle root, every sibling,
+  the log index), and exits 1 on any byte of difference or on a member either builder could not
+  prove within `PROVERS_DEADLINE_MS` (20 minutes by default). Its first measured member shows the slow
+  path is minutes on a busy block, not seconds: Sepolia claim 13's member 11582696/107/0 came back
+  identical in 5.0 s hosted and 400.1 s local. The SDK fetches all 100 continuity blocks whole, with
+  receipts and a hardcoded 500 ms pause, and Sepolia endpoints refuse some receipts as too large.
+  CI does not run it yet.
 - A claimant watching the mempool can front-run an incoming refutation with their own, keeping half
   the bond and denying the watcher their reward. This is priced rather than prevented: the
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —
