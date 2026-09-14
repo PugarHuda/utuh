@@ -1,7 +1,15 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { Contract, JsonRpcProvider, Wallet, formatEther } from 'ethers';
 import 'dotenv/config';
-import { CC3_RPC, CC3_CHAIN_ID, sources, withDeadline, SOURCE_TIMEOUT_MS, requirePrivateKey } from './config';
+import {
+  CC3_RPC,
+  CC3_CHAIN_ID,
+  cc3 as cc3Provider,
+  sources,
+  withDeadline,
+  SOURCE_TIMEOUT_MS,
+  requirePrivateKey,
+} from './config';
 import { SWEEP_CHUNK, requireChainKey } from './lib/networks';
 import { readDeployments, registryAt, signer } from './lib/contracts';
 import { scanScopeUnion, eventKey, type Scope } from './lib/scope';
@@ -11,7 +19,7 @@ import { refuteClaim } from './lib/claims';
 import { isTransportFailure } from './lib/gasLimit';
 import { claimStatus } from './lib/status';
 import { byDeadline, conclude, decodeState, encodeState, startBlock, type Verdict } from './lib/watchState';
-import { confirmEndpoints } from './lib/attest';
+import { claimSettlement, confirmEndpoints, describeSettlement } from './lib/attest';
 import { runScript } from './lib/cli';
 
 /// The watcher.
@@ -98,7 +106,9 @@ async function main() {
   // A dry run reads and never signs, so it needs no key — which is what lets it run on a
   // schedule in a public repository's CI with nothing to leak. Anything that might refute gets a
   // real wallet, and the key is demanded up front rather than at the moment a gap is found.
-  const cc3 = new JsonRpcProvider(CC3_RPC, CC3_CHAIN_ID, { staticNetwork: true });
+  // Reads fail over to Blockscout when the CC3 RPC does not answer; a refutation is still sent
+  // through the primary, which `signer` connects to on its own.
+  const cc3 = cc3Provider();
   const wallet = dry
     ? new Wallet(Wallet.createRandom().privateKey, cc3)
     : signer(CC3_RPC, CC3_CHAIN_ID, requirePrivateKey());
@@ -252,6 +262,11 @@ async function inspect(registry: Contract, wallet: any, claimId: bigint, dry: bo
   console.log(`\nclaim ${claimId}: sealed with ${members} member(s), bond ${formatEther(claim.bondPosted)} CTC`);
   console.log(`  range ${claim.fromBlock}..${claim.toBlock} on chain key ${claim.scope.chainKey}`);
   console.log(`  window closes at CC3 block ${until} (now ${now}, ${until - now} to go)`);
+  // Whether the claim's last block is checkpointed on CC3 or only attested — the optimistic view —
+  // is the difference between a sweep of settled history and one of history that could still move.
+  console.log(
+    `  ${describeSettlement(await claimSettlement(wallet.provider, Number(claim.scope.chainKey), Number(claim.toBlock)))}`,
+  );
 
   if (now > until) {
     console.log('  window already closed — too late to refute');
