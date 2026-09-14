@@ -516,7 +516,7 @@ a.addr:hover {
   max-width: 1180px;
   margin: var(--gap) auto 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
   gap: 0 var(--gap);
   border-top: 1px solid var(--rule-strong);
   border-bottom: 3px double var(--ink);
@@ -1039,7 +1039,7 @@ footer p {
 
 .two {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
   gap: var(--gap);
   align-items: start;
 }
@@ -1051,7 +1051,7 @@ footer p {
   list-style: none;
   counter-reset: step;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
   gap: 0 var(--gap);
   border-top: 1px solid var(--rule);
 }
@@ -1095,7 +1095,7 @@ footer p {
 /* The sign-off block. Three initials boxes on a working paper; three roles at this console. */
 .signoff {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
   border: 1px solid var(--rule-strong);
   border-radius: var(--radius);
   overflow: hidden;
@@ -1173,7 +1173,7 @@ footer p {
 .legend {
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
   gap: 0.5rem var(--gap);
   font-size: var(--t-small);
   color: var(--ink-soft);
@@ -1209,7 +1209,7 @@ section[data-frame] .legend {
 
 .landing .addresses {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
   gap: 0.25rem var(--gap);
   font-size: var(--t-small);
 }

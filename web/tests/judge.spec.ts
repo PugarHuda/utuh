@@ -21,7 +21,7 @@ const VIEWPORTS = {
 
 /// The two grounds the stylesheet paints, so a scheme that did not switch is caught rather than
 /// audited twice under the same palette.
-const GROUND = { light: 'rgb(221, 215, 204)', dark: 'rgb(16, 14, 12)' } as const;
+const GROUND = { light: 'rgb(223, 231, 213)', dark: 'rgb(15, 21, 18)' } as const; // DESIGN.md paper / dark-paper
 
 /// Uncaught exceptions and console errors, from the first byte on.
 function watch(page: Page): string[] {
@@ -33,7 +33,7 @@ function watch(page: Page): string[] {
   return errors;
 }
 
-async function ready(page: Page, url = '/'): Promise<void> {
+async function ready(page: Page, url = '/app/'): Promise<void> {
   await page.goto(url);
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 }
@@ -137,7 +137,7 @@ test('a slow chain: the page says what it is waiting for, then finishes', async 
     await route.continue();
   });
   const errors = watch(page);
-  await page.goto('/');
+  await page.goto('/app/');
 
   // Every pane names what it is doing while it waits, rather than sitting blank.
   await expect(page.locator('#attestcoin-body')).toContainText('reading the ChainInfo precompile');
@@ -178,7 +178,7 @@ test('what a crawler, a link preview, an agent and a scanner each read is there'
   request,
   baseURL,
 }) => {
-  await page.goto('/');
+  await page.goto('/app/');
   await expect(page).toHaveTitle(/Utuh/);
   for (const [selector, pattern] of [
     ['meta[name="description"]', /Attestcoin/],
@@ -222,7 +222,7 @@ test('what a crawler, a link preview, an agent and a scanner each read is there'
 });
 
 test('the first paint is fast: LCP under 2.5s, before the chain has said a word', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/app/');
   // The candidate that stands when the chain has answered nothing yet — the page's own frame, its
   // heading and its placeholders. Everything the chain adds later is content, and a slow public
   // endpoint must not be able to make this page look slow to paint.
