@@ -810,7 +810,11 @@ answer, and writes and reverts never retry. The proxy was measured before it was
 5-call batches and answers 413 to six, rejects the `finalized` tag the SDK reads ChainInfo at, and
 omits logs for a null-then-set topic filter, so those filters stay on the primary and a 1000-log
 answer counts as truncated. With the primary pointed at a dead port, `npm run probe` verified 24
-mainnet events through the proxy alone.
+mainnet events through the proxy alone. The rule and the proxy's measured limits live in `offchain/lib/failover.ts`
+(ddadb10), which imports nothing but ethers types, so the console can use the same rule. `npm run
+doctor` also asks both attestation indexers for reverted attestations on the Ethereum chain keys,
+because a reverted attestation is the one event that could unsettle a claim it calls checkpointed.
+Both answered 0 on 2026-09-14.
 
 The sweep is the daemon's own function, imported rather than reimplemented — `scanScopeUnion` in
 `offchain/lib/scope.ts`, bundled into the page. A browser cannot conclude that a claim is complete
