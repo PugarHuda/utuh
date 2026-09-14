@@ -945,7 +945,11 @@ page carries is the ABI the contracts were compiled with.
 `Content-Security-Policy` (210d727): the static build bakes its record into a JSON data block, so the
 only inline script left is the landing's hashed redirect, and `web/tests/csp.spec.ts` injects the
 policy onto the static build and fails on any violation while the page boots, audits, sweeps and
-falls back to Blockscout. The header itself is not yet in `vercel.json`. The production deploy in `pages.yml` uploads
+falls back to Blockscout. `vercel.json` sends that policy on every document (40cd6fa), though not
+on PDFs, images, fonts, scripts or styles: `default-src 'none'`; scripts only from the site plus the
+one hash, which matches the committed landing page; styles and fonts only from the site; images from
+the site and `data:`; `connect-src` limited to the twelve origins the page calls; `base-uri`,
+`form-action`, `object-src` and `frame-ancestors` all `'none'`; no `'unsafe-inline'` or `'unsafe-eval'`. The production deploy in `pages.yml` uploads
 `vercel.json` beside the build and compares the live headers with it. Production today, deployed from master, sends only the HSTS header Vercel adds itself.
 
 More files are written beside those and never requested by the page, because they are for other
