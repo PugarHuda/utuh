@@ -1011,6 +1011,14 @@ it — against the WCAG 2.x A and AA rules, and any violation fails the build by
 exists so that people who would never run a daemon can still refute or borrow, and "people" is not
 "sighted people with a mouse". It reports zero.
 
+Lighthouse 12 agrees, in a single mobile run with default throttling against production on
+2026-09-14, after the 9e4261f deploy. It is a measurement from that day, not a CI budget.
+`https://utuh.vercel.app/` scored performance 95, accessibility 100, best practices 100 and SEO 100,
+with LCP 2.3 s, CLS 0.001, TBT 40 ms, FCP 1.9 s and Speed Index 4.0 s. The console at `/app/` scored
+97, 100, 100 and 100, with LCP 1.4 s, CLS 0.031, TBT 20 ms, FCP 1.0 s and Speed Index 4.7 s. Neither
+page has an accessibility audit below 100. The build before that deploy measured an LCP of 3.55 s
+and accessibility of 98 on `/`.
+
 `npm run web:test` drives it in a real browser against the live chain: the chain id it reports has
 to match an independent RPC call, the attestation frontier has to be past genesis, the claims it
 lists have to be the ones the registry holds, and the sweep has to produce a verdict with its
