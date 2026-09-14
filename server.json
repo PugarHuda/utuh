@@ -9,6 +9,12 @@
     "source": "github"
   },
   "websiteUrl": "https://utuh.vercel.app/",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://utuh.vercel.app/api/mcp"
+    }
+  ],
   "packages": [
     {
       "registryType": "npm",
