@@ -924,8 +924,12 @@ page carries is the ABI the contracts were compiled with.
 
 **On branch dev, pending merge:** `vercel.json` makes the canonical host send HSTS,
 `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, a
-`Permissions-Policy` that denies camera, microphone and geolocation, and `X-Frame-Options: DENY`,
-and the production deploy in `pages.yml` uploads it beside the build and compares the live headers
+`Permissions-Policy` that denies camera, microphone and geolocation, `X-Frame-Options: DENY`, and a
+`Content-Security-Policy` of `default-src 'none'`: scripts, styles and fonts only from the site itself
+plus one hashed inline redirect script, no `'unsafe-inline'` and no `'unsafe-eval'`, `frame-ancestors
+'none'`, and `connect-src` limited to the twelve origins the page actually calls (the CC3 RPC and
+Blockscout's proxy for it, the Creditcoin Mainnet RPC, both attestation indexers, both Proof Builder
+hostnames and five Ethereum and Sepolia endpoints). The production deploy in `pages.yml` uploads it beside the build and compares the live headers
 with it. Production today, deployed from master, sends only the HSTS header Vercel adds itself.
 
 More files are written beside those and never requested by the page, because they are for other
