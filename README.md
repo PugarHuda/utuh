@@ -207,6 +207,16 @@ Utuh is the layer that would sit under such a contract: a bonded claim that a se
 _all_ of them, refutable by anyone with one proof of one omitted event. Presence stays
 cryptographic exactly as above. Absence becomes economic, which is the most that can be had.
 
+Other bonded-claim designs have appeared on the same board. One bonds a predicate over a block
+window and gives the bond to whoever proves one transaction that breaks it, which is the same shape
+as a refutation here and covers the empty case: _nothing bad happened_. Its predicate sees one
+proven transaction at a time and, in its own documentation, cannot sum history or compare two
+transactions. So it can bond that a set is empty but not that a non-empty set is all of them. That
+second sentence is the one a volume history or a repayment record needs, and it is what
+`UtuhCredit` lends against. Absence here is the empty-set case of completeness, not the other way
+round. The other difference is who looks: a bond deters only if someone searches, and Utuh ships
+the search, as the browser sweep and `npx -y utuh-mcp`.
+
 ## What Utuh does
 
 Two halves, each sound on its own.
