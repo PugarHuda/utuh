@@ -1022,7 +1022,10 @@ Firefox and WebKit, and `ci.yml` is set to run all three on every push to master
 daily. CI run 34805675016 on 9e4261f (2026-09-14, against a local static server) passed with every
 job green: 272 browser tests passed across the three engines, 33 were skipped, and 1 was flaky. The
 flaky one is WebKit's `/?claim=5` deep-link test in `web/tests/judge.spec.ts`, which failed once and
-passed on retry. The run before it, on 7460f7a, had two WebKit failures in `flows.spec.ts` (the
+passed on retry. Its log line is `Origin http://127.0.0.1:5173 is not allowed by
+Access-Control-Allow-Origin. Status code: 502`: an upstream endpoint answered 502 without CORS
+headers. web-qa2's analysis puts that on `https://rpc.sepolia.ethpandaops.io`, which the log line
+itself does not name. The run before it, on 7460f7a, had two WebKit failures in `flows.spec.ts` (the
 keyboard-only sweep and back/forward), fixed on the test side in 9e4261f. Firefox and WebKit skip the tests that only mean something on Chromium, and there are two
 kinds: the two slow-3G LCP and CLS tests, which throttle the network through the Chrome DevTools
 Protocol, and six screenshot comparisons whose baselines Chromium renders.
