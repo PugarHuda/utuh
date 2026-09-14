@@ -36,6 +36,7 @@ const TYPES: Record<string, string> = {
 
 const PUBLISHED_ONLY = [
   '/llms.txt',
+  '/llms-full.txt',
   '/whitepaper.pdf',
   '/deck.pdf',
   '/logo.png',
@@ -93,11 +94,6 @@ async function main(): Promise<void> {
         if (path === '/app' || path === '/app/' || path === '/app/index.html') {
           return await serveFile(join(WEB, 'app.html'), res);
         }
-        // The console lives under /app/ so the landing can have the root. A static host serves
-        // app/index.html for both spellings; so does this.
-        if (path === '/app' || path === '/app/' || path === '/app/index.html') {
-          return await serveFile(join(WEB, 'app.html'), res);
-        }
         if (path === '/style.css') return await serveFile(join(WEB, 'style.css'), res);
         if (path === '/og.png') return await serveFile(join(WEB, 'og.png'), res);
         // The one webfont. Named rather than path-joined, for the same reason the ABIs are: an
@@ -112,9 +108,6 @@ async function main(): Promise<void> {
         // prove that this build asks for no `/abi` and no `/deployments.json` at all.
         if (path === '/static/' || path === '/static/index.html') {
           return await serveFile(join(STATIC, 'index.html'), res);
-        }
-        if (path === '/static/app' || path === '/static/app/' || path === '/static/app/index.html') {
-          return await serveFile(join(STATIC, 'app', 'index.html'), res);
         }
         if (path === '/static/app' || path === '/static/app/' || path === '/static/app/index.html') {
           return await serveFile(join(STATIC, 'app', 'index.html'), res);

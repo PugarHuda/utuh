@@ -1,6 +1,6 @@
 import { buildSync } from 'esbuild';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runScript } from '../offchain/lib/cli';
 import { DEPLOYMENT_RECORDS } from '../offchain/lib/networks';
@@ -159,6 +159,7 @@ function main(): Promise<void> {
       '  <url><loc>https://utuh.vercel.app/whitepaper.pdf</loc></url>',
       '  <url><loc>https://utuh.vercel.app/deck.pdf</loc></url>',
       '  <url><loc>https://utuh.vercel.app/llms.txt</loc></url>',
+      '  <url><loc>https://utuh.vercel.app/llms-full.txt</loc></url>',
       '</urlset>',
       '',
     ].join(String.fromCharCode(10)),
@@ -219,6 +220,8 @@ function main(): Promise<void> {
       '',
       '## Source',
       '',
+      '- [Everything above in one file](https://utuh.vercel.app/llms-full.txt): the README and every document',
+      '  under docs/, concatenated at build time.',
       '- [Repository](https://github.com/PugarHuda/utuh)',
       '- [Whitepaper](https://utuh.vercel.app/whitepaper.pdf)',
       '- [Deck](https://utuh.vercel.app/deck.pdf)',
@@ -227,6 +230,23 @@ function main(): Promise<void> {
       '',
     ].join(String.fromCharCode(10)),
   );
+
+  // The long form of the same convention (docs.creditcoin.org and modelcontextprotocol.io both serve
+  // one): the documents themselves rather than links to them, for an agent that reads one URL and
+  // stops. Concatenated from the files at build time, README first and docs/ in name order, each
+  // under its own path as a heading, so it cannot say anything the repository does not.
+  const documents = [
+    'README.md',
+    ...readdirSync(join(ROOT, 'docs'))
+      .filter((f) => f.endsWith('.md'))
+      .sort()
+      .map((f) => `docs/${f}`),
+  ];
+  const body = documents.map((path) => {
+    const text = readFileSync(join(ROOT, path), 'utf8').replace(/\r\n/g, '\n').trim();
+    return `# ${path}\n\n${text}\n`;
+  });
+  writeFileSync(join(DEST, 'llms-full.txt'), body.join('\n'));
 
   console.log(`static console in ${DEST}`);
   console.log(`  registry ${String(deployments.registry)}`);

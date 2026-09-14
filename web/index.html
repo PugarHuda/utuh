@@ -107,6 +107,7 @@
           </p>
           <div class="actions">
             <a id="console-link" class="act primary" href="app/">Open the console</a>
+            <a href="#check">Check every claim yourself</a>
             <a href="whitepaper.pdf">Read the whitepaper (PDF)</a>
             <a href="https://github.com/PugarHuda/utuh">Source on GitHub</a>
           </div>
@@ -285,47 +286,91 @@
         </dl>
       </section>
 
-      <section class="plain">
-        <h2>On the record</h2>
+      <section class="plain" id="check" aria-labelledby="check-heading">
+        <h2 id="check-heading">Check it yourself</h2>
         <p class="note">
-          Contracts verified on Blockscout and Sourcify. Nobody has audited them; this page audits claims. Testnet
-          software — the contracts hold testnet CTC. No users, no TVL, no partners are claimed, because there are none
-          to claim.
+          Every figure on this page is a read anyone can repeat, with no wallet and no key. Contracts verified on
+          Blockscout and Sourcify. Nobody has audited them; this page audits claims. Testnet software — the contracts
+          hold testnet CTC. No users, no TVL, no partners are claimed, because there are none to claim.
         </p>
-        <div class="addresses">
-          <div>
-            <span class="print">Registry · Sepolia-sourced</span
-            ><a
-              href="https://creditcoin-testnet.blockscout.com/address/0x26880c8980Cd54827543bD34c6c613253c69347b"
-              class="addr"
-              >0x2688…347b</a
-            >
-          </div>
-          <div>
-            <span class="print">Credit · Sepolia-sourced</span
-            ><a
-              href="https://creditcoin-testnet.blockscout.com/address/0x0177aDb82152c8673a85271F7F06336B820324b6"
-              class="addr"
-              >0x0177…24b6</a
-            >
-          </div>
-          <div>
-            <span class="print">Registry · mainnet-sourced</span
-            ><a
-              href="https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac"
-              class="addr"
-              >0x8FA0…5Fac</a
-            >
-          </div>
-          <div>
-            <span class="print">Credit · mainnet-sourced</span
-            ><a
-              href="https://creditcoin-testnet.blockscout.com/address/0x89FB81b1e453b7Bd18ac1A6AF03C84A40Ce10C57"
-              class="addr"
-              >0x89FB…0C57</a
-            >
-          </div>
-        </div>
+        <article class="schedule" data-testid="check" aria-label="what can be verified, and where">
+          <header>
+            <h3>Verification programme</h3>
+            <span class="ref">W/P J-1</span>
+            <span class="gloss">each row is one fact and the place that proves it</span>
+          </header>
+          <dl>
+            <div class="row">
+              <dt>Registry · Sepolia-sourced</dt>
+              <dd>
+                <a class="addr" href="https://creditcoin-testnet.blockscout.com/address/0x26880c8980Cd54827543bD34c6c613253c69347b">0x2688…347b</a> ·
+                <a href="https://repo.sourcify.dev/102031/0x26880c8980Cd54827543bD34c6c613253c69347b">Sourcify full match</a> · holds claim 5 and every claim of the completed loop
+              </dd>
+            </div>
+            <div class="row">
+              <dt>Credit · Sepolia-sourced</dt>
+              <dd>
+                <a class="addr" href="https://creditcoin-testnet.blockscout.com/address/0x0177aDb82152c8673a85271F7F06336B820324b6">0x0177…24b6</a> ·
+                <a href="https://repo.sourcify.dev/102031/0x0177aDb82152c8673a85271F7F06336B820324b6">Sourcify full match</a> · opens lines against finalized Sepolia claims
+              </dd>
+            </div>
+            <div class="row">
+              <dt>Registry · mainnet-sourced</dt>
+              <dd>
+                <a class="addr" href="https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac">0x8FA0…5Fac</a> ·
+                <a href="https://repo.sourcify.dev/102031/0x8FA0BD5301D998Be873E31453E53d114929a5Fac">Sourcify full match</a> · holds claim 20 and the claims about real Aave history
+              </dd>
+            </div>
+            <div class="row">
+              <dt>Credit · mainnet-sourced</dt>
+              <dd>
+                <a class="addr" href="https://creditcoin-testnet.blockscout.com/address/0x89FB81b1e453b7Bd18ac1A6AF03C84A40Ce10C57">0x89FB…0C57</a> ·
+                <a href="https://repo.sourcify.dev/102031/0x89FB81b1e453b7Bd18ac1A6AF03C84A40Ce10C57">Sourcify full match</a> · opens lines against finalized mainnet claims
+              </dd>
+            </div>
+            <div class="row">
+              <dt>Claim 5 refuted</dt>
+              <dd data-testid="check-refutation-sepolia-5">reading the registry…</dd>
+            </div>
+            <div class="row">
+              <dt>Claim 20 refuted</dt>
+              <dd data-testid="check-refutation-mainnet-20">reading the registry…</dd>
+            </div>
+            <div class="row">
+              <dt>Every member proof</dt>
+              <dd>
+                <a href="https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications"
+                  >Creditcoin's verification dashboard</a
+                >
+                lists each verification the Block Prover emitted, by source height
+              </dd>
+            </div>
+            <div class="row">
+              <dt>Refutations so far</dt>
+              <dd data-testid="check-tally">reading both registries…</dd>
+            </div>
+            <div class="row">
+              <dt>Sweep as an agent</dt>
+              <dd>
+                <span class="snippet">
+                  <code>npx -y utuh-mcp</code>
+                  <button class="act" type="button" data-copy="npx -y utuh-mcp">copy</button>
+                </span>
+              </dd>
+            </div>
+            <div class="row">
+              <dt>Re-measure every number</dt>
+              <dd>
+                <span class="snippet">
+                  <code>npm run judge</code>
+                  <button class="act" type="button" data-copy="npm run judge">copy</button>
+                </span>
+                re-reads every figure above from the chain, the explorer, npm and the MCP Registry with no key, after
+                <a href="https://github.com/PugarHuda/utuh#running-it">cloning and installing</a>
+              </dd>
+            </div>
+          </dl>
+        </article>
       </section>
     </main>
 

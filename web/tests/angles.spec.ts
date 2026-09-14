@@ -92,7 +92,10 @@ test('a wallet whose owner says no leaves the page usable and says what happened
   // And the borrow pane, which does send: the commitment is refused by the owner, and the page
   // reports the refusal rather than hanging or pretending it went out.
   const send = page.locator('[data-testid=send-commitment]');
-  await expect(send).toBeVisible({ timeout: 60_000 });
+  // 120s, not 60: after connect the borrow pane re-reads the chain, and on an afternoon when the CC3 RPC
+  // stalls those reads go through Blockscout's rationed proxy. Measured 2026-09-14: 26s on the primary, and
+  // still drawing at 60s via Blockscout. Degraded is the page's contract; this waits for it.
+  await expect(send).toBeVisible({ timeout: 120_000 });
   await send.click();
   // MetaMask's 4001 is the person's decision, and the page says so as one, not as ethers' dump.
   await expect(page.locator('[data-testid=borrow-log]')).toContainText(

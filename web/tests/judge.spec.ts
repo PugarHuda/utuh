@@ -167,9 +167,16 @@ test('going offline mid-session: a sweep fails in a sentence, and nothing is thr
   } finally {
     await context.setOffline(false);
   }
-  // Chromium logs every request it refused while offline as a resource error of its own; those are
-  // the outage, not the page. What must not appear is an exception the page failed to catch.
-  const ours = errors.filter((e) => !/Failed to load resource: net::ERR_INTERNET_DISCONNECTED/.test(e));
+  // Every engine logs each request it refused while offline as a console error of its own, in its own
+  // words, and those are the outage, not the page: Chromium's net::ERR_INTERNET_DISCONNECTED, Firefox's
+  // "CORS request did not succeed" with no status, WebKit's "internal error". What must not appear is an
+  // exception the page failed to catch, which arrives as a pageerror and is never filtered here.
+  const refused = [
+    /Failed to load resource: net::ERR_INTERNET_DISCONNECTED/,
+    /Cross-Origin Request Blocked: .*\(Reason: CORS request did not succeed\)\. Status code: \(null\)/,
+    /Failed to load resource: WebKit encountered an internal error/,
+  ];
+  const ours = errors.filter((e) => !(e.startsWith('console: ') && refused.some((r) => r.test(e))));
   expect(ours, ours.join('\n')).toEqual([]);
 });
 
@@ -202,6 +209,8 @@ test('what a crawler, a link preview, an agent and a scanner each read is there'
   // The files a static host serves beside the page, none of which the page itself asks for.
   for (const [path, type, opens] of [
     ['llms.txt', /text\/plain/, /^# Utuh/],
+    // The README first, under its path, and then its own first heading: the long form is the documents.
+    ['llms-full.txt', /text\/plain/, /^# README\.md\n\n# Utuh\n/],
     ['.well-known/security.txt', /text\/plain/, /^Contact: https:\/\/github\.com\/PugarHuda\/utuh\/security/m],
     ['whitepaper.pdf', /application\/pdf/, /^%PDF-/],
     ['deck.pdf', /application\/pdf/, /^%PDF-/],

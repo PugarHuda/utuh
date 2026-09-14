@@ -104,6 +104,7 @@ test('the canonical console and its mirror are serving the same build', async ({
     'main.js',
     'style.css',
     'llms.txt',
+    'llms-full.txt',
     'og.png',
     'whitepaper.pdf',
     'deck.pdf',

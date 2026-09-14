@@ -25,6 +25,43 @@
   font-display: swap;
 }
 
+/* What the page is set in for the moment before Archivo arrives, sized so the swap does not move
+   anything. Archivo is 1000 units to the em with an ascent of 878 and a descent of 210; Arial, and
+   Liberation Sans, its metric twin on Linux, are set against it at the widths measured on this page's
+   own text: body copy at weight 400 is 0.982 of Arial's width, the display h1 at 600 and 90% stretch is
+   0.867 of Arial Bold's, headings at 700 and 92% are 0.917. Each override is Archivo's metric divided by
+   that size-adjust. Without this, a Linux browser draws the hero in DejaVu Sans first and the swap
+   pushed the page down by a layout shift of 0.11. */
+@font-face {
+  font-family: 'Archivo Fallback'; /* impeccable-disable-line design-system-font -- Archivo's own stand-in */
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans');
+  font-weight: 400 500;
+  size-adjust: 98.2%;
+  ascent-override: 89.4%;
+  descent-override: 21.4%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Archivo Fallback'; /* impeccable-disable-line design-system-font -- Archivo's own stand-in */
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold');
+  font-weight: 600;
+  size-adjust: 86.7%;
+  ascent-override: 101.3%;
+  descent-override: 24.2%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Archivo Fallback'; /* impeccable-disable-line design-system-font -- Archivo's own stand-in */
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold');
+  font-weight: 700;
+  size-adjust: 91.7%;
+  ascent-override: 95.7%;
+  descent-override: 22.9%;
+  line-gap-override: 0%;
+}
+
 /* The mark sprite carries `hidden`, but the browser's own [hidden] rule is scoped to the HTML
    namespace and an inline <svg> is not in it: left alone it lays out at its default 300×150 and
    pushes the whole page down. Collapsed rather than display:none, so <use> can still reach it. */
@@ -55,7 +92,7 @@ svg[hidden] {
   --on-red: #f8efec;
   --bad: var(--red);
 
-  --face: 'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --face: 'Archivo', 'Archivo Fallback', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --data: ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
 
   --t-edge: 0.688rem;
@@ -1181,6 +1218,15 @@ footer p {
   flex-basis: 100%;
 }
 
+/* Inside the verification programme a link sits in a running sentence, so it carries the page's
+   underline rather than relying on the blue alone: a reader who cannot tell the pencils apart still
+   has to find the place that proves each row. */
+#check dd a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
 /* The legend of marks. A working paper that leaves a tick undefined is a working paper nobody
    else can review, so every mark on this page is explained once, here. */
 .legend {
@@ -1341,17 +1387,24 @@ section[data-frame] .legend {
    moment that has passed, and a reader in dark mode still wants dark ink on white stock: the light
    palette comes back whatever the screen was set to, and a schedule is never split across a page. */
 @media print {
+  /* The whole light set, not the few tokens print happens to show: a partial override leaves dark
+     `--on-blue` beside light `--blue`, and any tool that reads the stylesheet without its media
+     queries sees exactly that mix. */
   :root {
-    --paper: #fff;
-    --sheet: #fff;
-    --well: #f3f6ef;
+    --paper: #dfe7d5;
+    --sheet: #ebf0e3;
+    --well: #d1dbc6;
     --rule: #b3c4ab;
     --rule-strong: #5f7a5e;
     --margin: #c43a2b;
     --ink: #16201a;
     --ink-soft: #445244;
     --red: #b52d1d;
+    --red-soft: #e9c7c1;
     --blue: #234f9e;
+    --blue-soft: #cbd7ec;
+    --on-blue: #f4f7ee;
+    --on-red: #f8efec;
     color-scheme: light;
   }
 

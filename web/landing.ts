@@ -186,6 +186,36 @@ function finding(s: Schedule): HTMLElement {
   return p;
 }
 
+/// The "Check it yourself" rows are filled from reads the page already made for the schedules and
+/// the tally above: nothing in that block asks the chain anything of its own.
+function check(testid: string, nodes: Node[]): void {
+  document.querySelector(`[data-testid="${testid}"]`)?.replaceChildren(...nodes);
+}
+
+function checkRefutation(s: Schedule): void {
+  const r = s.refutation;
+  const testid = `check-refutation-${s.which}-${s.id}`;
+  if (!r) {
+    check(testid, [document.createTextNode(`status ${s.status}; no ClaimRefuted record was read for it`)]);
+    return;
+  }
+  check(testid, [
+    out(`${EXPLORER}/tx/${r.tx}`, `${r.tx.slice(0, 10)}…${r.tx.slice(-4)}`),
+    document.createTextNode(` — the omitted event at source block ${r.omittedBlock.toLocaleString()}, sent by `),
+    out(`${EXPLORER}/address/${r.refuter}`, shortAddress(r.refuter)),
+  ]);
+}
+
+function checkTally(refuted: number, sealed: number, refuters: number | undefined): void {
+  const who =
+    refuters === undefined
+      ? 'with the refuting addresses not all readable right now'
+      : `sent from ${refuters} distinct address${refuters === 1 ? '' : 'es'}`;
+  check('check-tally', [
+    document.createTextNode(`${refuted.toLocaleString()} of ${sealed.toLocaleString()} claims refuted, ${who}`),
+  ]);
+}
+
 /// `level` is the heading the schedule's title takes where it sits: the hero's claim comes straight
 /// after the page's h1, so it is an h2 there, and the claim under "Two claims…" is an h3 under that
 /// section's h2. A skipped level is a screen reader's outline with a hole in it.
@@ -215,17 +245,20 @@ async function renderSchedule(abis: Abis, which: DeploymentName, id: number, lev
     const foot = el('p', 'finding');
     foot.appendChild(open);
 
+    checkRefutation(s);
     box.replaceChildren(header, strip(s), el('div', 'body'), finding(s), foot);
     box.querySelector('.body')!.appendChild(members(s));
   } catch (e) {
     box.replaceChildren(el('p', 'pending bad', `Creditcoin did not answer for claim ${id}: ${(e as Error).message}`));
+    check(`check-refutation-${which}-${id}`, [
+      el('span', 'bad', `Creditcoin did not answer: ${(e as Error).message}`),
+    ]);
   }
 }
 
 export async function landing(): Promise<void> {
-  // The MCP install line, copied. Clipboard access is a user gesture away and nothing else.
-  const copy = document.getElementById('copy-mcp') as HTMLButtonElement | null;
-  if (copy) {
+  // Commands, copied. Clipboard access is a user gesture away and nothing else.
+  for (const copy of document.querySelectorAll<HTMLButtonElement>('button[data-copy]')) {
     copy.onclick = async () => {
       try {
         await navigator.clipboard.writeText(copy.dataset.copy ?? '');
@@ -269,6 +302,7 @@ export async function landing(): Promise<void> {
       $('t-claims').textContent = t.sealed.toLocaleString();
       $('t-refuted').textContent = t.refuted.toLocaleString();
       $('t-burned').textContent = `${formatEther(t.burned)} CTC`;
+      checkTally(t.refuted, t.sealed, t.refuters);
       refuters(t.refuters);
       const box = $('invitation');
       if (t.openNow) {
@@ -295,6 +329,7 @@ export async function landing(): Promise<void> {
       for (const id of ['t-proven', 't-claims', 't-refuted', 't-burned']) $(id).textContent = '—';
       strip.dataset.ready = 'failed';
       strip.title = (e as Error).message;
+      check('check-tally', [el('span', 'bad', `the registries did not answer — ${(e as Error).message}`)]);
     }
   })();
 

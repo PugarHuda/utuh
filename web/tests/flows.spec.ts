@@ -68,7 +68,10 @@ test('a refused signature is reported in one sentence, and nothing is left disab
   await expect(page.locator('#connect')).toBeDisabled();
 
   const send = page.locator('[data-testid=send-commitment]');
-  await expect(send).toBeVisible({ timeout: 60_000 });
+  // 120s, not 60: after connect the borrow pane re-reads the chain, and on an afternoon when the CC3 RPC
+  // stalls those reads go through Blockscout's rationed proxy. Measured 2026-09-14: 26s on the primary, and
+  // still drawing at 60s via Blockscout. Degraded is the page's contract; this waits for it.
+  await expect(send).toBeVisible({ timeout: 120_000 });
   await send.click();
   const line = page.locator('[data-testid=borrow-log] .line').last();
   await expect(line).toHaveText('could not send it: you declined it in your wallet, so nothing was sent', {
@@ -161,6 +164,58 @@ for (const [what, path] of [
   });
 }
 
+/// The swap from the fallback face to Archivo must not move the page. On the Linux CI runner the
+/// system fallback is DejaVu Sans, whose wide Vera metrics made the hero reflow when Archivo arrived: a
+/// layout shift of 0.1138, failing the slow-3G test above. The stylesheet's 'Archivo Fallback' faces set
+/// Arial (or Liberation Sans, its Linux twin) to Archivo's measured widths and vertical metrics. This
+/// serves the real stylesheet with only the generic tail of the stack swapped for a wide Vera-family face,
+/// delays the webfont so the swap is a separate paint, and measures the shift at that moment. Without the
+/// fallback faces it was 0.1046; with them, 0.0001. Chromium only, because only Chromium reports
+/// layout-shift entries.
+test('@chromium Archivo swapping in over its fallback moves nothing', async ({ page }) => {
+  await page.route(/creditcoin|blockscout|tenderly|0xrpc|publicnode|ethpandaops/, (r) => r.abort());
+  await page.route('**/style.css', async (route) => {
+    const response = await route.fetch();
+    const css = await response.text();
+    const stack = css.match(/--face: ([^;]+);/)?.[1] ?? '';
+    expect(stack, 'the face stack names the metric-matched fallback second').toMatch(
+      /^'Archivo', 'Archivo Fallback',/,
+    );
+    await route.fulfill({
+      response,
+      body: css.replace(
+        /--face: [^;]+;/,
+        "--face: 'Archivo', 'Archivo Fallback', Verdana, 'DejaVu Sans', sans-serif;",
+      ),
+    });
+  });
+  await page.route('**/archivo.woff2', async (route) => {
+    await new Promise((wake) => setTimeout(wake, 2_500));
+    await route.continue();
+  });
+  await page.addInitScript(() => {
+    const w = window as unknown as { __shifts: [number, number][]; __fontAt?: number };
+    w.__shifts = [];
+    new PerformanceObserver((l) => {
+      for (const e of l.getEntries() as (PerformanceEntry & { value: number })[])
+        w.__shifts.push([e.startTime, e.value]);
+    }).observe({ type: 'layout-shift', buffered: true });
+    document.fonts.addEventListener('loadingdone', () => (w.__fontAt = performance.now()));
+  });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/');
+  await page.waitForFunction(() => (window as unknown as { __fontAt?: number }).__fontAt !== undefined, null, {
+    timeout: 20_000,
+  });
+  await page.waitForTimeout(1_000);
+  const shift = await page.evaluate(() => {
+    const w = window as unknown as { __shifts: [number, number][]; __fontAt: number };
+    return w.__shifts.filter(([t]) => Math.abs(t - w.__fontAt) < 600).reduce((sum, [, v]) => sum + v, 0);
+  });
+  expect(await page.evaluate(() => document.fonts.check('16px Archivo')), 'Archivo did load').toBe(true);
+  expect(shift, 'layout shift at the moment Archivo replaced its fallback').toBeLessThan(0.01);
+});
+
 test('back from a claim in the console returns a live landing, and forward returns the claim', async ({ page }) => {
   const seen = errors(page);
   await page.addInitScript(() => {
@@ -211,7 +266,9 @@ test('a second tab opened on a claim while the first is sweeping gets its own wh
   expect([...seen, ...seenSecond], [...seen, ...seenSecond].join('\n')).toEqual([]);
 });
 
-test('the landing prints as a working paper: dark ink on white, no controls, no schedule split', async ({ page }) => {
+test('the landing prints as a working paper: light stock and dark ink, no controls, no schedule split', async ({
+  page,
+}) => {
   // Dark on screen on purpose: the print has to come back to the light palette regardless.
   await page.emulateMedia({ colorScheme: 'dark' });
   await ready(page, '/');
@@ -231,7 +288,7 @@ test('the landing prints as a working paper: dark ink on white, no controls, no 
     };
   });
   expect(printed).toEqual({
-    ground: 'rgb(255, 255, 255)',
+    ground: 'rgb(223, 231, 213)',
     ink: 'rgb(22, 32, 26)',
     skip: 'none',
     nav: 'none',
