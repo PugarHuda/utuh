@@ -63,8 +63,11 @@ the gate.
 **Refused.** Claim 20 asserted the same thing about `0x58039c0ce2bddecc6f60458d425da66f606c5afa`, and
 one proof of a real liquidation broke it. Naming it reverts with `NotUsable(20, 1, 0)`, and a refusal
 was sent so it stays on the record:
-[`0x3989ee00…bb4f3`](https://creditcoin-testnet.blockscout.com/tx/0x3989ee001f93069eb72b1c134869f86999a590df43db6aa90011cb8c9edbb4f3)
-(status 0). Every refusal can be reproduced with `cast call`:
+[`0x89561d2e…a46b9`](https://creditcoin-testnet.blockscout.com/tx/0x89561d2e9b9bd96cc4df97010d78b0f8723fb6d1cea782463a0af3ac09ba46b9)
+(status 0, 275,520 of 700,000 gas). A first attempt at a 200,000 gas limit,
+[`0x3989ee00…bb4f3`](https://creditcoin-testnet.blockscout.com/tx/0x3989ee001f93069eb72b1c134869f86999a590df43db6aa90011cb8c9edbb4f3),
+ran out of gas before reaching the check. CC3 meters calls well above a local EVM: the same refusal
+costs 71,232 gas in the fork test. Every refusal can be reproduced with `cast call`:
 
 ```sh
 G=0xcA6228C30607F26253Fffc2A4013a801DEEB5D09; RPC=https://rpc.cc3-testnet.creditcoin.network
@@ -128,4 +131,4 @@ implements all three.
 
 Everything the gate reads is a view. Chain spend for this example, from the funded key: the claim's
 1 CTC bond went out and came back through `finalize` and `withdraw`, and the rest is gas (open, seal,
-deploy, the refusal, finalize, withdraw, grant), 0.001173 CTC in total.
+deploy, both refusal attempts, finalize, withdraw, grant), 0.001311 CTC in total.
