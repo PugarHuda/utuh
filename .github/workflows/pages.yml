@@ -92,6 +92,13 @@ jobs:
           live=$(printf '%s' "$live" | sha256sum | cut -d' ' -f1)
           echo "built $built"
           echo "live  $live"
+          # vercel.json is consumed by the platform and never served, so its hash cannot be compared.
+          # Its effect can: every header it declares must be on the live response, or a commit that
+          # changed only the headers would be judged "already serving" and never deployed.
+          served=$(curl -fsSI --max-time 25 https://utuh.vercel.app/ | tr -d '\r') || served=""
+          stale=$(jq -r '.headers[] | select(.source == "/(.*)") | .headers[] | "\(.key): \(.value)"' vercel.json \
+            | while IFS= read -r h; do grep -qixF "$h" <<<"$served" || echo "$h"; done)
+          if [ -n "$stale" ]; then echo "headers the live site does not send yet:"; echo "$stale"; live="headers-differ"; fi
           if [ "$built" = "$live" ]; then
             echo "same=true" >> "$GITHUB_OUTPUT"
             echo "the canonical console already serves this build — nothing to deploy"
@@ -113,7 +120,11 @@ jobs:
         # canonical URL is what notices if the staleness lasts — which it did not, until the smoke
         # learned to compare the canonical's bundle against the mirror's. It does now.
         continue-on-error: true
-        run: npx --yes vercel@59 deploy web/static --prod --yes --token "$VERCEL_TOKEN"
+        # Staged outside web/static: Vercel reads vercel.json from the root of what it is given, and
+        # the Pages artifact below is web/static itself, which must not carry a Vercel config.
+        run: |
+          rm -rf .vercel-deploy && cp -r web/static .vercel-deploy && cp vercel.json .vercel-deploy/
+          npx --yes vercel@59 deploy .vercel-deploy --prod --yes --token "$VERCEL_TOKEN"
 
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5

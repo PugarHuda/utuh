@@ -12,6 +12,9 @@ test-results/
 web/static/
 out-halmos/
 dist-mcp/
+# What preview.yml and pages.yml stage for Vercel, and what Lighthouse CI writes.
+.vercel-deploy/
+.lighthouseci/
 
 # The Impeccable design tooling, vendored by `npx impeccable install` into the harness directory it
 # detected. It is 3.5 MB of somebody else's tool, reinstallable in one command, and no part of the
