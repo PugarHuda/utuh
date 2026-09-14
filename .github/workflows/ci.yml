@@ -163,6 +163,9 @@ jobs:
     # id, the claim count, the shape of a status — rather than about any particular claim.
     name: console
     runs-on: ubuntu-latest
+    # Three engines against live endpoints take a while, but not hours. Without a ceiling, a browser
+    # that hangs holds a runner for GitHub's six-hour default before anyone hears about it.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
