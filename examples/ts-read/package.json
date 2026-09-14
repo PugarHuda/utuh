@@ -1,0 +1,14 @@
+{
+  "name": "utuh-ts-read",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "read": "tsx read.ts"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}
