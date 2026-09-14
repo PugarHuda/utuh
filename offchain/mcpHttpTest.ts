@@ -349,6 +349,21 @@ async function main(): Promise<void> {
         `swept through ${w?.sweptThrough} of ${wideClaim?.fromBlock}..${wideClaim?.toBlock}: ` +
           (wide.result.result?.content?.[0]?.text ?? '').slice(0, 120),
       );
+      // The other side of the same contract: under the default budget the whole range is swept, and
+      // a claim with nothing missing is reported complete through its last block — the budget does
+      // not make every wide sweep inconclusive.
+      t0 = Date.now();
+      const full = await client.call('sweep_claim', WIDE);
+      const fullTook = Date.now() - t0;
+      const f = full.result.result?.structuredContent;
+      check(
+        `under the default budget the same sweep completes (${(fullTook / 1000).toFixed(1)}s)`,
+        f?.complete === true &&
+          f?.inconclusive === false &&
+          f?.sweptThrough === wideClaim?.toBlock &&
+          f?.provenance?.vouched >= 1,
+        JSON.stringify(f ?? full.result).slice(0, 200),
+      );
     } else {
       t0 = Date.now();
       const wide = await client.call('sweep_claim', WIDE);
