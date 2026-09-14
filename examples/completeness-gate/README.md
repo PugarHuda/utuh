@@ -5,6 +5,11 @@ if it names a Finalized, unrefuted Utuh claim that asserts, under bond, *this ad
 liquidated on Aave V3 (Ethereum mainnet) over at least 216,000 blocks*, and only if the account is
 the one that address proved it controls.
 
+It is written and deployed by this project as the worked example, not by an outside user: the deployer
+is `0x50577827700c0cF60240ABd07f041F09C95d4748` and the borrower below is our own test account. What it
+shows is that an unrelated contract can be built on Utuh using only the published install steps and
+views.
+
 It is the missing half of Gluwa's reference loan,
 [`ASCLoanManager`](https://github.com/gluwa/attestcoin-protocol-examples/blob/main/loan/contracts/sol/ASCLoanManager.sol).
 That contract proves the events that happened (`LoanFunded`, `LoanRepaid`) with the Block Prover, and
@@ -13,7 +18,7 @@ onlyOwner`. A lender deciding whether to register a loan at all needs a sentence
 no inclusion proof can give one. This gate reads it as a boolean. It holds no proofs, never calls
 `0x0FD2`, and has no owner.
 
-## Install (as an outsider)
+## Install (the way an outside project would)
 
 ```sh
 mkdir completeness-gate && cd completeness-gate
