@@ -37,7 +37,8 @@ import { answersTheQuestion, valueOf, isRangeRefusal, type Scope } from './lib/s
 import { supportedChains, verifyChainKeys } from './lib/chain';
 import { Prover, isAbsence, waitVerdict } from './lib/proofs';
 import { calldataGas, modelledGas, isChainRejection, isTransportFailure, isPayloadTooLarge } from './lib/gasLimit';
-import { FALLBACK_BATCH, PROXY_LOG_CAP, sendWithFailover, waitForBlock } from './lib/chain';
+import { waitForBlock } from './lib/chain';
+import { FALLBACK_BATCH, PROXY_LOG_CAP, sendWithFailover } from './lib/failover';
 import { claimStatus } from './lib/status';
 import { runScript, sentenceFor } from './lib/cli';
 

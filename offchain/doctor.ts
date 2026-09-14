@@ -22,7 +22,7 @@ import {
   describeSettlement,
   latestAttestation,
 } from './lib/attest';
-import { FALLBACK_BATCH } from './lib/chain';
+import { FALLBACK_BATCH } from './lib/failover';
 import { claimStatus } from './lib/status';
 import sepoliaRecord from '../deployments.full.json';
 import mainnetRecord from '../deployments.json';
@@ -127,6 +127,42 @@ async function ecosystem(): Promise<number> {
     try {
       const n = await count(indexer, key);
       say(n > 0, which, `${n.toLocaleString()} attestations of Ethereum, chain key ${key}`);
+    } catch (e: any) {
+      say(false, which, String(e.message ?? e).slice(0, 50));
+    }
+  }
+
+  // The attestation-reorg alarm. Each indexer publishes every attestation the network reverted, per
+  // chain key; a reverted attestation is a height the precompile once vouched for and then took back,
+  // which is the one event that could unsettle a claim this project called settled. Measured
+  // 2026-09-14: zero rows on both networks (feature-scout2's lead). Not zero is a finding, not noise.
+  for (const [which, indexer, keys] of [
+    ['testnet reverted attestations', ATTESTATION_INDEXERS.testnet, [CHAIN_KEY.sepolia, CHAIN_KEY.mainnet]],
+    ['mainnet reverted attestations', ATTESTATION_INDEXERS.mainnet, [ATTESTATION_INDEXERS.mainnet.ethereumKey]],
+  ] as const) {
+    try {
+      const r = await get(indexer.graphql, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          query: `{ revertedAttestationChainTos(filter:{chainKey:{in:${JSON.stringify(keys.map(String))}}}) { totalCount nodes { chainKey blockNumber } } }`,
+        }),
+      });
+      const b = (await r.json()) as {
+        data?: {
+          revertedAttestationChainTos?: { totalCount: number; nodes: { chainKey: string; blockNumber: string }[] };
+        };
+      };
+      const t = b.data?.revertedAttestationChainTos;
+      // An answer without the table is unknown, never zero.
+      if (!t) throw new Error('the indexer answered without the table');
+      say(
+        t.totalCount === 0,
+        which,
+        t.totalCount === 0
+          ? `none for chain key(s) ${keys.join(', ')}`
+          : `${t.totalCount}: ${t.nodes.map((n) => `key ${n.chainKey} at CC3 block ${n.blockNumber}`).join('; ')}`,
+      );
     } catch (e: any) {
       say(false, which, String(e.message ?? e).slice(0, 50));
     }
