@@ -39,7 +39,7 @@
     "provers": "tsx offchain/provers.ts",
     "slither": "slither .",
     "fmt": "forge fmt",
-    "check": "forge fmt --check && forge lint src/ && forge test && prettier --check \"offchain/**/*.ts\" \"web/**/*.ts\" && tsc --noEmit -p tsconfig.json && slither .",
+    "check": "forge fmt --check && forge lint src/ && forge test && prettier --check --no-error-on-unmatched-pattern \"offchain/**/*.ts\" \"web/**/*.ts\" \"api/**/*.ts\" && tsc --noEmit -p tsconfig.json && slither .",
     "gas": "tsx offchain/gas.ts",
     "web:build": "esbuild web/main.ts --bundle --format=esm --target=es2022 --minify --outfile=web/dist/main.js",
     "web": "npm run web:build && npm run web:static && tsx web/serve.ts",
@@ -48,14 +48,15 @@
     "web:test": "playwright test",
     "web:shots": "tsx web/tests/shots.ts",
     "lint": "forge lint src/",
-    "format": "prettier --write \"offchain/**/*.ts\" \"web/**/*.ts\"",
-    "format:check": "prettier --check \"offchain/**/*.ts\" \"web/**/*.ts\"",
+    "format": "prettier --write --no-error-on-unmatched-pattern \"offchain/**/*.ts\" \"web/**/*.ts\" \"api/**/*.ts\"",
+    "format:check": "prettier --check --no-error-on-unmatched-pattern \"offchain/**/*.ts\" \"web/**/*.ts\" \"api/**/*.ts\"",
     "deadcode": "knip",
     "symbolic": "npm run symbolic:build && halmos --forge-build-out out-halmos --contract EventScopeKeySymbolic",
     "symbolic:deep": "npm run symbolic:build && halmos --forge-build-out out-halmos --contract CreditRoundingSymbolic --solver-timeout-assertion 600000",
     "symbolic:build": "forge build --no-dynamic-test-linking --ast --out out-halmos",
     "mcp:package": "tsx offchain/build-mcp.ts",
-    "mcp:test": "tsx offchain/build-mcp.ts && tsx offchain/mcpTest.ts"
+    "mcp:test": "tsx offchain/build-mcp.ts && tsx offchain/mcpTest.ts",
+    "mcp:http-test": "tsx offchain/build-mcp.ts && tsx offchain/mcpHttpTest.ts"
   },
   "dependencies": {
     "@gluwa/usc-contracts": "^0.1.2",

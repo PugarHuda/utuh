@@ -2,11 +2,13 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "offchain/*.ts",
-    "web/*.ts"
+    "web/*.ts",
+    "api/mcp.ts"
   ],
   "project": [
     "offchain/**/*.ts",
-    "web/**/*.ts"
+    "web/**/*.ts",
+    "api/**/*.ts"
   ],
   "ignoreBinaries": [
     "forge",
