@@ -66,6 +66,17 @@ const QUOTED = {
   verified: 224,
 };
 
+/// A contract nobody here wrote the rules for, that reads Utuh anyway: `examples/completeness-gate`.
+/// The address is the one fact quoted; what lives there, whether its source is published, and what
+/// it is wired to are all read live below.
+const CONSUMER = {
+  name: 'NeverLiquidatedGate',
+  address: '0xcA6228C30607F26253Fffc2A4013a801DEEB5D09',
+  /// The allowance it granted on a finalized mainnet-sourced claim, and the transaction that did it.
+  claimId: 72,
+  grant: '0x82fe073a1de45d11e644ec1147630303851d87253a3c276ced6ec9d151e01a53',
+};
+
 /// The two links every document hands a reader, and what each must still be.
 const LINKED: { deployment: DeploymentName; id: number; members?: number; what: string }[] = [
   { deployment: 'sepolia', id: 5, what: 'a claim sealed one event short, refuted from a browser' },
@@ -182,6 +193,85 @@ async function main(): Promise<void> {
       `${name} is deployed and verified at ${address}`,
       `${deployed ? `${(code.length - 2) / 2} bytes of code` : 'NO CODE'}; ${verified}; ${matched}`,
       deployed && verified.startsWith('verified') && matched.startsWith('Sourcify ') && !matched.includes('no match'),
+    );
+  }
+
+  // ── A third-party consumer is deployed, verified, and reads the published contracts ──────────
+  {
+    const code = await provider.getCode(CONSUMER.address);
+    // Blockscout rate-limits silently, so one refusal is asked again before it is called unknown.
+    let bs: { is_verified?: boolean; name?: string } | null = null;
+    for (let i = 0; i < 3 && !bs; i++) {
+      bs = await json<{ is_verified?: boolean; name?: string }>(
+        `${BLOCKSCOUT}/smart-contracts/${CONSUMER.address}`,
+      ).catch(() => null);
+      if (!bs) await new Promise((r) => setTimeout(r, 3000));
+    }
+    const gate = new Contract(
+      CONSUMER.address,
+      [
+        'function REGISTRY() view returns (address)',
+        'function CONTROL() view returns (address)',
+        'function MIN_HISTORY_BLOCKS() view returns (uint64)',
+        'function claimUsed(uint256) view returns (bool)',
+      ],
+      provider,
+    );
+    let wired = 'not read';
+    let wiredOk = false;
+    try {
+      // The history floor is compared with the mainnet-sourced credit line's own, read now: the gate
+      // is meant to ask no less of a claim than the lender it sits beside.
+      const lender = new Contract(
+        mainnetRecord.credit,
+        ['function MIN_HISTORY_BLOCKS() view returns (uint64)'],
+        provider,
+      );
+      const [registry, control, floor, lenderFloor] = await Promise.all([
+        gate.REGISTRY(),
+        gate.CONTROL(),
+        gate.MIN_HISTORY_BLOCKS(),
+        lender.MIN_HISTORY_BLOCKS(),
+      ]);
+      wiredOk =
+        String(registry).toLowerCase() === mainnetRecord.registry.toLowerCase() &&
+        String(control).toLowerCase() === sepoliaRecord.credit.toLowerCase() &&
+        floor === lenderFloor;
+      wired = `REGISTRY() ${registry}, CONTROL() ${control}, MIN_HISTORY_BLOCKS ${floor} (the credit line's ${lenderFloor})`;
+    } catch (e) {
+      wired = `wiring unreadable (${(e as Error).message.slice(0, 40)})`;
+    }
+    note(
+      `${CONSUMER.name}, a consumer outside the protocol, is deployed and verified at ${CONSUMER.address} and reads the ` +
+        'mainnet-sourced registry and the Sepolia-sourced credit line',
+      `${code !== '0x' ? `${(code.length - 2) / 2} bytes of code` : 'NO CODE'}; ` +
+        `${bs ? `Blockscout: ${bs.is_verified ? 'verified' : 'NOT verified'} as ${bs.name ?? '?'}` : 'Blockscout unreachable — unknown, not unverified'}; ` +
+        wired,
+      code !== '0x' && bs?.is_verified === true && bs.name === CONSUMER.name && wiredOk,
+    );
+
+    // And it has acted on one: the grant succeeded, spent the claim, and the claim is Finalized on the
+    // registry the submission lists — so a contract outside the protocol underwrote on Utuh's word.
+    let used: boolean | string = 'not read';
+    let status = 'not read';
+    let receiptOk = false;
+    try {
+      const [receipt, spent, claim] = await Promise.all([
+        provider.getTransactionReceipt(CONSUMER.grant),
+        gate.claimUsed(CONSUMER.claimId),
+        new Contract(mainnetRecord.registry, registryArtifact.abi, provider).claim(CONSUMER.claimId),
+      ]);
+      receiptOk = receipt?.status === 1 && receipt.to?.toLowerCase() === CONSUMER.address.toLowerCase();
+      used = spent as boolean;
+      status = claimStatus(claim.status);
+    } catch (e) {
+      status = `unreadable (${(e as Error).message.slice(0, 40)})`;
+    }
+    note(
+      `${CONSUMER.name} granted an allowance on mainnet-sourced claim ${CONSUMER.claimId}, which is Finalized`,
+      `grant ${CONSUMER.grant.slice(0, 12)}… ${receiptOk ? 'succeeded, sent to the gate' : 'NOT a successful call to the gate'}; ` +
+        `claimUsed(${CONSUMER.claimId}) ${used}; registry claim ${CONSUMER.claimId} ${status}`,
+      receiptOk && used === true && status === 'Finalized',
     );
   }
 
