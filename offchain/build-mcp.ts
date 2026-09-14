@@ -11,7 +11,7 @@ import { join } from 'node:path';
 /// mcp.ts imports them instead of reading files — into one node script with no dependencies, plus
 /// the package.json, README and LICENSE that make it publishable.
 ///
-///   npm run mcp:package        # writes dist-mcp/
+///   npm run mcp:package        # writes dist-mcp/, and dist-mcp/api/mcp.js for the remote endpoint
 ///   cd dist-mcp && npm publish # the deliberate, human step
 ///
 /// The version is the repository's own, so a republish is a visible bump rather than a silent
@@ -33,6 +33,20 @@ async function main(): Promise<void> {
     format: 'cjs',
     outfile: join(DIST, 'utuh-mcp.cjs'),
     banner: { js: '#!/usr/bin/env node' },
+    logLevel: 'warning',
+  });
+
+  // The same server over Streamable HTTP, as the Vercel function `api/mcp.ts`. One self-contained
+  // file for the same reason as the stdio bundle: the site is deployed as a directory with no
+  // node_modules and no build step, so the SDK, ethers, the ABI and both deployment records have to
+  // be inside it. The deploy stages it as `api/mcp.js` beside the static files.
+  await build({
+    entryPoints: [join(ROOT, 'api', 'mcp.ts')],
+    bundle: true,
+    platform: 'node',
+    target: 'node20',
+    format: 'cjs',
+    outfile: join(DIST, 'api', 'mcp.js'),
     logLevel: 'warning',
   });
 
@@ -121,6 +135,33 @@ claude mcp add utuh -- npx -y utuh-mcp
 **Any other client** — it is a stdio server: run \`npx -y utuh-mcp\` and speak JSON-RPC on its
 stdin and stdout. It is listed in the official MCP Registry as \`io.github.PugarHuda/utuh-mcp\`.
 
+### Or connect by URL — available after merge to master
+
+Clients that take a remote MCP server instead of a command — Claude.ai, ChatGPT, hosted agents —
+connect to the same server over Streamable HTTP at \`https://utuh.vercel.app/api/mcp\`. There is
+nothing to install and no sign-in. Production serves it once this endpoint is merged to master
+and deployed; until then the address answers 404.
+
+**Claude.ai** — Settings → Connectors → Add custom connector. Name it \`Utuh\`, set the URL to
+\`https://utuh.vercel.app/api/mcp\`, leave the OAuth fields empty, and add it; then enable it for a
+conversation from the tools menu.
+
+**ChatGPT** — Settings → Apps & Connectors → Advanced settings, turn on Developer mode, then Create.
+Set the MCP server URL to \`https://utuh.vercel.app/api/mcp\` and Authentication to "No authentication".
+
+**Claude Code**:
+
+\`\`\`bash
+claude mcp add --transport http utuh https://utuh.vercel.app/api/mcp
+\`\`\`
+
+The remote server holds no key, so two things differ from \`npx\`. \`refute_claim\` never sends: it
+proves the omitted event and returns the unsigned transaction — the registry address, calldata
+carrying the proof, the chain id and a gas limit from \`eth_estimateGas\` — for your own wallet to
+sign, and \`wouldRevert\` names the registry error when eth_call says it would fail. And a sweep has a
+50-second budget: a range too wide for it answers \`inconclusive\` with the block it swept through,
+and the local server, which has no budget, sweeps the rest.
+
 ## What it serves
 
 ![The live console's Watch pane on claim 5: four Sepolia endpoints each answered 4 events, and the verdict INCOMPLETE: 1 event(s) the claim does not contain — the same sweep sweep_claim runs](https://raw.githubusercontent.com/PugarHuda/utuh/master/docs/img/watch.png)
@@ -166,6 +207,11 @@ secret it can hold is \`PRIVATE_KEY\`, which you supply, which is read from the 
 written anywhere, and used only by \`refute_claim\` after \`confirm: true\`. Nothing is shared with the
 authors or any third party. Questions: open an issue at https://github.com/PugarHuda/utuh or use
 the contact in that repository's SECURITY.md.
+
+The remote endpoint at \`https://utuh.vercel.app/api/mcp\` runs as a Vercel function and keeps nothing
+between requests either: no account, no cookies, no key. Vercel's function logs record each request
+and the progress lines a tool prints — claim ids, endpoint counts — for Vercel's own log retention,
+as they would for any site it hosts.
 
 The first MCP client ever connected to this server found the gap in a standing claim and refuted
 it — a real slashed bond, during its own smoke test.
