@@ -230,6 +230,10 @@ function confirmedSources(cc3: JsonRpcProvider, chainKey: number) {
     }
     return usable;
   });
+  // Only an answer is memoised. `confirmEndpoints` asks CC3 which chain the key denotes first, and a
+  // CC3 hiccup there rejected this promise — which then sat in the map, so every later claim on the
+  // same chain key failed inspection with the same stale error for the rest of the daemon's life.
+  pending.catch(() => confirmedByKey.delete(chainKey));
   confirmedByKey.set(chainKey, pending);
   return pending;
 }
