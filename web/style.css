@@ -22,6 +22,16 @@
   font-display: swap;
 }
 
+/* The mark sprite carries `hidden`, but the browser's own [hidden] rule is scoped to the HTML
+   namespace and an inline <svg> is not in it: left alone it lays out at its default 300×150 and
+   pushes the whole page down. Collapsed rather than display:none, so <use> can still reach it. */
+svg[hidden] {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 :root {
   /* Eye-ease green ledger stock. Not cream: accountants chose this green because figures are read
      on it for hours, and it is the one paper colour the audience already associates with a

@@ -79,6 +79,7 @@ async function main(): Promise<void> {
     .filter({ hasText: /Refuted/ })
     .waitFor({ timeout: 60_000 });
   await page.locator('[data-testid=claims-table] tbody tr').first().waitFor({ timeout: 60_000 });
+  await footed(page);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: join(OUT, 'console-mainnet-20.png'), clip: { x: 0, y: 0, ...DESK } });
   await page.close();
