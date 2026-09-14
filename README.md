@@ -24,6 +24,9 @@ Protocol, built for BUIDL CTC 2026 Fall and deployed on Creditcoin CC3 Testnet.
   longer holds. On 2026-09-14, 23 of 23 held.
 - **Hold the watcher role from an agent:** `npx -y utuh-mcp` — 0.4.0 on npm and in the official
   [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp).
+- **Measured:** 193 Foundry tests with 12 invariants · 98.08% branch coverage · Slither 0 findings ·
+  halmos 5 of 5 · every contract verified on Blockscout and matched on Sourcify · 248
+  `TransactionVerified` events on CC3's own indexer.
 - **Demo video (3 min):** https://youtu.be/HwSnv3E4tzo · **Whitepaper:** [PDF](https://utuh.vercel.app/whitepaper.pdf), from [`web/whitepaper.html`](web/whitepaper.html)
   · **Deck:** [`web/deck.pdf`](web/deck.pdf)
 
@@ -1715,6 +1718,12 @@ check is `appendBatch` `0x5ccfb529…25fb25`, three rows there and three members
 
 ## Known limits
 
+- **Nobody outside this project has used it yet.** Every transaction into the four deployed
+  contracts, 374 on 2026-09-14, was sent from one of four keys this project holds: the deployer,
+  which is also the refuter of claims 5 and 20; the browser-test borrower; the claimant `npm run bait`
+  uses; and the test borrower. Every claim and every refutation on both registries is ours. The
+  mechanism is exercised end to end on the live chain, but no outside watcher, claimant or lender
+  has used it.
 - Claim members are held as a storage array so refutation is a binary search the chain runs
   itself, with no witness a claimant could withhold. What caps a claim is not that array, though —
   measured, the cost follows the _bytes of the transactions being proven_ at about twice their
