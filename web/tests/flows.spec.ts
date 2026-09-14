@@ -17,9 +17,43 @@ async function ready(page: Page, url: string): Promise<void> {
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 90_000 });
 }
 
-function errors(page: Page): string[] {
+/// Every error the page did not handle, on every engine.
+///
+/// Two sources. An `unhandledrejection` listener, installed before the page's own scripts, reports
+/// through the console, so a rejection nothing caught fails the test on Chromium, Firefox and WebKit
+/// alike. And `pageerror`, with one thing left out that is not an error at all. WebKit logs the console
+/// line "Fetch API cannot load https://<host>/ due to access control checks." for any cross-origin fetch
+/// that fails, including one the page caught and one the browser cancelled on navigation. Playwright's
+/// WebKit driver turns that log line into a pageerror by splitting it at its first colon: name "Fetch API
+/// cannot load https", message "//host/ due to access control checks." (with the fetch's call site as a stack
+/// on some paths). Measured 2026-09-14: a fetch caught on the spot still raised it, and the
+/// landing-to-console-and-back path raised it while the page recorded zero unhandled rejections. Only that
+/// exact shape, about the RPC hosts the page reads, is left out.
+const isWebkitFetchLog = (e: Error) =>
+  e.name === 'Fetch API cannot load https' &&
+  /^\/+\S*(creditcoin|blockscout|tenderly|0xrpc|publicnode|ethpandaops)\S* due to access control checks\.$/.test(
+    e.message,
+  );
+
+async function errors(page: Page): Promise<string[]> {
   const seen: string[] = [];
-  page.on('pageerror', (e) => seen.push(`pageerror: ${String(e)}`));
+  await page.addInitScript(() => {
+    addEventListener('unhandledrejection', (e) => {
+      const r = e.reason as { message?: string } | undefined;
+      console.log(`UNHANDLED REJECTION: ${r?.message ?? String(e.reason)}`);
+    });
+  });
+  page.on('console', (m) => {
+    if (m.text().startsWith('UNHANDLED REJECTION: ')) seen.push(m.text());
+  });
+  page.on('pageerror', (e) => {
+    // Recorded with its parts, so a failure says why it was not the WebKit log line above.
+    if (!isWebkitFetchLog(e)) {
+      seen.push(
+        `pageerror: name=${JSON.stringify(e.name)} message=${JSON.stringify(e.message)} stack=${e.stack ? 'yes' : 'none'}`,
+      );
+    }
+  });
   return seen;
 }
 
@@ -85,7 +119,7 @@ test('from the landing to a finished sweep on the keyboard alone, with reduced m
   test.setTimeout(300_000);
   const context = await browser.newContext({ reducedMotion: 'reduce' });
   const page = await context.newPage();
-  const seen = errors(page);
+  const seen = await errors(page);
   await page.goto('/');
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
 
@@ -217,7 +251,7 @@ test('@chromium Archivo swapping in over its fallback moves nothing', async ({ p
 });
 
 test('back from a claim in the console returns a live landing, and forward returns the claim', async ({ page }) => {
-  const seen = errors(page);
+  const seen = await errors(page);
   await page.addInitScript(() => {
     addEventListener('pageshow', (e) => {
       (window as unknown as { __restored: boolean }).__restored = e.persisted;
@@ -249,13 +283,13 @@ test('a second tab opened on a claim while the first is sweeping gets its own wh
   context,
 }) => {
   test.setTimeout(300_000);
-  const seen = errors(page);
+  const seen = await errors(page);
   await ready(page, '/app/');
   await page.locator('#sweep').click();
   await expect(page.locator('[data-testid=log]')).toContainText('sweeping', { timeout: 30_000 });
 
   const second = await context.newPage();
-  const seenSecond = errors(second);
+  const seenSecond = await errors(second);
   await ready(second, '/app/?claim=5');
   await expect(second.locator('#claim-select')).toHaveValue('5', { timeout: 60_000 });
   await expect(second.locator('[data-testid=claim-standing]')).toContainText(/Refuted/, { timeout: 60_000 });
