@@ -43,6 +43,9 @@ Attestcoin 프로토콜은 소스 체인에서 **어떤 트랜잭션이 일어�
 - 사건 하나가 빠진 채 봉인된 클레임: <https://utuh.vercel.app/?claim=5>
 - 이더리움 메인넷 216,000블록에 대한 거짓 "청산된 적 없음" 클레임, 청산 증명 하나로 파기됨:
   <https://utuh.vercel.app/?deployment=mainnet&claim=20>
+- 데모 영상(3분): <https://youtu.be/HwSnv3E4tzo>
+- 모든 수치를 직접 재측정: `npm run judge` — 키 없이 라이브 체인에 대해 다시 측정하고, 하나라도 더 이상
+  성립하지 않으면 0이 아닌 코드로 종료합니다. 2026-09-14 기준 23개 중 23개 성립.
 
 각 검증 기록은 Creditcoin이 직접 운영하는 오라클 대시보드에서 소스 높이별로 확인할 수 있습니다.
 이쪽에서는 쓸 수 없는 기록입니다:
@@ -53,7 +56,7 @@ Attestcoin 프로토콜은 소스 체인에서 **어떤 트랜잭션이 일어�
 - 랜딩 페이지 <https://utuh.vercel.app/> 는 두 레지스트리를 Creditcoin에서 직접 읽어 그립니다. 콘솔
   <https://utuh.vercel.app/app/> 은 백엔드도 키도 없이 브라우저에서 이더리움을 훑고 클레임을
   반박합니다.
-- 감시자 역할을 에이전트에게 — `npx utuh-mcp` (npm 및 공식 MCP 레지스트리에
+- 감시자 역할을 에이전트에게 — `npx -y utuh-mcp` (npm 및 공식 MCP 레지스트리에
   `io.github.PugarHuda/utuh-mcp`로 등재).
 - 직접 만든 컨트랙트에서 레지스트리 사용 — [INTEGRATING.md](INTEGRATING.md). 컨트랙트는 증명을
   보관하지 않고 `0x0FD2`를 호출하지도 않습니다. 불리언 하나만 읽습니다.
