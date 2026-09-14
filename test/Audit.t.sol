@@ -351,6 +351,50 @@ contract AuditTest is LifecycleFixture {
     }
 
     /// @notice A claim about the wrong event cannot settle a line, however much it proves.
+    /// @notice A repayment claim still inside its challenge window does not settle a line.
+    /// @dev Every settlement in these suites used a finalized claim, so `_applyRepayment`'s usability
+    ///      check could be deleted unnoticed — and then a claim nobody had yet had the chance to refute
+    ///      would discharge a debt. Found by gambit; see test/MUTATION.md.
+    function test_settlingWithARepaymentClaimNotYetFinalizedIsRefused() public {
+        uint256 lineId = _openLine();
+        credit.fund{value: 1 ether}();
+        vm.prank(payer);
+        credit.draw(lineId, 1 ether);
+
+        uint64[] memory at = new uint64[](1);
+        at[0] = VOL_TO + 2;
+        uint256 repay = _sealedClaim(_repayScope(), VOL_TO + 1, VOL_TO + 100, at);
+        assertEq(uint8(registry.claim(repay).status), uint8(UtuhRegistry.Status.Sealed));
+        uint256 backing = credit.backingFor(1 ether);
+
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.ClaimNotUsable.selector, repay, backing));
+        credit.settle(lineId, repay);
+    }
+
+    /// @notice Payments that settled one line cannot then underwrite the next.
+    /// @dev In this fixture, as in the deployed lender, the volume and repayment specs are the same
+    ///      class of payment, so a repayment claim is also a well-formed volume claim, over a range
+    ///      that starts exactly where the underwriting watermark allows. Marking it spent is the only
+    ///      thing that stops one set of payments both discharging a debt and opening fresh credit.
+    ///      gambit deleted that line and nothing noticed. See test/MUTATION.md.
+    function test_aRepaymentClaimCannotUnderwriteTheNextLine() public {
+        uint256 lineId = _openLine();
+        credit.fund{value: 1 ether}();
+        vm.prank(payer);
+        credit.draw(lineId, 1 ether);
+
+        uint64 from = VOL_TO + 1;
+        uint64 to = from + 200;
+        uint256 repay = _repaymentClaim(from, to);
+        credit.settle(lineId, repay);
+        assertEq(credit.underwrittenThrough(payer), from, "the claim starts where fresh history may");
+
+        uint256 clean = _cleanClaim(from, to);
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.ClaimAlreadySpent.selector, repay));
+        credit.openLine(payer, repay, _ids(clean));
+    }
+
     /// @notice A claim one subject spent underwriting their own line cannot also repay another's.
     /// @dev The spent-claim check in `_applyRepayment` sits behind the watermark, and for a single
     ///      subject the watermark always fires first: a claim spent opening a line starts before
