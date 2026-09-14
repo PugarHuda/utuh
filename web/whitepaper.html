@@ -911,9 +911,9 @@ claim 9: sealed with 3 member(s), bond 2.0 CTC
         runs is not skipped. And <code>npx utuh-mcp</code> puts the role behind the Model Context
         Protocol: version 0.4.0 on npm and in the official MCP Registry, and a one-click
         <code>utuh-mcp.mcpb</code> on GitHub release v0.4.0 &mdash; five tools, claims as
-        resources, and a confirmation demanded before the one tool that spends. A remote Streamable
-        HTTP endpoint at <code>/api/mcp</code> is on branch dev, pending merge, and not yet served in
-        production.
+        resources, and a confirmation demanded before the one tool that spends. The same server answers
+        remotely at <code>https://utuh.vercel.app/api/mcp</code> (Streamable HTTP, no key;
+        <code>refute_claim</code> returns an unsigned transaction).
       </p>
     </div>
   </section>
@@ -1254,16 +1254,15 @@ function draw(uint256 lineId, uint256 amount, uint256 repayRequired, uint64 repa
         Measured on 2026-09-14: 212 events proven into 85 claims on the two published registries,
         34 of those claims refuted by a proof of an omitted event, and 34 CTC of bond burned. The
         attestation indexer's own table of every <code>TransactionVerified</code> event the Block
-        Prover has emitted holds 142,712 rows for CC3 Testnet, and 248 of them are this project's
+        Prover has emitted holds 143,709 rows for CC3 Testnet, and 248 of them are this project's
         &mdash; 212 members, 34 refutations, 2 control bindings. Blockscout counts 376 transactions
         and 156.6M gas into the three listed contracts. <code>npm run judge</code> re-measures every
         one of these numbers against the chain, the explorer, npm and the MCP Registry with no key,
-        and exits non-zero on any that no longer holds; 25 of 25 held on branch dev, where two checks read
-        the deployed example gate, and master's 23 of 23 all held.
+        and exits non-zero on any that no longer holds; 25 of 25 held on 2026-09-14, after the production
+        deploy.
       </p>
       <p>
-        The contracts' own tests, on branch dev and pending merge (master has 193 tests and 98.08% of
-        branches): <code>forge test</code> passes 211 tests, and <code>forge coverage</code> over
+        The contracts' own tests: <code>forge test</code> passes 211 tests, and <code>forge coverage</code> over
         <code>src/</code> reaches 100% of branches (104/104) and lines (432/432). Mutation testing
         (gambit 0.2.1, 738 mutants) killed 99.1%, 730 of 737; the 7 survivors are equivalent mutants,
         each explained in <code>test/MUTATION.md</code>, and the score was 93.9% before the 38 missing
