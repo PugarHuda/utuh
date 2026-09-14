@@ -21,10 +21,9 @@ will get an answer within a week, and credit in the fix.
 - `offchain/` and `web/` — anything that builds, sweeps, proves, refutes or signs.
 - The published site — the landing page at https://utuh.vercel.app/ and the console at
   https://utuh.vercel.app/app/ — and its mirror at https://pugarhuda.github.io/utuh/.
-  The response headers the canonical host sends are set in `vercel.json` (on branch dev, pending
-  merge, Content-Security-Policy on every document included; until then production sends only Vercel's
-  default HSTS). A header missing from a response
-  there after the merge is in scope.
+  The response headers the canonical host sends are set in `vercel.json`, a Content-Security-Policy
+  on every document included, and production has served them since master deployed 9e4261f on
+  2026-09-14. A header missing from a response there is in scope.
 
 ## What is already known
 

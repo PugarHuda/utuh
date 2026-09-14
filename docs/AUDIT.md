@@ -143,7 +143,7 @@ off and four line-level suppressions each explained beside the code; `forge lint
 tests (10 fuzzed, 16 invariants — 5 on the registry, 7 on the credit contract, 4 across both in
 `test/UtuhProperties.t.sol`); halmos over the
 ordering key and the roundings, 5 of 5 checks passing (the deep rounding proof takes about five
-minutes). Line and branch coverage over `src/` are 100% (432/432 and 104/104) on 2026-09-14, on branch dev.
+minutes). Line and branch coverage over `src/` are 100% (432/432 and 104/104) on 2026-09-14.
 Mutation testing (Certora gambit 0.2.1) kills 730 of 737 mutants, 99.1%; the other 7 are equivalent,
 each argued in `test/MUTATION.md`, and a reviewer who can kill one has a finding. A 30-minute medusa
 campaign passed its 22 checks over 639,295 calls and caught both bugs planted in scratch copies of `src/`. `README.md` § What

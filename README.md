@@ -24,10 +24,10 @@ Protocol, built for BUIDL CTC 2026 Fall and deployed on Creditcoin CC3 Testnet.
   longer holds. On 2026-09-14 it printed 25 of 25 on branch dev, where two checks read the example
   gate below, and master's 23 of 23 all held.
 - **Hold the watcher role from an agent:** `npx -y utuh-mcp` — 0.4.0 on npm and in the official
-  [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp). A remote URL for
-  clients that cannot run a command is on branch dev, pending merge ([below](#the-watcher-as-an-mcp-server-and-why-an-agent-can-hold-the-role)).
+  [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp). For clients that
+  cannot run a command, the same server answers at `https://utuh.vercel.app/api/mcp` ([below](#the-watcher-as-an-mcp-server-and-why-an-agent-can-hold-the-role)).
 - **Measured:** 211 Foundry tests with 16 invariants, 100% line and branch coverage and 99.1% of 737
-  mutants killed (on branch dev, pending merge) · Slither 0 findings · halmos 5 of 5 · every contract verified on Blockscout and matched on Sourcify · 248
+  mutants killed · Slither 0 findings · halmos 5 of 5 · every contract verified on Blockscout and matched on Sourcify · 248
   `TransactionVerified` events on CC3's own indexer.
 - **Demo video (3 min):** https://youtu.be/HwSnv3E4tzo · **Whitepaper:** [PDF](https://utuh.vercel.app/whitepaper.pdf), from [`web/whitepaper.html`](web/whitepaper.html)
   · **Deck:** [`web/deck.pdf`](web/deck.pdf)
@@ -704,7 +704,7 @@ Desktop's one-click install. In 0.4.0 every tool answers with `structuredContent
 result rather than a thrown exception. 0.3.0 — five tools, one prompt, the resources — was what
 npm served for most of that day, and the earlier releases stay installable by version.
 
-**A URL instead of `npx` — on branch dev, pending merge.** Claude.ai connectors, ChatGPT and most
+**A URL instead of `npx`.** Claude.ai connectors, ChatGPT and most
 hosted agents take a remote MCP URL and cannot run a local command. `api/mcp.ts` (3241629) serves
 the same `createServer` over Streamable HTTP, stateless, with every tool, resource and prompt
 defined once in `offchain/mcp.ts`. It holds no key. Over HTTP, `refute_claim` never sends: it
@@ -713,9 +713,10 @@ for the caller's own wallet to sign. `npm run mcp:http-test` passes 33 of 33 aga
 function locally, where the same sweep now has to finish complete under the default budget, and it
 passed 30 of 30 against a non-production preview, before that check was added. A 216,002-block
 mainnet sweep took 17.0 s from a local machine and 8.1 s from the CI runner, both against a preview,
-and 15.4–17.8 s over five local runs of the built function. The stdio suite stays at 66 of 66. The planned
-address is `https://utuh.vercel.app/api/mcp`. It is **not live**: production deploys from master
-and answered 404 there on 2026-09-14. `server.json` lists it beside the npm package for the next
+and 15.4–17.8 s over five local runs of the built function. The stdio suite stays at 66 of 66. It is live at
+`https://utuh.vercel.app/api/mcp`: on 2026-09-14, after master deployed, `initialize` answered 200
+from server `utuh` 0.4.0, and `tools/list` returned `tally`, `list_claims`, `sweep_claim`,
+`refute_claim` and `audit_attestors`. `server.json` lists it beside the npm package for the next
 tagged registry publish (d2265bd).
 
 Listed in the official [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp)
@@ -818,7 +819,7 @@ which the daily CI probe caught. So the page's reads fail over to Blockscout's `
 the same chain, the one second way onto CC3 that exists; its batch ceiling and burst rationing were
 measured before being coded around (`web/chain.ts` has the numbers).
 
-**On branch dev, pending merge:** the scripts fail over the same way (e726fd8). In node,
+The scripts fail over the same way (e726fd8). In node,
 `eth_call`, `eth_getLogs` and `eth_blockNumber` retry against the proxy when the primary does not
 answer, and writes and reverts never retry. The proxy was measured before it was trusted: it takes
 5-call batches and answers 413 to six, rejects the `finalized` tag the SDK reads ChainInfo at, and
@@ -942,7 +943,7 @@ live chain, and asks its host for nothing but its `index.html`, `main.js`, `styl
 they use. A GitHub Actions workflow builds it from each commit's own artifacts, so the ABI the
 page carries is the ABI the contracts were compiled with.
 
-**On branch dev, pending merge:** `vercel.json` makes the canonical host send HSTS,
+`vercel.json` makes the canonical host send HSTS,
 `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, a
 `Permissions-Policy` that denies camera, microphone and geolocation, `X-Frame-Options: DENY`. The page now fits a strict
 `Content-Security-Policy` (210d727): the static build bakes its record into a JSON data block, so the
@@ -974,9 +975,9 @@ need not be a person, leaving nothing at its own URL for a machine to read, is a
 a screenshot. `static.spec.ts` checks that every tool it advertises is one the server actually has,
 and that the package it points at is really published under the name it gives.
 
-**On branch dev, pending merge (adae297):** the build also writes `llms-full.txt`, this README and
+The build also writes [`llms-full.txt`](https://utuh.vercel.app/llms-full.txt) (adae297), this README and
 every `docs/*.md` in one file, for an agent that wants the whole argument without following links.
-And the landing's "Check it yourself" section (`/#check`, where the hero's "Check every claim
+And the landing's ["Check it yourself"](https://utuh.vercel.app/#check) section (`/#check`, where the hero's "Check every claim
 yourself" link points) replaces "On the record" and keeps its sentence about who has used this. It
 lists each contract with its Blockscout page, Sourcify full match and role; the claim 5 and claim
 20 refutation transactions and their refuter; the oracle dashboard; the live count of refuted claims
@@ -1017,7 +1018,7 @@ provenance attached. With `UTUH_LIVE_UI=1` a further test connects a real wallet
 that is genuinely short, and refutes it — a real transaction, verified by the real precompile,
 slashing a real bond.
 
-**On branch dev, pending merge (b6194c2):** the suites run as three Playwright projects, Chromium,
+The suites run as three Playwright projects (b6194c2), Chromium,
 Firefox and WebKit, and `ci.yml` is set to run all three on every push to master and dev, on pull requests and
 daily. CI run 34805675016 on 9e4261f (2026-09-14, against a local static server) passed with every
 job green: 272 browser tests passed across the three engines, 33 were skipped, and 1 was flaky. The
@@ -1481,7 +1482,7 @@ exists to `openLine`, `settle` and `cure`, and after every move it checks four p
 suite can check alone: bonds are conserved, no line exceeds ten times the enforceable loss behind
 it, no refuted claim backs a line, and the watermarks only advance. It also walks every move once,
 so the harness cannot pass vacuously. The same four are properties in `test/medusa/UtuhProperties.sol`
-for the medusa fuzzer, and on branch dev, pending merge, a 30-minute medusa 1.5.1 campaign (`medusa fuzz --config
+for the medusa fuzzer, and a 30-minute medusa 1.5.1 campaign (`medusa fuzz --config
 test/medusa/medusa.json --timeout 1800 --workers 3`) passed all 22 checks, the 4 properties and 18
 assertion tests, over 639,295 calls and 6,391 sequences, reaching 2,730 branches. They were also
 checked against bugs planted on purpose in scratch copies of `src/`, never committed: medusa caught
@@ -1490,7 +1491,7 @@ both, shrunk to 7 and 16 calls. `isUsable` without its Finalized check broke
 refuter broke `property_bondsAreConserved`.
 
 CI also refuses a push that drops line coverage under 90% or branch coverage under 70%; they read
-100% and 100% on 2026-09-14 on branch dev, and the table below is those numbers. The floors stay where they
+100% and 100% on 2026-09-14, and the table below is those numbers. The floors stay where they
 are as regression guards, not as a description of the coverage.
 
 The branch floor was added the day it was needed. Lines had been the only gate, and lines are easy
@@ -1555,7 +1556,7 @@ identical, measured — and the contracts already verified on Blockscout were bu
 tree that has this line in it.
 
 `forge coverage --no-match-test invariant --no-match-coverage "test|script" --report summary` — the
-CI command, forge 1.8.0 — read this on 2026-09-14 on branch dev, after the mutation pass below (the two
+CI command, forge 1.8.0 — read this on 2026-09-14, after the mutation pass below (the two
 interface files are left out of the rows but counted in forge's total: they declare the precompile ABIs
 and hold no logic):
 
@@ -1657,7 +1658,7 @@ property the solver could not decide — that `backingFor` never overshoots by m
 written down as undecided in `CreditRounding.symbolic.t.sol` and left to the fuzzer, rather than
 quietly dropped.
 
-**Mutation testing, on branch dev, pending merge.** Certora gambit 0.2.1 wrote 738 mutants of
+**Mutation testing.** Certora gambit 0.2.1 wrote 738 mutants of
 `UtuhRegistry`, `UtuhCredit` and `EventScope` (243, 410 and 85; one did not compile). Against the
 suite as it stood that morning, 692 of 737 died, 93.9%. Each of the 45 survivors was either a test
 that did not assert enough or a mutant no execution can tell apart from the original. The 38 of
@@ -1715,7 +1716,7 @@ script: it exercises the entire proving path through `eth_call`, so an empty wal
 | `find_highest_attested_before` on `0x0FD3`       | the newest settled attestation — where a claim's range ends                      |
 | `find_lowest_attested_after` on `0x0FD3`         | the height a not-yet-provable event becomes provable at                          |
 | `get_latest_checkpoint_height_and_hash`          | how far behind the settled view is, which only checkpoints answer                |
-| `get_checkpoint_for_height` on `0x0FD3`          | confirming a reported checkpoint is one, by digest; on dev, pending merge, also classifying a claim's end as checkpointed, attested only or unattested (`npm run doctor`) |
+| `get_checkpoint_for_height` on `0x0FD3`          | confirming a reported checkpoint is one, by digest; also classifying a claim's end as checkpointed, attested only or unattested (`npm run doctor`) |
 | `get_attestation_height_for_digest` on `0x0FD3`  | the leg that checks the attestation indexer against the chain itself             |
 | `PrecompileChainInfoProvider`                    | waiting for attestation without asking a hosted service                          |
 | `RawProofBuilder` over source RPCs               | proofs built locally when the hosted Proof Builder is down                      |
@@ -1862,7 +1863,7 @@ check is `appendBatch` `0x5ccfb529…25fb25`, three rows there and three members
   (35×). What remains is the endpoint's own latency on one block-with-receipts call and the
   continuity blocks. Size a challenge window for the slow path, and measure it for your own
   endpoints with `npm run provers` first.
-  **On branch dev, pending merge:** `npm run provers -- --sample N` (294cb04) takes the newest N
+  `npm run provers -- --sample N` (294cb04) takes the newest N
   members already in the published claims, proves each with both builders, compares every field
   (the endpoint digest, every continuity root, height, transaction bytes, Merkle root, every sibling,
   the log index), and exits 1 on any byte of difference or on a member either builder could not
