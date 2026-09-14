@@ -709,8 +709,11 @@ hosted agents take a remote MCP URL and cannot run a local command. `api/mcp.ts`
 the same `createServer` over Streamable HTTP, stateless, with every tool, resource and prompt
 defined once in `offchain/mcp.ts`. It holds no key. Over HTTP, `refute_claim` never sends: it
 returns the unsigned transaction, whose calldata decodes to `refute(claimId, proof, continuity)`,
-for the caller's own wallet to sign. `npm run mcp:http-test` passes 32 of 32 locally and 30 of 30
-against a non-production preview, where a 216,002-block mainnet sweep answered in 17 s. The planned
+for the caller's own wallet to sign. `npm run mcp:http-test` passes 33 of 33 against the built
+function locally, where the same sweep now has to finish complete under the default budget, and it
+passed 30 of 30 against a non-production preview, before that check was added. A 216,002-block
+mainnet sweep took 17.0 s from a local machine and 8.1 s from the CI runner, both against a preview,
+and 15.4–17.8 s over five local runs of the built function. The stdio suite stays at 66 of 66. The planned
 address is `https://utuh.vercel.app/api/mcp`. It is **not live**: production deploys from master
 and answered 404 there on 2026-09-14. `server.json` lists it beside the npm package for the next
 tagged registry publish (d2265bd).
@@ -949,7 +952,11 @@ falls back to Blockscout. `vercel.json` sends that policy on every document (40c
 on PDFs, images, fonts, scripts or styles: `default-src 'none'`; scripts only from the site plus the
 one hash, which matches the committed landing page; styles and fonts only from the site; images from
 the site and `data:`; `connect-src` limited to the twelve origins the page calls; `base-uri`,
-`form-action`, `object-src` and `frame-ancestors` all `'none'`; no `'unsafe-inline'` or `'unsafe-eval'`. The production deploy in `pages.yml` uploads
+`form-action`, `object-src` and `frame-ancestors` all `'none'`; no `'unsafe-inline'` or `'unsafe-eval'`.
+Measured on a dev preview built from ce47503: `/` and `/app/?claim=5` answer with that policy byte for
+byte plus the five headers; `llms.txt`, `security.txt`, `whitepaper.pdf` and `main.js` carry the five
+and no CSP, as scoped; and in Chromium the landing loaded, `/?claim=5` forwarded to the console, and
+a sweep completed with zero `securitypolicyviolation` events. The production deploy in `pages.yml` uploads
 `vercel.json` beside the build and compares the live headers with it. Production today, deployed from master, sends only the HSTS header Vercel adds itself.
 
 More files are written beside those and never requested by the page, because they are for other
@@ -1830,9 +1837,10 @@ check is `appendBatch` `0x5ccfb529…25fb25`, three rows there and three members
   350.2 s local (`--sample 1`, exit 0, 2026-09-14). Sepolia claim 13's member 11582696/107/0 came
   back identical in 5.0 s hosted and 400.1 s local. The SDK fetches all 100 continuity blocks whole, with
   receipts and a hardcoded 500 ms pause, and Sepolia endpoints refuse some receipts as too large.
-  The nightly `live precompile` job in `ci.yml` runs `--sample 1` (9c7fbbe), on the daily schedule
-  and on manual dispatch: one member, because a busy block's local proof has measured 400 s, and a
-  25-minute step timeout just above the script's deadline, so a hang fails rather than stalls.
+  The nightly `live precompile` job in `ci.yml` runs `--sample 2` (93fe9de) on the daily schedule and
+  on manual dispatch. That proves the newest mainnet member and then a Sepolia one, so both source
+  chains are compared byte for byte every night. The step timeout is 45 minutes, two 20-minute
+  deadlines plus five, so a hang fails the job instead of stalling it.
 - A claimant watching the mempool can front-run an incoming refutation with their own, keeping half
   the bond and denying the watcher their reward. This is priced rather than prevented: the
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —
