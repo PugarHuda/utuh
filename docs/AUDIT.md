@@ -56,6 +56,7 @@ symbolic suites over every input:
 | `underwrittenThrough` and `settledThrough` only advance | `test/CreditInvariant.t.sol` |
 | ordering key is injective and chronological over all `(height, txIndex, logIndex)` | `EventScopeKey.symbolic.t.sol`, halmos |
 | backing is never short of the limit; every draw owes something | `CreditRounding.symbolic.t.sol`, halmos |
+| with both contracts driven at once: bonds are conserved, no line exceeds ten times the enforceable loss behind it, no refuted claim backs a line, the watermarks only advance | `test/UtuhProperties.t.sol` (forge invariants); the same four as medusa properties in `test/medusa/UtuhProperties.sol` |
 
 Properties that are *not* invariants and a reviewer should not expect: completeness of a finalized
 claim (economic, not cryptographic — see Known limits), and refuter income (front-runnable by the
@@ -130,8 +131,9 @@ and `proveControl`. There are no `unchecked` blocks in `src/`.
 ## What the tools already say
 
 `npm run check`: Slither at 0 findings across 10 contracts and 97 detectors, with five detectors
-off and four line-level suppressions each explained beside the code; `forge lint`; 193 Foundry
-tests (10 fuzzed, 12 invariants — 5 on the registry, 7 on the credit contract); halmos over the
+off and four line-level suppressions each explained beside the code; `forge lint`; 195 Foundry
+tests (10 fuzzed, 16 invariants — 5 on the registry, 7 on the credit contract, 4 across both in
+`test/UtuhProperties.t.sol`); halmos over the
 ordering key and the roundings, 5 of 5 checks passing (the deep rounding proof takes about five
 minutes). Branch coverage over `src/` is 98.08%, lines 99.77%, on 2026-09-13. `README.md` § What
 the tools say lists every suppression and why. A reviewer disagreeing with a suppression is a
@@ -142,7 +144,7 @@ finding.
 ```
 git clone https://github.com/PugarHuda/utuh && cd utuh
 npm ci && forge build
-forge test            # 193 (`forge test --list` counts 203 functions; the summary counts each invariant contract once), no network, no key
+forge test            # 195 (`forge test --list` counts 208 functions; the summary counts each invariant contract once), no network, no key
 npm run puretest      # 93 assertions on the classifiers, payload reader and watcher rules, no key
 npm run judge         # every deployed claim measured live, no key
 npm run livetest      # the full live suite against CC3 — needs a funded testnet key

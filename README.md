@@ -23,8 +23,9 @@ Protocol, built for BUIDL CTC 2026 Fall and deployed on Creditcoin CC3 Testnet.
   repository and the submission quote against the live chain and exits non-zero on any that no
   longer holds. On 2026-09-14, 23 of 23 held.
 - **Hold the watcher role from an agent:** `npx -y utuh-mcp` — 0.4.0 on npm and in the official
-  [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp).
-- **Measured:** 193 Foundry tests with 12 invariants · 98.08% branch coverage · Slither 0 findings ·
+  [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp). A remote URL for
+  clients that cannot run a command is on branch dev, pending merge ([below](#the-watcher-as-an-mcp-server-and-why-an-agent-can-hold-the-role)).
+- **Measured:** 195 Foundry tests with 16 invariants · 98.08% branch coverage · Slither 0 findings ·
   halmos 5 of 5 · every contract verified on Blockscout and matched on Sourcify · 248
   `TransactionVerified` events on CC3's own indexer.
 - **Demo video (3 min):** https://youtu.be/HwSnv3E4tzo · **Whitepaper:** [PDF](https://utuh.vercel.app/whitepaper.pdf), from [`web/whitepaper.html`](web/whitepaper.html)
@@ -692,6 +693,17 @@ Desktop's one-click install. In 0.4.0 every tool answers with `structuredContent
 result rather than a thrown exception. 0.3.0 — five tools, one prompt, the resources — was what
 npm served for most of that day, and the earlier releases stay installable by version.
 
+**A URL instead of `npx` — on branch dev, pending merge.** Claude.ai connectors, ChatGPT and most
+hosted agents take a remote MCP URL and cannot run a local command. `api/mcp.ts` (3241629) serves
+the same `createServer` over Streamable HTTP, stateless, with every tool, resource and prompt
+defined once in `offchain/mcp.ts`. It holds no key. Over HTTP, `refute_claim` never sends: it
+returns the unsigned transaction, whose calldata decodes to `refute(claimId, proof, continuity)`,
+for the caller's own wallet to sign. `npm run mcp:http-test` passes 32 of 32 locally and 30 of 30
+against a non-production preview, where a 216,002-block mainnet sweep answered in 17 s. The planned
+address is `https://utuh.vercel.app/api/mcp`. It is **not live**: production deploys from master
+and answered 404 there on 2026-09-14. `server.json` lists it beside the npm package for the next
+tagged registry publish (d2265bd).
+
 Listed in the official [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp)
 as `io.github.PugarHuda/utuh-mcp`, so a client that does not know the package name can still find
 it. The registry hosts metadata only; it proves ownership by fetching the published tarball and
@@ -1111,8 +1123,8 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 193 forge tests, twelve of them invariants (`forge test --list` counts
-                            # 203 functions, one per invariant; the summary counts each invariant contract once)
+npm run test                # 195 forge tests, sixteen of them invariants (`forge test --list` counts
+                            # 208 functions, one per invariant; the summary counts each invariant contract once)
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -1371,9 +1383,9 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-193 tests, 10 of them fuzzed and 12 of them invariants over random sequences. Everything below runs
-with `forge test`, no key and no network. (`forge test --list` counts 203 functions; the run summary
-prints 193 because forge reports each invariant contract as a single test.)
+195 tests, 10 of them fuzzed and 16 of them invariants over random sequences. Everything below runs
+with `forge test`, no key and no network. (`forge test --list` counts 208 functions; the run summary
+prints 195 because forge reports each invariant contract as a single test.)
 
 Most of them cover the part that runs in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
@@ -1411,6 +1423,12 @@ exactly `available`; `funded − withdrawn == available + Σ drawn`; `drawn <= l
 one `Active` line per subject at most, and `activeLineOf` names it; `defaultsOf` equals the count
 of `Defaulted` lines; a drawn line has a deadline and owes something while an undrawn one has
 neither; and the two watermarks only advance.
+`test/UtuhProperties.t.sol` drives both contracts at once, so the borrower may offer any claim that
+exists to `openLine`, `settle` and `cure`, and after every move it checks four properties neither
+suite can check alone: bonds are conserved, no line exceeds ten times the enforceable loss behind
+it, no refuted claim backs a line, and the watermarks only advance. It also walks every move once,
+so the harness cannot pass vacuously. The same four are properties in `test/medusa/UtuhProperties.sol`
+for the medusa fuzzer.
 
 CI also refuses a push that drops line coverage under 90% or branch coverage under 70%; they read
 99.77% and 98.08% on 2026-09-13, and the table below is those numbers. The floors stay where they
@@ -1525,7 +1543,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 193 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 195 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings** across 10 contracts and 97 detectors, which is only worth stating
 alongside what it was allowed to look for.
 
