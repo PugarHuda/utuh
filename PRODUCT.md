@@ -96,7 +96,7 @@ make it impossible. That distinction is load-bearing and must never be overstate
 - A live landing page at utuh.vercel.app and the console at utuh.vercel.app/app/, mirrored at
   pugarhuda.github.io/utuh, both built from each commit's own artifacts by the same workflow.
 - Real measurements produced by the repo, not asserted: `npm run gas` fits a cost model over 56
-  real appends; symbolic proofs of two roundings; 195 forge tests; a nightly job that proves real
+  real appends; symbolic proofs of two roundings; 197 forge tests; a nightly job that proves real
   mainnet transactions against the live precompile.
 - Public third-party evidence of usage: CC3's own dashboard lists every `verifyAndEmit`.
 - **Absences that must never be fabricated:** no users, no testimonials, no TVL, no partnerships,

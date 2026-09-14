@@ -131,7 +131,7 @@ and `proveControl`. There are no `unchecked` blocks in `src/`.
 ## What the tools already say
 
 `npm run check`: Slither at 0 findings across 10 contracts and 97 detectors, with five detectors
-off and four line-level suppressions each explained beside the code; `forge lint`; 195 Foundry
+off and four line-level suppressions each explained beside the code; `forge lint`; 197 Foundry
 tests (10 fuzzed, 16 invariants — 5 on the registry, 7 on the credit contract, 4 across both in
 `test/UtuhProperties.t.sol`); halmos over the
 ordering key and the roundings, 5 of 5 checks passing (the deep rounding proof takes about five
@@ -144,7 +144,7 @@ finding.
 ```
 git clone https://github.com/PugarHuda/utuh && cd utuh
 npm ci && forge build
-forge test            # 195 (`forge test --list` counts 208 functions; the summary counts each invariant contract once), no network, no key
+forge test            # 197 (`forge test --list` counts 210 functions; the summary counts each invariant contract once), no network, no key
 npm run puretest      # 93 assertions on the classifiers, payload reader and watcher rules, no key
 npm run judge         # every deployed claim measured live, no key
 npm run livetest      # the full live suite against CC3 — needs a funded testnet key

@@ -26,7 +26,7 @@ Protocol, built for BUIDL CTC 2026 Fall and deployed on Creditcoin CC3 Testnet.
 - **Hold the watcher role from an agent:** `npx -y utuh-mcp` — 0.4.0 on npm and in the official
   [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp). A remote URL for
   clients that cannot run a command is on branch dev, pending merge ([below](#the-watcher-as-an-mcp-server-and-why-an-agent-can-hold-the-role)).
-- **Measured:** 195 Foundry tests with 16 invariants · 98.08% branch coverage · Slither 0 findings ·
+- **Measured:** 197 Foundry tests with 16 invariants · 98.08% branch coverage · Slither 0 findings ·
   halmos 5 of 5 · every contract verified on Blockscout and matched on Sourcify · 248
   `TransactionVerified` events on CC3's own indexer.
 - **Demo video (3 min):** https://youtu.be/HwSnv3E4tzo · **Whitepaper:** [PDF](https://utuh.vercel.app/whitepaper.pdf), from [`web/whitepaper.html`](web/whitepaper.html)
@@ -1001,6 +1001,12 @@ provenance attached. With `UTUH_LIVE_UI=1` a further test connects a real wallet
 that is genuinely short, and refutes it — a real transaction, verified by the real precompile,
 slashing a real bond.
 
+**On branch dev, pending merge (b6194c2):** the suites run as three Playwright projects, Chromium,
+Firefox and WebKit, and CI runs all three on every push to master and dev, on pull requests and
+daily. Firefox and WebKit skip the tests that only mean something on Chromium, and there are two
+kinds: the two slow-3G LCP and CLS tests, which throttle the network through the Chrome DevTools
+Protocol, and six screenshot comparisons whose baselines Chromium renders.
+
 ## Layout
 
 ```
@@ -1147,8 +1153,8 @@ npm run probe               # verifies real mainnet events on-chain — needs no
 
 npm run check               # everything CI runs, in one command
 npm run build               # forge build
-npm run test                # 195 forge tests, sixteen of them invariants (`forge test --list` counts
-                            # 208 functions, one per invariant; the summary counts each invariant contract once)
+npm run test                # 197 forge tests, sixteen of them invariants (`forge test --list` counts
+                            # 210 functions, one per invariant; the summary counts each invariant contract once)
 npm run lint                # forge lint over src/
 npm run fmt                 # forge fmt
 npm run format              # prettier over offchain/  (--check variant: npm run format:check)
@@ -1407,9 +1413,9 @@ enforces an absolute floor of 20 blocks regardless.
 
 ## On testing
 
-195 tests, 10 of them fuzzed and 16 of them invariants over random sequences. Everything below runs
-with `forge test`, no key and no network. (`forge test --list` counts 208 functions; the run summary
-prints 195 because forge reports each invariant contract as a single test.)
+197 tests, 10 of them fuzzed and 16 of them invariants over random sequences. Everything below runs
+with `forge test`, no key and no network. (`forge test --list` counts 210 functions; the run summary
+prints 197 because forge reports each invariant contract as a single test.)
 
 Most of them cover the part that runs in a plain EVM: ordering and scope matching
 in `EventScope.t.sol`; in `SettlementLedger.t.sol` what the source-chain ledger will and will not
@@ -1452,7 +1458,10 @@ exists to `openLine`, `settle` and `cure`, and after every move it checks four p
 suite can check alone: bonds are conserved, no line exceeds ten times the enforceable loss behind
 it, no refuted claim backs a line, and the watermarks only advance. It also walks every move once,
 so the harness cannot pass vacuously. The same four are properties in `test/medusa/UtuhProperties.sol`
-for the medusa fuzzer.
+for the medusa fuzzer, and they were checked against bugs planted on purpose in scratch copies of
+`src/`, never committed: medusa caught both. `isUsable` without its Finalized check broke
+`property_noRefutedClaimBacksALine`, and counting the whole bond as burned while still paying the
+refuter broke `property_bondsAreConserved`.
 
 CI also refuses a push that drops line coverage under 90% or branch coverage under 70%; they read
 99.77% and 98.08% on 2026-09-13, and the table below is those numbers. The floors stay where they
@@ -1567,7 +1576,7 @@ a fixture that rots fails the suite for reasons that have nothing to do with the
 
 ## What the tools say
 
-`npm run check` is what CI runs: `forge fmt --check`, the 195 tests, `tsc --noEmit`, and Slither.
+`npm run check` is what CI runs: `forge fmt --check`, the 197 tests, `tsc --noEmit`, and Slither.
 Slither reports **0 findings** across 10 contracts and 97 detectors, which is only worth stating
 alongside what it was allowed to look for.
 
@@ -1819,7 +1828,9 @@ check is `appendBatch` `0x5ccfb529…25fb25`, three rows there and three members
   path is minutes on a busy block, not seconds: Sepolia claim 13's member 11582696/107/0 came back
   identical in 5.0 s hosted and 400.1 s local. The SDK fetches all 100 continuity blocks whole, with
   receipts and a hardcoded 500 ms pause, and Sepolia endpoints refuse some receipts as too large.
-  CI does not run it yet.
+  The nightly `live precompile` job in `ci.yml` runs `--sample 1` (9c7fbbe), on the daily schedule
+  and on manual dispatch: one member, because a busy block's local proof has measured 400 s, and a
+  25-minute step timeout just above the script's deadline, so a hang fails rather than stalls.
 - A claimant watching the mempool can front-run an incoming refutation with their own, keeping half
   the bond and denying the watcher their reward. This is priced rather than prevented: the
   guarantee is `enforceableLoss`, not the bond. What it does not fix is the watcher's incentive —

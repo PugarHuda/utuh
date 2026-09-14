@@ -96,7 +96,7 @@ against them. The runbook is [MAINNET.md](MAINNET.md): measured 2026-09-10, thre
 
 Money at rest in a bond contract is a different risk class from a demo, and no amount of
 self-testing substitutes for someone whose job is to break it. Slither at zero findings across 97
-detectors, 195 Foundry tests, symbolic proofs over every input rather than 256 samples, and an
+detectors, 197 Foundry tests, symbolic proofs over every input rather than 256 samples, and an
 invariant suite over random sequences are the floor, not the ceiling. The CertiK credits attached
 to this hackathon's prizes are the start of it.
 
