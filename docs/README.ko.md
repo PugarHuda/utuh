@@ -50,7 +50,8 @@ Attestcoin 프로토콜은 소스 체인에서 **어떤 트랜잭션이 일어�
 
 ## 참여 방법
 
-- 콘솔 — <https://utuh.vercel.app/> — 백엔드도 키도 없이 브라우저에서 이더리움을 훑고 클레임을
+- 랜딩 페이지 <https://utuh.vercel.app/> 는 두 레지스트리를 Creditcoin에서 직접 읽어 그립니다. 콘솔
+  <https://utuh.vercel.app/app/> 은 백엔드도 키도 없이 브라우저에서 이더리움을 훑고 클레임을
   반박합니다.
 - 감시자 역할을 에이전트에게 — `npx utuh-mcp` (npm 및 공식 MCP 레지스트리에
   `io.github.PugarHuda/utuh-mcp`로 등재).

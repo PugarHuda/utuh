@@ -14,12 +14,15 @@ Built for BUIDL CTC 2026 Fall on Creditcoin.
 **Whitepaper (PDF):** https://utuh.vercel.app/whitepaper.pdf — 15 pages, rendered from
 [`web/whitepaper.html`](web/whitepaper.html). **Deck:** [`web/deck.pdf`](web/deck.pdf), 12 slides.
 
-Deployed and verified on Creditcoin CC3 Testnet. **[The console is live at
-utuh.vercel.app](https://utuh.vercel.app/)** — it reads the chain from your own
-browser, lets anyone sweep Ethereum and break an incomplete claim, and lets a borrower be
-underwritten end to end without cloning anything. `npm run web` runs the same page locally.
+Deployed and verified on Creditcoin CC3 Testnet. **[utuh.vercel.app](https://utuh.vercel.app/)**
+is live: the landing page reads both registries from Creditcoin as it draws — the two refuted
+claims with their block-range strips, the tally (proven, sealed, broken, burned), the deployed
+addresses — and the console at **[utuh.vercel.app/app/](https://utuh.vercel.app/app/)** reads the
+chain from your own browser, lets anyone sweep Ethereum and break an incomplete claim, and lets a
+borrower be underwritten end to end without cloning anything. `npm run web` serves both locally.
 
-Two claims, live, one click each — the console renders both from Creditcoin as the page draws:
+Two claims, live, one click each — the landing page reads both refuted claims from Creditcoin as
+it draws, and each link opens the console on the claim with its verdict first:
 a claim **[sealed one event short and broken from a browser](https://utuh.vercel.app/?claim=5)**,
 and a false _"never liquidated"_ claim over 216,000 blocks of Ethereum mainnet
 **[refuted by one liquidation proof](https://utuh.vercel.app/?deployment=mainnet&claim=20)**.
@@ -30,9 +33,8 @@ Two things a reader with a clone and no key can check first. `npm run judge` re-
 number this repository and the submission quote — the contracts and their verification, the tally,
 both linked claims, the explorer counters, npm, the MCP Registry, the published build, the sixteen
 protocol entry points, the test and commit counts — and exits non-zero on any that no longer
-holds; on the evening of 2026-09-13 it measured 23 claims and 21 held — the two that did not are
-the npm and MCP Registry lines, because master declares `utuh-mcp` 0.4.0 and npm serves 0.3.0
-until it is published. And a bond here stands behind a specific line, not behind
+holds; late on 2026-09-13, after `utuh-mcp` 0.4.0 was published, 23 of 23 held. And a bond here
+stands behind a specific line, not behind
 nothing: `UtuhCredit.openLine` reaches a claim only through `UtuhRegistry.isUsable(claimId,
 exposure)`, the finalized claim is spent by the line it opens, `underwrittenThrough` consumes the
 history range, and the limit is capped at ten times the enforceable loss. Exposure is gated by the
@@ -626,13 +628,16 @@ That entry is Claude Desktop's `claude_desktop_config.json` and Cursor's `.curso
 Code's `.vscode/mcp.json` wants `{ "servers": { "utuh": { "type": "stdio", "command": "npx",
 "args": ["-y", "utuh-mcp"] } } }`, and Claude Code is `claude mcp add utuh -- npx -y utuh-mcp`.
 Add `"env": { "PRIVATE_KEY": "0x…" }` to the entry only if `refute_claim` should be able to send;
-the other four tools spend nothing. What npm serves today is **0.3.0** — five tools, one prompt,
-the resources — verified from a clean cache on 2026-09-13. Master is 0.4.0 and ships with the next
-`npm publish` (`dist-mcp/RELEASE.md`): every tool answers with `structuredContent` against an
+the other four tools spend nothing. npm serves **0.4.0** (published 2026-09-13; a clean-cache
+`npx -y utuh-mcp` reports it, with logging and completions capabilities and `instructions`), and
+the same server is attached to the GitHub release
+[`v0.4.0`](https://github.com/PugarHuda/utuh/releases/tag/v0.4.0) as `utuh-mcp.mcpb` for Claude
+Desktop's one-click install. In 0.4.0 every tool answers with `structuredContent` against an
 `outputSchema`, sweeps and audits narrate progress over `notifications/progress` and log over
 `notifications/message`, argument completion works for the resource templates, the server sends
 `instructions` at `initialize`, and a missing claim or a bad cursor comes back as an `isError`
-result rather than a thrown exception.
+result rather than a thrown exception. 0.3.0 — five tools, one prompt, the resources — was what
+npm served for most of that day, and the earlier releases stay installable by version.
 
 Listed in the official [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.PugarHuda/utuh-mcp)
 as `io.github.PugarHuda/utuh-mcp`, so a client that does not know the package name can still find
@@ -685,18 +690,28 @@ progress, and one such line in the middle of a JSON-RPC stream is a corrupted se
 ## The console, and why the watcher belongs in a browser
 
 ```bash
-npm run web     # http://127.0.0.1:5173
+npm run web     # landing page on http://127.0.0.1:5173, console at /app/
 ```
 
-Everything on that page is read from CC3 Testnet as the page draws it. No server holds a key, no
+Two pages, one set of reads. The landing page at `/` is what a visitor meets: the two refuted
+claims as working-paper cards with a strip of their block range, the tally, "sweep claim N
+yourself", how it works in three steps, the three roles, `npx -y utuh-mcp`, a legend of the marks,
+the deployed addresses, and links to the whitepaper, the deck, GitHub, npm, Creditcoin's
+verification dashboard and `llms.txt`. The console at `/app/` is the tool — Watch, Claims, Borrow,
+Audit the attestors, Credit and Deployment, with a switch between the two published deployments.
+Both read through `web/reads.ts`, so the two pages cannot disagree about what the registries hold.
+The visual world, in [DESIGN.md](DESIGN.md), is the auditor's working paper: paper and ink, red
+pencil for exceptions, blue for links, light and dark.
+
+Everything on either page is read from CC3 Testnet as it draws. No server holds a key, no
 indexer stands in between, and there is no seeded state to fall back on — if the chain is
 unreachable the page says so rather than showing the last thing it knew. The ABIs come out of
 forge's own artifacts, so a field the contract stopped having is a load failure rather than a
 plausible-looking zero.
 
-It shows four things: what Creditcoin says it can attest, read straight off `0x0FD3`; every claim
-in the registry with its bond, its enforceable loss and its remaining window; the lender's policy
-and every line; and a watcher.
+The console shows four things: what Creditcoin says it can attest, read straight off `0x0FD3`;
+every claim in the registry with its bond, its enforceable loss and its remaining window; the
+lender's policy and every line; and a watcher.
 
 The watcher is the part that had to exist. Every guarantee here rests on one sentence — _anyone may
 refute a claim by proving one in-scope event it left out_ — and until something is actually
@@ -739,9 +754,12 @@ Aave repayments, both default endpoints — 320 s at the 10,000-block chunk, 582
 `eth_getLogs` calls are not where the time goes; the per-event receipt lookups that pin each log to
 its position inside its transaction are.
 
-A claim has an address. `?claim=N` opens claim N on arrival — what a post, a document or a
+A claim has an address. `/app/?claim=N` opens claim N on arrival — what a post, a document or a
 refuter's message points at — reaching past the first page if it has to, and the address bar
-follows the picker, so the URL always says what is on screen. And a visitor with two wallets
+follows the picker, so the URL always says what is on screen. `/?claim=N` on the landing page
+forwards to the console, so every link this repository ever published still lands. A linked claim
+opens with its verdict first: _Refuted by one proof of an in-scope event at source block … — 1.0
+CTC of the 2.0 CTC bond paid to …, the rest burned._ And a visitor with two wallets
 installed is asked which: the page listens for EIP-6963 announcements and names every wallet that
 answers, instead of taking whichever one grabbed `window.ethereum` last. A wallet that only does
 the old thing still connects.
@@ -966,7 +984,11 @@ offchain/
   lib/revert.ts             what a call reverted with, by the contract's own name — CC3's RPC hides
                             the data inside the message text
 web/
-  index.html                the console — everything on it is read from CC3 as the page draws it
+  index.html                the landing page — both registries read live: the two refuted claims,
+                            the tally, the addresses; nothing on it is written down
+  app.html                  the console — everything on it is read from CC3 as the page draws it
+  landing.ts                the landing page's reads and the range strips, from the chain's members
+  reads.ts                  the eth_calls both pages make, so they cannot disagree about a registry
   main.ts                   panes: what Creditcoin attests, claims, the watcher, borrowing, credit
   chain.ts                  providers, ABIs out of forge's artifacts, wallet connection
   watch.ts                  the watcher in the browser, importing the daemon's own sweep
@@ -1041,7 +1063,7 @@ npm run bait                # seal a deliberately short claim for the watcher to
 npm run livetest            # 121 guards asserted against the live chain, refunds included
 npm run puretest            # 93 assertions that need no key and no chain — what CI runs
 
-npm run web                 # the console on http://127.0.0.1:5173 — read-only without a wallet
+npm run web                 # landing page on http://127.0.0.1:5173, console at /app/ — read-only without a wallet
 npm run web:build           # bundle it; the server serves ABIs straight out of out/
 npm run web:static          # the published build: four files, no server
 npm run web:pdf             # web/whitepaper.html -> whitepaper.pdf, the submitted document

@@ -67,7 +67,8 @@ test('picking a claim writes it into the address bar; switching deployments drop
 test('a claim id that this registry does not have is looked for on the other one', async ({ page }) => {
   await page.goto('/?claim=56');
   await expect(page.locator('#deployment')).toHaveValue('mainnet');
-  await expect(page.locator('#claim-select')).toHaveValue('56');
+  // The mainnet registry is the larger one, and a slow afternoon draws it in half a minute.
+  await expect(page.locator('#claim-select')).toHaveValue('56', { timeout: 60_000 });
 });
 
 test('a claim id the default registry does have is not sent elsewhere', async ({ page }) => {

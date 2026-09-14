@@ -84,6 +84,7 @@ function main(): Promise<void> {
   // slides change with the story, and refusing to publish the console over a stale deck would hold
   // the wrong thing hostage.
   copyFileSync(join(WEB, 'deck.pdf'), join(DEST, 'deck.pdf'));
+  copyFileSync(join(WEB, 'logo.png'), join(DEST, 'logo.png'));
 
   // The one webfont, self-hosted. A page whose argument is that it needs no server should not open
   // a connection to a font CDN to render its own name, so the file ships with the page. The

@@ -117,6 +117,10 @@ test('with the primary RPC down, the page reads Creditcoin through Blockscout in
   await expect(page.locator('body')).toHaveAttribute('data-state', 'ready', { timeout: 180_000 });
   await expect(page.locator('#chain-id')).toHaveText('102031');
   await expect(page.locator('#cc3-block')).toHaveText(/^[1-9]\d*$/);
+  // And the header says which route the numbers took, because every pane is slower on it and a
+  // visitor watching a spinner deserves the reason.
+  await expect(page.locator('#rpc-route')).toBeVisible();
+  await expect(page.locator('#rpc-route')).toHaveText('via Blockscout');
 });
 
 test('with Creditcoin unreachable, the page fails loudly instead of showing stale numbers', async ({ page }) => {

@@ -24,6 +24,11 @@
       content="Utuh: a completeness claim laid out as an auditor's working paper, with the omitted event circled in red."
     />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Utuh — completeness for the Attestcoin Protocol" />
+    <meta
+      name="twitter:description"
+      content="Attestcoin proves a transaction happened. It cannot prove a set is complete. Utuh bonds that assertion and lets anyone break it with one proof — and underwrites credit on it. Live on Creditcoin CC3 Testnet."
+    />
     <meta name="twitter:image" content="https://utuh.vercel.app/og.png" />
     <meta name="theme-color" content="#0f1512" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#dfe7d5" media="(prefers-color-scheme: light)" />
@@ -54,8 +59,14 @@
     -->
     <svg hidden aria-hidden="true">
       <symbol id="m-tick" viewBox="0 0 16 16"><path d="M2.5 8.5l3.5 3.5 7.5-8" /></symbol>
-      <symbol id="m-exc" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" /><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" /></symbol>
-      <symbol id="m-wait" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" /><path d="M8 4.5V8l2.5 1.5" /></symbol>
+      <symbol id="m-exc" viewBox="0 0 16 16">
+        <circle cx="8" cy="8" r="6" />
+        <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" />
+      </symbol>
+      <symbol id="m-wait" viewBox="0 0 16 16">
+        <circle cx="8" cy="8" r="6" />
+        <path d="M8 4.5V8l2.5 1.5" />
+      </symbol>
     </svg>
     <nav class="skip" aria-label="skip links">
       <a href="#sweep" data-skip="sweep">Skip to the watcher</a>
@@ -69,7 +80,14 @@
           <option value="mainnet">Mainnet-sourced — real Aave history</option>
         </select>
         <span class="chip">chain <b id="chain-id">…</b></span>
-        <span class="chip">block <b id="cc3-block">…</b></span>
+        <span class="chip"
+          >block <b id="cc3-block">…</b
+          ><span
+            id="rpc-route"
+            title="Creditcoin's own RPC did not answer from this browser; every read is going through Blockscout's proxy for the same chain"
+            >via Blockscout</span
+          ></span
+        >
         <button id="connect" class="act">connect wallet</button>
         <span id="wallet-choice" data-testid="wallet-choice"></span>
       </div>
@@ -98,23 +116,33 @@
       <div class="t"><b id="t-burned">…</b><span>bond slashed from claimants who were short</span></div>
     </section>
 
-    <p id="invitation" class="invitation" data-testid="invitation"></p>
+    <p id="invitation" class="invitation" data-testid="invitation">
+      <span class="note">Reading both registries for a claim still inside its challenge window…</span>
+    </p>
 
     <main>
       <section data-frame="1">
         <h2>Watch</h2>
         <p class="note">
-          The sweep runs in your browser, against independent public endpoints, using the same code the watcher
-          daemon runs. If it finds an in-scope event a sealed claim does not contain, one proof breaks the claim and
-          pays you half the bond. No wallet is needed to look; one is needed only to send the refutation.
+          The sweep runs in your browser, against independent public endpoints, using the same code the watcher daemon
+          runs. If it finds an in-scope event a sealed claim does not contain, one proof breaks the claim and pays you
+          half the bond. No wallet is needed to look; one is needed only to send the refutation.
         </p>
         <div class="controls">
           <select id="claim-select" data-testid="claim-select" aria-label="claim to sweep"></select>
           <button id="sweep" class="act primary" data-testid="sweep">sweep the source chain</button>
         </div>
-        <div id="claim-detail" class="body" data-testid="claim-detail"></div>
+        <div id="claim-detail" class="body" tabindex="0" data-testid="claim-detail"></div>
         <div id="refute-box" class="actions"></div>
-        <div id="log" class="log" data-testid="log" role="log" aria-live="polite" aria-atomic="false"></div>
+        <div
+          id="log"
+          class="log"
+          data-testid="log"
+          role="log"
+          tabindex="0"
+          aria-live="polite"
+          aria-atomic="false"
+        ></div>
       </section>
 
       <section data-frame="2">
@@ -124,20 +152,28 @@
           Block Prover on the way in, so it cannot be inflated; the bond is what stands behind the assertion that
           nothing was left out.
         </p>
-        <div id="registry-body" class="body">reading the registry…</div>
+        <div id="registry-body" class="body" tabindex="0">reading the registry…</div>
         <div id="actions" class="actions"></div>
         <dl class="legend" aria-label="marks used on this page">
           <div>
-            <dt><svg class="mark tick" aria-hidden="true"><use href="#m-tick" /></svg></dt>
+            <dt>
+              <svg class="mark tick" aria-hidden="true"><use href="#m-tick" /></svg>
+            </dt>
             <dd><b>Finalized.</b> Survived its challenge window in public; the bond went home.</dd>
           </div>
           <div>
-            <dt><svg class="mark wait" aria-hidden="true"><use href="#m-wait" /></svg></dt>
+            <dt>
+              <svg class="mark wait" aria-hidden="true"><use href="#m-wait" /></svg>
+            </dt>
             <dd><b>Sealed.</b> Inside its window: published, and still breakable by anyone.</dd>
           </div>
           <div>
-            <dt><svg class="mark exc" aria-hidden="true"><use href="#m-exc" /></svg></dt>
-            <dd><b>Refuted.</b> One in-scope event it left out was proven; the row is struck and stays on the schedule.</dd>
+            <dt>
+              <svg class="mark exc" aria-hidden="true"><use href="#m-exc" /></svg>
+            </dt>
+            <dd>
+              <b>Refuted.</b> One in-scope event it left out was proven; the row is struck and stays on the schedule.
+            </dd>
           </div>
           <div>
             <dt><b>W/P</b></dt>
@@ -152,7 +188,7 @@
           Nothing bridges. The history stays on Ethereum, the credit is issued in CTC on Creditcoin, repayment happens
           back on Ethereum, and only proof crosses.
         </p>
-        <div id="credit-body" class="body">reading the credit contract…</div>
+        <div id="credit-body" class="body" tabindex="0">reading the credit contract…</div>
       </section>
 
       <section data-frame="4">
@@ -161,12 +197,13 @@
           The whole underwriting, from this page: bind your Ethereum address, build the two claims, wait out their
           challenge window, open the line. Same contracts the scripts use, your wallet, real bonds.
         </p>
-        <div id="borrow-body" class="body">connect a wallet to borrow.</div>
+        <div id="borrow-body" class="body" tabindex="0">connect a wallet to borrow.</div>
         <div
           id="borrow-log"
           class="log"
           data-testid="borrow-log"
           role="log"
+          tabindex="0"
           aria-live="polite"
           aria-atomic="false"
         ></div>
@@ -174,12 +211,12 @@
 
       <section data-frame="5">
         <h2>Deployment</h2>
-        <div id="addresses" class="body">…</div>
+        <div id="addresses" class="body" tabindex="0">…</div>
       </section>
 
       <section data-frame="6">
         <h2>What Creditcoin can read</h2>
-        <div id="attestcoin-body" class="body">reading the ChainInfo precompile…</div>
+        <div id="attestcoin-body" class="body" tabindex="0">reading the ChainInfo precompile…</div>
       </section>
 
       <section data-frame="7">
@@ -203,7 +240,7 @@
           different set of attestors, and it is checked against Ethereum rather than against testnet. The last line
           compares the two: the same Ethereum block, the same digest, signed by sets with nothing in common.
         </p>
-        <div id="attestors-body" class="body">reading the attestation indexer…</div>
+        <div id="attestors-body" class="body" tabindex="0">reading the attestation indexer…</div>
       </section>
     </main>
 
@@ -215,7 +252,9 @@
       <p>
         <a href="../">About Utuh</a> · <a href="../whitepaper.pdf">Whitepaper</a> ·
         <a href="https://github.com/PugarHuda/utuh">Source</a> ·
-        <a href="https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications">Creditcoin's verifications</a>
+        <a href="https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications"
+          >Creditcoin's verifications</a
+        >
       </p>
     </footer>
 

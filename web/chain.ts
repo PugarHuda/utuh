@@ -83,6 +83,7 @@ class FailoverProvider extends JsonRpcProvider {
     try {
       return await sendTo(CC3_RPC_DEFAULT, payload, 7_000);
     } catch {
+      fellBack();
       // 15s, not 10: the proxy rations bursts by *holding* the excess, not by refusing it —
       // measured, a parked request is answered within ~12s of being sent. A 10s deadline was
       // aborting requests moments before their answer arrived. The second attempt is for the
@@ -95,6 +96,13 @@ class FailoverProvider extends JsonRpcProvider {
       }
     }
   }
+}
+
+/// The page says so the first time a read has to go through Blockscout. The failover is meant to be
+/// invisible in what it shows and it is; what it must not be invisible about is *why* every pane is
+/// suddenly slower. The stylesheet reveals the header's "via Blockscout" on this attribute.
+function fellBack(): void {
+  if (typeof document !== 'undefined') document.body.dataset.rpc = 'fallback';
 }
 
 /// At most three fallback requests in the air at once.
@@ -128,6 +136,10 @@ export const cc3: JsonRpcProvider = new FailoverProvider(CC3_RPC_DEFAULT, CC3_CH
 });
 
 /// Independent source-chain endpoints, the same list the watcher script sweeps.
+///
+/// The list has to answer a browser, not only a daemon: an endpoint that returns its rate-limit
+/// responses without CORS headers puts a red error in the console that no code on the page can
+/// catch — mevblocker did, under the attestor audit's burst on boot, and was replaced for it.
 export function sourceEndpoints(chainKey: number): { url: string; provider: JsonRpcProvider }[] {
   const key = requireChainKey(chainKey);
   return SOURCE_RPCS_DEFAULT[key].map((url) => ({

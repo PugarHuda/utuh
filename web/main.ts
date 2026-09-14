@@ -284,8 +284,10 @@ async function renderTally(): Promise<void> {
     renderInvitation(t.openNow);
     strip.dataset.ready = 'true';
   } catch (e) {
-    // A tally that cannot be read says so rather than showing a plausible zero.
+    // A tally that cannot be read says so rather than showing a plausible zero, and the invitation
+    // stops saying it is looking.
     for (const id of ['t-proven', 't-claims', 't-refuted', 't-burned']) $(id).textContent = '—';
+    $('invitation').replaceChildren();
     strip.dataset.ready = 'failed';
     strip.title = reason(e);
   }
@@ -975,9 +977,16 @@ function sourceRange(chainKey: number, from: number, to: number): HTMLElement {
 /// into one number — and nothing else, so what can be linked is the block; the transaction at that
 /// index inside it is the one. Every member passed through the Block Prover on the way in, and the
 /// oracle dashboard has the verification the precompile emitted for it, by source height.
+/// Which render of the detail is the current one. Reading a claim's members is one `keyAt` call per
+/// member, in order, and a slow afternoon makes that a slow render; a person who picks another claim
+/// meanwhile starts a second one, and whichever finished last used to own the pane — measured, the
+/// picker said 70 and the pane said 71. The stale render checks before it draws and stands down.
+let detailRun = 0;
+
 async function renderClaimDetail(): Promise<void> {
   const box = $('claim-detail');
   const chosen = ($('claim-select') as HTMLSelectElement).value;
+  const run = ++detailRun;
   if (!chosen) {
     box.replaceChildren();
     return;
@@ -1084,6 +1093,7 @@ async function renderClaimDetail(): Promise<void> {
     foot.appendChild(dash);
     foot.appendChild(document.createTextNode(', by source height.'));
 
+    if (run !== detailRun) return;
     box.replaceChildren(
       line,
       head,
@@ -1108,9 +1118,11 @@ async function renderClaimDetail(): Promise<void> {
       }
     }
   } catch (e) {
-    fail(box, e);
+    if (run === detailRun) fail(box, e);
   }
 }
+
+/// What the status means for this claim, with the numbers the contract holds about it.
 
 async function doSweep(): Promise<void> {
   const button = $('sweep') as HTMLButtonElement;

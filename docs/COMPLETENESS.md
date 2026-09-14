@@ -126,7 +126,7 @@ Two things that document will tell you and this one should not bury:
 - **You are the watcher of last resort.** A line opens only on a finalized claim, so the challenge
   window is your diligence window and the loss from a false clean claim is yours. Half the bond is
   a rebate on work you had to do, not a wage that has to clear. The console at
-  <https://utuh.vercel.app/> sweeps and refutes from a browser with no backend, and `npx utuh-mcp`
+  <https://utuh.vercel.app/app/> sweeps and refutes from a browser with no backend, and `npx utuh-mcp`
   puts the same role behind the Model Context Protocol, so holding it costs a tab or an agent
   rather than a team.
 
@@ -138,8 +138,8 @@ The claim in this document is falsifiable and the addresses are public. If your 
 gap some other way, that is a better answer than this one and worth writing down. If it does not
 and you would rather it did, the integration is a boolean and an interface.
 
-Two live examples to read rather than take on trust — the console renders each of these from
-Creditcoin directly:
+Two live examples to read rather than take on trust — the landing page at <https://utuh.vercel.app/>
+reads both from Creditcoin as it draws, and each link opens the console on the claim, verdict first:
 
 - A claim sealed one event short, found and broken from a browser:
   <https://utuh.vercel.app/?claim=5>
