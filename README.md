@@ -822,7 +822,7 @@ answer, and writes and reverts never retry. The proxy was measured before it was
 omits logs for a null-then-set topic filter, so those filters stay on the primary and a 1000-log
 answer counts as truncated. With the primary pointed at a dead port, `npm run probe` verified 24
 mainnet events through the proxy alone. The rule and the proxy's measured limits live in `offchain/lib/failover.ts`
-(ddadb10), which imports nothing but ethers types, so the console can use the same rule. `npm run
+(ddadb10), which imports nothing but ethers types, and the console's CC3 fallback now uses the same rule (210d727). `npm run
 doctor` also asks both attestation indexers for reverted attestations on the Ethereum chain keys,
 because a reverted attestation is the one event that could unsettle a claim it calls checkpointed.
 Both answered 0 on 2026-09-14. The watcher uses the same provider (440c95f): discovery, deadlines and membership
@@ -941,9 +941,11 @@ page carries is the ABI the contracts were compiled with.
 
 **On branch dev, pending merge:** `vercel.json` makes the canonical host send HSTS,
 `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, a
-`Permissions-Policy` that denies camera, microphone and geolocation, `X-Frame-Options: DENY`. A `Content-Security-Policy` is
-written but not committed: it waits for the console to stop setting its baked record in an inline
-script, because shipping the header first would block the published console. The production deploy in `pages.yml` uploads
+`Permissions-Policy` that denies camera, microphone and geolocation, `X-Frame-Options: DENY`. The page now fits a strict
+`Content-Security-Policy` (210d727): the static build bakes its record into a JSON data block, so the
+only inline script left is the landing's hashed redirect, and `web/tests/csp.spec.ts` injects the
+policy onto the static build and fails on any violation while the page boots, audits, sweeps and
+falls back to Blockscout. The header itself is not yet in `vercel.json`. The production deploy in `pages.yml` uploads
 `vercel.json` beside the build and compares the live headers with it. Production today, deployed from master, sends only the HSTS header Vercel adds itself.
 
 More files are written beside those and never requested by the page, because they are for other
