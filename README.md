@@ -942,8 +942,8 @@ page carries is the ABI the contracts were compiled with.
 `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, a
 `Permissions-Policy` that denies camera, microphone and geolocation, `X-Frame-Options: DENY`. A `Content-Security-Policy` is
 written but not committed: it waits for the console to stop setting its baked record in an inline
-script, because shipping the header first would block the published console. The production deploy in `pages.yml` uploads it beside the build and compares the live headers
-with it. Production today, deployed from master, sends only the HSTS header Vercel adds itself.
+script, because shipping the header first would block the published console. The production deploy in `pages.yml` uploads
+`vercel.json` beside the build and compares the live headers with it. Production today, deployed from master, sends only the HSTS header Vercel adds itself.
 
 More files are written beside those and never requested by the page, because they are for other
 readers. `.well-known/security.txt` is RFC 9116, for a researcher who found the deployment rather
