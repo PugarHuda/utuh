@@ -178,6 +178,41 @@ contract UtuhCreditTest is Test {
         assertEq(s.topicMask, 0x03);
     }
 
+    /// @notice Every valid pair of subject and counterparty topics, every field of the scope.
+    /// @dev The two tests above use topics 1 and 2 only, and 2 is where `1 << (t - 1)`, `1 + (t - 1)`
+    ///      and `(t - 1) << 1` all agree. gambit swapped the shift for each and nothing noticed, and
+    ///      it replaced the chain key with the constant 1, which the tests' specs never checked.
+    ///      Topic 3, counterparty topic 1, and a spec whose every field differs from its zero or
+    ///      default value are what tell them apart. See test/MUTATION.md.
+    function test_expectedScopeIsExactForEveryTopicPair() public view {
+        for (uint8 subjectTopic = 1; subjectTopic <= 3; subjectTopic++) {
+            for (uint8 counterpartyTopic = 0; counterpartyTopic <= 3; counterpartyTopic++) {
+                if (counterpartyTopic == subjectTopic) continue;
+                UtuhCredit.HistorySpec memory spec = _spec(subjectTopic, counterpartyTopic);
+                spec.metric = EventScope.Metric.DATA_WORD;
+                spec.metricArg = 5;
+
+                EventScope.Scope memory s = credit.expectedScope(spec, ALICE);
+
+                assertEq(s.chainKey, 3, "chain");
+                assertEq(s.emitter, spec.emitter, "emitter");
+                assertEq(s.eventSig, spec.eventSig, "event");
+                assertEq(uint8(s.metric), uint8(EventScope.Metric.DATA_WORD), "metric");
+                assertEq(s.metricArg, 5, "metric argument");
+
+                uint8 mask = uint8(1) << (subjectTopic - 1);
+                if (counterpartyTopic != 0) mask |= uint8(1) << (counterpartyTopic - 1);
+                assertEq(s.topicMask, mask, "mask");
+                for (uint8 t = 1; t <= 3; t++) {
+                    bytes32 want;
+                    if (t == subjectTopic) want = bytes32(uint256(uint160(ALICE)));
+                    else if (t == counterpartyTopic) want = bytes32(uint256(uint160(LENDER_ETH)));
+                    assertEq(s.topics[t - 1], want, "topic");
+                }
+            }
+        }
+    }
+
     function test_scopeIdentityDiffersPerSubject() public view {
         bytes32 a = EventScope.id(credit.expectedScope(_spec(2, 0), ALICE));
         bytes32 b = EventScope.id(credit.expectedScope(_spec(2, 0), BOB));

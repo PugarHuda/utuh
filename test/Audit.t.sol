@@ -563,18 +563,25 @@ contract AuditTest is LifecycleFixture {
         assertGt(registry.challengeUntil(repay) + 1, due, "a repayment could have been finalized in time");
     }
 
+    // Every constructor refusal below deploys through {deployCredit}, an external call on this test,
+    // and never with a bare `new`. Under forge 1.8.0 a `vm.expectRevert` followed by a `new` whose
+    // constructor reverts ends the test right there: the create's revert bubbles into the test's
+    // own frame and is accepted as the expected one, so nothing after it runs. These three tests were
+    // written that way and each checked only its first case. gambit found it, by deleting guards
+    // the later cases were meant to catch; see test/MUTATION.md.
+
     function test_constructorRefusesZeroHistoryOrZeroStaleness() public {
         UtuhCredit.HistorySpec[] memory clean = new UtuhCredit.HistorySpec[](1);
         clean[0] = _adverseSpec();
         UtuhCredit.Policy memory p = _policy();
         p.minHistoryBlocks = 0;
         vm.expectRevert(UtuhCredit.NoCredit.selector);
-        new UtuhCredit(registry, p, _paymentSpec(), clean, _paymentSpec());
+        this.deployCredit(p, _paymentSpec(), clean, _paymentSpec());
 
         p = _policy();
         p.maxStalenessBlocks = 0;
         vm.expectRevert(UtuhCredit.NoCredit.selector);
-        new UtuhCredit(registry, p, _paymentSpec(), clean, _paymentSpec());
+        this.deployCredit(p, _paymentSpec(), clean, _paymentSpec());
     }
 
     function test_constructorRefusesTopicsOutsideOneToThree() public {
@@ -584,17 +591,46 @@ contract AuditTest is LifecycleFixture {
         UtuhCredit.HistorySpec memory bad = _paymentSpec();
         bad.subjectTopic = 0;
         vm.expectRevert(abi.encodeWithSelector(UtuhCredit.BadSubjectTopic.selector, uint8(0)));
-        new UtuhCredit(registry, _policy(), bad, clean, _paymentSpec());
+        this.deployCredit(_policy(), bad, clean, _paymentSpec());
 
         bad = _paymentSpec();
         bad.subjectTopic = 4;
         vm.expectRevert(abi.encodeWithSelector(UtuhCredit.BadSubjectTopic.selector, uint8(4)));
-        new UtuhCredit(registry, _policy(), bad, clean, _paymentSpec());
+        this.deployCredit(_policy(), bad, clean, _paymentSpec());
 
         bad = _paymentSpec();
         bad.counterpartyTopic = 4;
         vm.expectRevert(abi.encodeWithSelector(UtuhCredit.BadSubjectTopic.selector, uint8(4)));
-        new UtuhCredit(registry, _policy(), bad, clean, _paymentSpec());
+        this.deployCredit(_policy(), bad, clean, _paymentSpec());
+    }
+
+    /// @notice Each of the three roles is checked, not only the first. A bad repayment or clean
+    ///         spec behind a good volume spec is refused just the same.
+    /// @dev gambit deleted `_requireSpec(repay)`, then `_requireSpec(clean[i])`, and every test still
+    ///      passed, because every bad spec above is the volume spec. See test/MUTATION.md.
+    function test_constructorChecksTheRepaymentAndCleanSpecsToo() public {
+        UtuhCredit.HistorySpec[] memory clean = new UtuhCredit.HistorySpec[](1);
+        clean[0] = _adverseSpec();
+        UtuhCredit.HistorySpec memory bad = _paymentSpec();
+        bad.subjectTopic = 0;
+
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.BadSubjectTopic.selector, uint8(0)));
+        this.deployCredit(_policy(), _paymentSpec(), clean, bad);
+
+        clean[0] = bad;
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.BadSubjectTopic.selector, uint8(0)));
+        this.deployCredit(_policy(), _paymentSpec(), clean, _paymentSpec());
+    }
+
+    /// @dev A lender over this fixture's registry, deployed from outside the calling test's frame.
+    ///      Not a test: forge runs only `test`-prefixed functions.
+    function deployCredit(
+        UtuhCredit.Policy memory policy,
+        UtuhCredit.HistorySpec memory volume,
+        UtuhCredit.HistorySpec[] memory clean,
+        UtuhCredit.HistorySpec memory repay
+    ) external returns (UtuhCredit) {
+        return new UtuhCredit(registry, policy, volume, clean, repay);
     }
 
     // ------------------------------------------------------------------
