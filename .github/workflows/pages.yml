@@ -51,6 +51,10 @@ jobs:
       - name: build the console
         run: npm run web:static
 
+      # /api/mcp, the MCP server as a Vercel function. A self-contained bundle: no node_modules on Vercel.
+      - name: build the MCP function
+        run: npm run mcp:package
+
       # Vercel serves the canonical copy, so it cannot be the one a human remembers to update. Both
       # hosts publish the same `web/static` from the same commit, in the same run, or the address
       # the page gives out drifts behind the address that merely mirrors it.
@@ -96,7 +100,8 @@ jobs:
           # Its effect can: every header it declares must be on the live response, or a commit that
           # changed only the headers would be judged "already serving" and never deployed.
           served=$(curl -fsSI --max-time 25 https://utuh.vercel.app/ | tr -d '\r') || served=""
-          stale=$(jq -r '.headers[] | select(.source == "/(.*)") | .headers[] | "\(.key): \(.value)"' vercel.json \
+          # Every block in vercel.json matches `/` today, so all of its headers belong on this response.
+          stale=$(jq -r '.headers[].headers[] | "\(.key): \(.value)"' vercel.json \
             | while IFS= read -r h; do grep -qixF "$h" <<<"$served" || echo "$h"; done)
           if [ -n "$stale" ]; then echo "headers the live site does not send yet:"; echo "$stale"; live="headers-differ"; fi
           if [ "$built" = "$live" ]; then
@@ -124,6 +129,7 @@ jobs:
         # the Pages artifact below is web/static itself, which must not carry a Vercel config.
         run: |
           rm -rf .vercel-deploy && cp -r web/static .vercel-deploy && cp vercel.json .vercel-deploy/
+          mkdir -p .vercel-deploy/api && cp dist-mcp/api/mcp.js .vercel-deploy/api/mcp.js
           npx --yes vercel@59 deploy .vercel-deploy --prod --yes --token "$VERCEL_TOKEN"
 
       - uses: actions/configure-pages@v6

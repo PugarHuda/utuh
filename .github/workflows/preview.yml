@@ -54,6 +54,9 @@ jobs:
       - name: build the console
         run: npm run web:static
 
+      - name: build the MCP function
+        run: npm run mcp:package
+
       - name: deploy a preview, never production
         id: deploy
         env:
@@ -68,6 +71,7 @@ jobs:
             echo "::error::the preview command would touch production: $cmd"; exit 1
           fi
           rm -rf .vercel-deploy && cp -r web/static .vercel-deploy && cp vercel.json .vercel-deploy/
+          mkdir -p .vercel-deploy/api && cp dist-mcp/api/mcp.js .vercel-deploy/api/mcp.js
           eval "$cmd" > deploy.json
           url=$(jq -r .url deploy.json)
           target=$(jq -r .target deploy.json)
@@ -75,6 +79,15 @@ jobs:
           case "$url" in https://*.vercel.app) ;; *) echo "::error::no preview URL in: $(cat deploy.json)"; exit 1 ;; esac
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "### Preview for \`${GITHUB_SHA::7}\`: $url" >> "$GITHUB_STEP_SUMMARY"
+
+      # /api/mcp on the preview, through `vercel curl`, which gets past Vercel Authentication with the
+      # CLI's own token, so this needs no bypass secret.
+      - name: the MCP endpoint on the preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_NdlwQPgRp4Fn2WzyuKh1BLB2
+          VERCEL_PROJECT_ID: prj_ax7c7Tmvo59dozvBUZRo8nxZYFPS
+        run: npx tsx offchain/mcpHttpTest.ts --deployment "${{ steps.deploy.outputs.url }}"
 
   browsers:
     name: browsers and lighthouse on the preview

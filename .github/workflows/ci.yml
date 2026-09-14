@@ -113,7 +113,7 @@ jobs:
       - name: formatting
         # web/ is ~2,400 lines of TypeScript and was outside this glob until now: `forge fmt`
         # covers Solidity, and nothing covered the console.
-        run: npx prettier --check "offchain/**/*.ts" "web/**/*.ts"
+        run: npx prettier --check "offchain/**/*.ts" "web/**/*.ts" "api/**/*.ts"
 
       - name: typecheck
         run: npx tsc --noEmit -p tsconfig.json
@@ -139,6 +139,12 @@ jobs:
       # that spends asked to spend without saying so, which must refuse. No key involved.
       - name: the MCP server, over the protocol
         run: npm run mcp:test
+
+      # The same server as a Vercel function at /api/mcp: the bundle loaded in-process, served on a
+      # local port and spoken to over Streamable HTTP, with a fresh unfunded key in its environment to
+      # show the function never signs. Keyless, like the stdio suite above.
+      - name: the MCP server, over HTTP
+        run: npm run mcp:http-test
 
       - name: dead code
         run: npx knip
