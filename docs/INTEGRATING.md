@@ -28,7 +28,7 @@ says, and it grants an allowance only on a Finalized, unrefuted claim that an ad
 liquidated on Aave V3 over at least 216,000 mainnet blocks, and only to the account that address
 proved it controls. On 2026-09-14 it
 [granted 0.5 CTC on claim 72](https://creditcoin-testnet.blockscout.com/tx/0x82fe073a1de45d11e644ec1147630303851d87253a3c276ced6ec9d151e01a53)
-and [reverted `NotUsable` on refuted claim 20](https://creditcoin-testnet.blockscout.com/tx/0x3989ee001f93069eb72b1c134869f86999a590df43db6aa90011cb8c9edbb4f3);
+and [reverted `NotUsable` on refuted claim 20](https://creditcoin-testnet.blockscout.com/tx/0x89561d2e9b9bd96cc4df97010d78b0f8723fb6d1cea782463a0af3ac09ba46b9);
 an `eth_call` on claim 18 answers `NotController`, and one on claim 69 answers `WrongScope`. It has 20 tests
 against a mocked registry and 6 forked from CC3. This project wrote and deployed it, and the key
 that was granted is this project's test borrower, so it shows the integration working. It is not

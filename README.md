@@ -43,7 +43,7 @@ What is on-chain, all verified on Blockscout and Sourcify ([every address and re
 A contract that is not Utuh reads it: [`NeverLiquidatedGate`](examples/completeness-gate/README.md)
 at [`0xcA62…5D09`](https://creditcoin-testnet.blockscout.com/address/0xcA6228C30607F26253Fffc2A4013a801DEEB5D09?tab=contract)
 [granted an allowance on claim 72](https://creditcoin-testnet.blockscout.com/tx/0x82fe073a1de45d11e644ec1147630303851d87253a3c276ced6ec9d151e01a53)
-and [refused refuted claim 20](https://creditcoin-testnet.blockscout.com/tx/0x3989ee001f93069eb72b1c134869f86999a590df43db6aa90011cb8c9edbb4f3).
+and [refused refuted claim 20](https://creditcoin-testnet.blockscout.com/tx/0x89561d2e9b9bd96cc4df97010d78b0f8723fb6d1cea782463a0af3ac09ba46b9).
 This project wrote and deployed it as the worked example, so it is not an outside user.
 
 ## Contents
