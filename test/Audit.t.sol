@@ -475,6 +475,129 @@ contract AuditTest is LifecycleFixture {
         credit.openLine(payer, empty, _ids(clean));
     }
 
+    /// @notice A clean claim still inside its challenge window is refused, even beside a finalized
+    ///         volume claim.
+    /// @dev The cap `_checkClean` computes reads `enforceableLoss`, which answers for Sealed claims
+    ///      too, so the only thing refusing an unfinished clean claim is the `_requireUsable` loop
+    ///      over them. gambit deleted that call, and separately stopped the loop from running, and no
+    ///      test noticed: the existing not-finalized test leaves the *volume* claim unfinished.
+    function test_openLineRefusesACleanClaimThatIsNotFinalized() public {
+        _bindPayer();
+        uint256 volume = _volumeClaim(VOL_FROM, VOL_TO);
+        uint256 clean = _sealedClaim(_adverseScope(), VOL_FROM, VOL_TO, new uint64[](0));
+        assertEq(uint8(registry.claim(clean).status), uint8(UtuhRegistry.Status.Sealed));
+        uint256 cap = registry.enforceableLoss(clean) * credit.BOND_MULTIPLE();
+        uint256 uncapped = _limitFor(3);
+        uint256 backing = credit.backingFor(uncapped < cap ? uncapped : cap);
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.ClaimNotUsable.selector, clean, backing));
+        credit.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice An empty claim about somebody else's liquidations says nothing about this borrower.
+    /// @dev The wrong-scope test in Lifecycle.t.sol offers the wrong *volume* claim. Nothing offered
+    ///      a wrong clean claim, and gambit deleted the clean scope check unnoticed — which would
+    ///      let any quiet address's empty claim stand in for the borrower's own. See test/MUTATION.md.
+    function test_openLineRefusesACleanClaimAboutAnotherSubject() public {
+        _bindPayer();
+        uint256 volume = _volumeClaim(VOL_FROM, VOL_TO);
+        EventScope.Scope memory someoneElse = credit.expectedScope(_adverseSpec(), payee);
+        uint256 clean = _sealedClaim(someoneElse, VOL_FROM, VOL_TO, new uint64[](0));
+        _finalize(clean);
+
+        bytes32 want = EventScope.id(_adverseScope());
+        bytes32 got = EventScope.id(someoneElse);
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.ScopeMismatch.selector, want, got));
+        credit.openLine(payer, volume, _ids(clean));
+    }
+
+    /// @notice With two adverse classes, the line is capped by the weaker clean claim, wherever it
+    ///         sits in the list.
+    /// @dev Every lender in these suites listed one clean spec, so "the cap is the last claim's
+    ///      backing" and "the cap is the smallest" were the same statement. Here the weaker claim is
+    ///      first: 1 CTC bonded backs 5 CTC, the second's 4 CTC backs 20, and the volume underwrites 12.
+    function test_theWeakerOfTwoCleanClaimsCapsTheLine() public {
+        UtuhCredit.HistorySpec[] memory specs = new UtuhCredit.HistorySpec[](2);
+        specs[0] = _adverseSpec();
+        specs[1] = _adverseSpec();
+        UtuhCredit lender = new UtuhCredit(registry, _policy(), _paymentSpec(), specs, _paymentSpec());
+        _bindOn(lender);
+
+        uint256 volume = _volumeClaim(VOL_FROM, VOL_TO);
+        uint256[] memory cleans = new uint256[](2);
+        cleans[0] = _cleanClaimBonded(1 ether);
+        cleans[1] = _cleanClaimBonded(4 ether);
+        assertEq(_limitFor(3), 12 ether);
+
+        vm.prank(payer);
+        uint256 lineId = lender.openLine(payer, volume, cleans);
+        assertEq(lender.line(lineId).limit, 5 ether, "capped by the first, weaker claim");
+    }
+
+    function _cleanClaimBonded(uint256 bond) internal returns (uint256 claimId) {
+        // Built before the prank: `_adverseScope` is an external call and would take it.
+        EventScope.Scope memory scope = _adverseScope();
+        vm.prank(payer);
+        claimId = registry.open{value: bond}(scope, VOL_FROM, VOL_TO, WINDOW);
+        vm.prank(payer);
+        registry.seal(claimId);
+        _finalize(claimId);
+    }
+
+    /// @notice Under the cap, a line is exactly what the volume underwrites.
+    /// @dev Every other line in these suites rests on three settlements, 12 CTC of volume, and is
+    ///      clamped to the 10 CTC the clean claim backs, so the volume arithmetic never decided a
+    ///      limit. gambit multiplied by 10_000 where it divides and the cap hid it.
+    function test_aLineUnderTheCapIsExactlyWhatTheVolumeUnderwrites() public {
+        _bindPayer();
+        uint256 volume = _sealedClaim(_volumeScope(), VOL_FROM, VOL_TO, _heights(1));
+        _finalize(volume);
+        uint256 clean = _cleanClaim(VOL_FROM, VOL_TO);
+        uint256 cap = registry.enforceableLoss(clean) * credit.BOND_MULTIPLE();
+        assertLt(_limitFor(1), cap, "the volume limit must sit under the cap for this to say anything");
+
+        vm.prank(payer);
+        uint256 lineId = credit.openLine(payer, volume, _ids(clean));
+        assertEq(credit.line(lineId).limit, _limitFor(1));
+        assertEq(credit.line(lineId).limit, 4 ether);
+    }
+
+    /// @notice History is measured as a span, whatever height it starts at.
+    /// @dev The fixture starts every history at block 1,000,000, where `to % from` and `to - from`
+    ///      are the same number for any span under a million blocks. gambit swapped one for the
+    ///      other. A history starting at block 100 tells them apart.
+    function test_historyStartingAtALowHeightIsMeasuredAsASpan() public {
+        uint64 from = 100;
+        uint64 to = 300;
+        _mockChainInfo(to + 100);
+        _bindPayer();
+        uint256 volume = _volumeClaim(from, to);
+        uint256 clean = _cleanClaim(from, to);
+        assertEq(to % from, 0, "the mutant's span");
+
+        vm.prank(payer);
+        credit.openLine(payer, volume, _ids(clean));
+        assertEq(credit.underwrittenThrough(payer), to + 1);
+    }
+
+    /// @notice A lender's window is a floor. A claim exposed for longer is accepted.
+    /// @dev Every claim in these suites carries exactly the window its lender demands, so a check
+    ///      written backwards — refusing longer windows instead of shorter — passed them all.
+    function test_aClaimWindowAboveTheLendersFloorIsAccepted() public {
+        UtuhCredit strict = _strictLender(WINDOW * 2);
+        _bindOn(strict);
+        uint64 longer = WINDOW * 2 + 10;
+        uint256 volume = _sealedClaimWithWindow(_volumeScope(), VOL_FROM, VOL_TO, _heights(3), longer);
+        _finalize(volume);
+        uint256 clean = _sealedClaimWithWindow(_adverseScope(), VOL_FROM, VOL_TO, new uint64[](0), longer);
+        _finalize(clean);
+
+        vm.prank(payer);
+        uint256 lineId = strict.openLine(payer, volume, _ids(clean));
+        assertEq(uint8(strict.line(lineId).status), uint8(UtuhCredit.LineStatus.Active));
+    }
+
     /// @notice A claim about the same emitter, event and subject on a *different chain* is a
     ///         different scope. CC3 numbers Sepolia 1 and Ethereum mainnet 3; a Sepolia history
     ///         cannot underwrite a lender that reads mainnet.

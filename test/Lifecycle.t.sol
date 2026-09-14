@@ -713,11 +713,16 @@ contract LifecycleTest is LifecycleFixture {
     /// @dev The registry's floor and this lender's happen to be the same number, so the refusal
     ///      needs a lender that asks for more than the registry's minimum — which is the whole
     ///      point of the policy field: a lender may be stricter than the registry, never looser.
+    ///
+    ///      The clean claim carries a window this lender accepts. It used to carry the same short one,
+    ///      so the clean claim's check refused the line with the identical error and the volume check
+    ///      could be deleted without this test noticing. gambit did; see test/MUTATION.md.
     function test_openLineRefusesAVolumeClaimWithTooShortAWindow() public {
         UtuhCredit strict = _strictLender(WINDOW * 2);
         _bindOn(strict);
         uint256 volume = _volumeClaim(VOL_FROM, VOL_TO);
-        uint256 clean = _cleanClaim(VOL_FROM, VOL_TO);
+        uint256 clean = _sealedClaimWithWindow(_adverseScope(), VOL_FROM, VOL_TO, new uint64[](0), WINDOW * 2);
+        _finalize(clean);
         vm.prank(payer);
         vm.expectRevert(abi.encodeWithSelector(UtuhCredit.WindowTooShort.selector, WINDOW, WINDOW * 2));
         strict.openLine(payer, volume, _ids(clean));
