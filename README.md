@@ -814,7 +814,9 @@ mainnet events through the proxy alone. The rule and the proxy's measured limits
 (ddadb10), which imports nothing but ethers types, so the console can use the same rule. `npm run
 doctor` also asks both attestation indexers for reverted attestations on the Ethereum chain keys,
 because a reverted attestation is the one event that could unsettle a claim it calls checkpointed.
-Both answered 0 on 2026-09-14.
+Both answered 0 on 2026-09-14. The watcher uses the same provider (440c95f): discovery, deadlines and membership
+reads fall back to Blockscout, a refutation is still sent only through the primary, and each sealed
+claim it sweeps says whether its last block is checkpointed or only attested.
 
 The sweep is the daemon's own function, imported rather than reimplemented — `scanScopeUnion` in
 `offchain/lib/scope.ts`, bundled into the page. A browser cannot conclude that a claim is complete
