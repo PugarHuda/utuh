@@ -34,11 +34,17 @@ What is on-chain, all verified on Blockscout and Sourcify ([every address and re
 
 | On CC3 Testnet (chain 102031) | Address | What it holds |
 | --- | --- | --- |
-| `UtuhRegistry`, Ethereum-mainnet-sourced | [`0x8FA0…5Fac`](https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac?tab=contract) | 71 claims over real Ethereum mainnet history; 32 refuted, claim 20 among them |
+| `UtuhRegistry`, Ethereum-mainnet-sourced | [`0x8FA0…5Fac`](https://creditcoin-testnet.blockscout.com/address/0x8FA0BD5301D998Be873E31453E53d114929a5Fac?tab=contract) | 72 claims over real Ethereum mainnet history; 32 refuted, claim 20 among them |
 | `UtuhRegistry`, Sepolia-sourced | [`0x2688…347b`](https://creditcoin-testnet.blockscout.com/address/0x26880c8980Cd54827543bD34c6c613253c69347b?tab=contract) | 13 claims, the completed borrow-and-repay loop; claims 3 and 5 refuted |
 | `UtuhCredit`, Sepolia-sourced | [`0x0177…24b6`](https://creditcoin-testnet.blockscout.com/address/0x0177aDb82152c8673a85271F7F06336B820324b6?tab=contract) | lines 1–3 opened, drawn, repaid on Sepolia and settled; lines 2 and 3 entirely from the console |
 | `SettlementLedger`, on Sepolia | [`0xC8C9…575B`](https://eth-sepolia.blockscout.com/address/0xC8C9053C4E2c0590df684c12e5f2610EFeC9575B?tab=contract) | the source-chain repayments those lines settled on |
 | Creditcoin's own oracle record | [transaction-verifications](https://dashboard.cc3-testnet.creditcoin.network/transaction-verifications) | 248 `TransactionVerified` rows are Utuh's: 212 claim members, 34 refutations, the rest control bindings |
+
+A contract that is not Utuh reads it: [`NeverLiquidatedGate`](examples/completeness-gate/README.md)
+at [`0xcA62…5D09`](https://creditcoin-testnet.blockscout.com/address/0xcA6228C30607F26253Fffc2A4013a801DEEB5D09?tab=contract)
+[granted an allowance on claim 72](https://creditcoin-testnet.blockscout.com/tx/0x82fe073a1de45d11e644ec1147630303851d87253a3c276ced6ec9d151e01a53)
+and [refused refuted claim 20](https://creditcoin-testnet.blockscout.com/tx/0x3989ee001f93069eb72b1c134869f86999a590df43db6aa90011cb8c9edbb4f3).
+This project wrote and deployed it as the worked example, so it is not an outside user.
 
 ## Contents
 
