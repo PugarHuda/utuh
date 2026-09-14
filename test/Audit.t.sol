@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import {EvmV1Decoder} from "@gluwa/usc-contracts/contracts/decoding/EvmV1Decoder.sol";
 import {UtuhRegistry} from "../src/UtuhRegistry.sol";
 import {UtuhCredit} from "../src/UtuhCredit.sol";
 import {EventScope} from "../src/lib/EventScope.sol";
@@ -283,7 +284,7 @@ contract AuditTest is LifecycleFixture {
         // A lender whose control binding names the reentering contract as the account.
         UtuhCredit lender = new UtuhCredit(registry, _policy(), _paymentSpec(), clean, _paymentSpec());
         b.setLender(lender);
-        _rebindTo(lender, address(b));
+        _rebindTo(lender, payer, address(b));
 
         uint256 volume = _volumeClaim(VOL_FROM, VOL_TO);
         uint256 cln = _cleanClaim(VOL_FROM, VOL_TO);
@@ -350,6 +351,69 @@ contract AuditTest is LifecycleFixture {
     }
 
     /// @notice A claim about the wrong event cannot settle a line, however much it proves.
+    /// @notice A claim one subject spent underwriting their own line cannot also repay another's.
+    /// @dev The spent-claim check in `_applyRepayment` sits behind the watermark, and for a single
+    ///      subject the watermark always fires first: a claim spent opening a line starts before
+    ///      that line's `repayFrom`, and no second line opens while one still owes. So no test ever
+    ///      reached it, and gambit could delete it unnoticed.
+    ///
+    ///      It is reachable across subjects when a lender's volume and repayment specs mirror each
+    ///      other — volume counts payments from D to the subject, repayment counts payments from the
+    ///      subject to C. C's volume scope and D's repayment scope are then one scope, and the claim
+    ///      C spent underwriting their line clears D's watermark. Only `claimSpent` stands between
+    ///      that claim and discharging D's debt as well.
+    ///
+    ///      D is the fixture's payer and C its payee. D's own volume is payments to themselves, which
+    ///      the fixture does not carry, so D's claim uses the fixture transaction with its recipient
+    ///      topic set to the payer: the same log, decoded by the same decoder.
+    function test_aClaimSpentByOneSubjectCannotRepayAnother() public {
+        UtuhCredit.HistorySpec memory volume = _paymentSpec();
+        volume.subjectTopic = 2;
+        volume.counterpartyTopic = 1;
+        volume.counterparty = payer;
+        UtuhCredit.HistorySpec memory repay = _paymentSpec();
+        UtuhCredit.HistorySpec[] memory clean = new UtuhCredit.HistorySpec[](1);
+        clean[0] = _adverseSpec();
+        UtuhCredit lender = new UtuhCredit(registry, _policy(), volume, clean, repay);
+        assertEq(
+            EventScope.id(lender.expectedScope(volume, payee)),
+            EventScope.id(lender.expectedScope(repay, payer)),
+            "the payee's volume and the payer's repayment are one scope"
+        );
+
+        bytes memory selfPay = _withRecipient(settlement, payer);
+        bytes32[] memory topics = EvmV1Decoder.decodeReceiptFields(selfPay).receiptLogs[0].topics;
+        assertEq(topics[1], bytes32(uint256(uint160(payer))));
+        assertEq(topics[2], bytes32(uint256(uint160(payer))), "the patch did not land on the recipient");
+
+        // D borrows on payments to themselves, and draws.
+        _bindOn(lender);
+        uint256 dVolume = _finalizedWith(lender.expectedScope(volume, payer), VOL_FROM, VOL_TO, selfPay);
+        uint256 dClean = _cleanOn(lender, payer, VOL_FROM, VOL_TO);
+        vm.prank(payer);
+        uint256 dLine = lender.openLine(payer, dVolume, _ids(dClean));
+        lender.fund{value: 1 ether}();
+        vm.prank(payer);
+        lender.draw(dLine, 1 ether);
+
+        // C borrows on the fixture's payments to them, over history that starts after D's.
+        _rebindTo(lender, payee, payee);
+        uint64 from = VOL_TO + 1;
+        uint256 cVolume = _finalizedWith(lender.expectedScope(volume, payee), from, from + 200, settlement);
+        uint256 cClean = _cleanOn(lender, payee, from, from + 200);
+        vm.prank(payee);
+        lender.openLine(payee, cVolume, _ids(cClean));
+        assertTrue(lender.claimSpent(cVolume));
+
+        vm.expectRevert(abi.encodeWithSelector(UtuhCredit.ClaimAlreadySpent.selector, cVolume));
+        lender.settle(dLine, cVolume);
+
+        // The same payments, proven in a claim nobody has spent, do settle it.
+        uint256 unspent = _finalizedWith(lender.expectedScope(repay, payer), from, from + 200, settlement);
+        lender.settle(dLine, unspent);
+        assertEq(uint8(lender.line(dLine).status), uint8(UtuhCredit.LineStatus.Settled));
+    }
+
     function test_settlingWithAClaimOfAnotherScopeIsRefused() public {
         uint256 lineId = _openLine();
         credit.fund{value: 10 ether}();
@@ -566,12 +630,45 @@ contract AuditTest is LifecycleFixture {
     /// @dev Bind the fixture's payer to `account` at `lender`. The control fixture names the payer
     ///      itself, so a different account means writing the mapping the way the proof would have.
     ///      The slot is the one a read of `controllerOf(payer)` touches, not an assumed layout.
-    function _rebindTo(UtuhCredit lender, address account) internal {
+    function _rebindTo(UtuhCredit lender, address subject, address account) internal {
         vm.record();
-        lender.controllerOf(payer);
+        lender.controllerOf(subject);
         (bytes32[] memory reads,) = vm.accesses(address(lender));
         vm.store(address(lender), reads[0], bytes32(uint256(uint160(account))));
-        assertEq(lender.controllerOf(payer), account, "the binding did not land");
+        assertEq(lender.controllerOf(subject), account, "the binding did not land");
+    }
+
+    /// @dev The fixture settlement with its recipient topic replaced. Word 39 of the encoding is
+    ///      `topics[2]` of the receipt's first log; the caller decodes the result to confirm it.
+    function _withRecipient(bytes memory encoded, address to) internal pure returns (bytes memory out) {
+        out = bytes.concat(encoded);
+        bytes32 word = bytes32(uint256(uint160(to)));
+        for (uint256 i = 0; i < 32; i++) {
+            out[39 * 32 + i] = word[i];
+        }
+    }
+
+    /// @dev A finalized claim of three members, each proven from `encoded`.
+    function _finalizedWith(EventScope.Scope memory scope, uint64 from, uint64 to, bytes memory encoded)
+        internal
+        returns (uint256 claimId)
+    {
+        claimId = _open(scope, from, to);
+        vm.startPrank(payer);
+        for (uint64 i = 1; i <= 3; i++) {
+            UtuhRegistry.EventProof memory p = _one(from + 10 * i, 0);
+            p.encodedTransaction = encoded;
+            registry.appendBatch(claimId, _batch(p), _continuity());
+        }
+        registry.seal(claimId);
+        vm.stopPrank();
+        _finalize(claimId);
+    }
+
+    /// @dev A finalized empty claim over `lender`'s adverse class for `subject`.
+    function _cleanOn(UtuhCredit lender, address subject, uint64 from, uint64 to) internal returns (uint256 claimId) {
+        claimId = _sealedClaim(lender.expectedScope(_adverseSpec(), subject), from, to, new uint64[](0));
+        _finalize(claimId);
     }
 }
 

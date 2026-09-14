@@ -134,6 +134,20 @@ contract EventScopeTest is Test {
         assertFalse(EventScope.matches(s, _transferLog(USDC, ALICE, ALICE, 1e6)), "alice->alice must not");
     }
 
+    /// @notice A scope that pins only the recipient takes that recipient's events from anyone.
+    /// @dev The mask is tested bit by bit, and a clear low bit under a set high one is the case a
+    ///      wrong bit test gets wrong: `mask / bit == 0` agrees with `mask & bit == 0` for every mask
+    ///      the other tests use, and disagrees here — it would check topic 1 against the empty
+    ///      slot the scope left unpinned. Found by gambit; see test/MUTATION.md.
+    function test_aRecipientOnlyScopeMatchesAnySender() public pure {
+        EventScope.Scope memory s = _scope(USDC, TRANSFER_SIG, BOB, 2);
+        assertEq(s.topicMask, 0x02);
+
+        assertTrue(EventScope.matches(s, _transferLog(USDC, ALICE, BOB, 1)), "alice->bob matches");
+        assertTrue(EventScope.matches(s, _transferLog(USDC, USDC, BOB, 1)), "anyone->bob matches");
+        assertFalse(EventScope.matches(s, _transferLog(USDC, BOB, ALICE, 1)), "bob->alice must not");
+    }
+
     /// @notice An unmasked scope takes every event of that signature from that contract.
     function test_wildcardMatchesAnySubject() public pure {
         EventScope.Scope memory s = _scope(USDC, TRANSFER_SIG, address(0), 0);
