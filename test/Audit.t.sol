@@ -76,6 +76,53 @@ contract AuditTest is LifecycleFixture {
         registry.appendBatch(claimId, ps, _continuity());
     }
 
+    /// @notice The prover is asked about exactly the proofs the claimant sent: their heights, their
+    ///         transactions and their Merkle paths, in order, against the claim's chain.
+    /// @dev Every other test mocks the batch verifier to answer true for any arguments, so the
+    ///      registry could hand it zeroed heights or empty transactions and still be believed. On
+    ///      Creditcoin that is a proof of nothing. gambit zeroed, deleted or replaced each of the
+    ///      three arrays `_verifyBatch` builds, and nothing noticed. See test/MUTATION.md.
+    function test_theBatchVerifierIsAskedAboutExactlyTheProofsSent() public {
+        uint256 claimId = _open(_volumeScope(), VOL_FROM, VOL_TO);
+        UtuhRegistry.EventProof[] memory ps = new UtuhRegistry.EventProof[](2);
+        ps[0] = _one(VOL_FROM + 10, 0);
+        ps[1] = _one(VOL_FROM + 20, 0);
+        ps[1].siblings = new IBlockProver.MerkleProofEntry[](1);
+        ps[1].siblings[0] = IBlockProver.MerkleProofEntry({hash: keccak256("sibling"), isLeft: true});
+
+        uint64[] memory heights = new uint64[](2);
+        bytes[] memory encoded = new bytes[](2);
+        IBlockProver.MerkleProof[] memory merkle = new IBlockProver.MerkleProof[](2);
+        for (uint256 i = 0; i < 2; i++) {
+            heights[i] = ps[i].blockHeight;
+            encoded[i] = ps[i].encodedTransaction;
+            merkle[i] = IBlockProver.MerkleProof({root: ps[i].merkleRoot, siblings: ps[i].siblings});
+        }
+        IBlockProver.ContinuityProof memory continuity = _continuity();
+
+        vm.expectCall(PROVER, abi.encodeWithSelector(VERIFY_BATCH, SEPOLIA, heights, encoded, merkle, continuity));
+        vm.prank(payer);
+        registry.appendBatch(claimId, ps, continuity);
+        assertEq(registry.memberCount(claimId), 2);
+    }
+
+    /// @notice Sealing announces the block the challenge window closes at, and that block is the
+    ///         one `challengeUntil` answers with.
+    /// @dev A watcher reads this event to know how long it has. Nothing checked its arguments, so
+    ///      gambit multiplied, divided and took the remainder of the sum unnoticed.
+    function test_sealingAnnouncesTheBlockTheWindowCloses() public {
+        uint256 claimId = _open(_volumeScope(), VOL_FROM, VOL_TO);
+        vm.prank(payer);
+        registry.appendBatch(claimId, _batch(_one(VOL_FROM + 10, 0)), _continuity());
+        vm.roll(1_000);
+
+        vm.expectEmit(true, false, false, true, address(registry));
+        emit UtuhRegistry.ClaimSealed(claimId, 1, settledAmount, 1_000 + WINDOW);
+        vm.prank(payer);
+        registry.seal(claimId);
+        assertEq(registry.challengeUntil(claimId), 1_000 + WINDOW);
+    }
+
     // ------------------------------------------------------------------
     // Registry: refute, the lower half of the search
     // ------------------------------------------------------------------
@@ -94,6 +141,55 @@ contract AuditTest is LifecycleFixture {
         vm.prank(WATCHER);
         registry.refute(claimId, _proofAt(all[0], 0), _continuity());
         assertEq(uint8(registry.claim(claimId).status), uint8(UtuhRegistry.Status.Refuted));
+    }
+
+    /// @notice Membership is a binary search: it reads a handful of members, not all of them.
+    /// @dev A search that walks the array from the top returns the same answer every time, so no
+    ///      correctness test can tell it apart — gambit's `mid = (lo + hi) - 1` did exactly that and
+    ///      survived. But the answer's cost is the point. A refutation runs this search, and a claim
+    ///      whose search costs one storage read per member can be built large enough that refuting it
+    ///      does not fit in a block, which is a claim nobody can break. So this counts the registry's
+    ///      storage reads on 64 members, probing below all of them, which is the linear scan's worst
+    ///      case: a binary search needs about eight.
+    function test_membershipReadsLogarithmicallyManyMembers() public {
+        uint256 claimId = _open(_volumeScope(), VOL_FROM, VOL_TO);
+        vm.startPrank(payer);
+        for (uint64 b = 0; b < 8; b++) {
+            UtuhRegistry.EventProof[] memory ps = new UtuhRegistry.EventProof[](8);
+            for (uint64 i = 0; i < 8; i++) {
+                ps[i] = _one(VOL_FROM + 1 + 8 * b + i, 0);
+            }
+            registry.appendBatch(claimId, ps, _continuity());
+        }
+        vm.stopPrank();
+        assertEq(registry.memberCount(claimId), 64);
+
+        uint256 below = EventScope.key(VOL_FROM, TX_INDEX, 0);
+        vm.record();
+        assertFalse(registry.contains(claimId, below));
+        (bytes32[] memory reads,) = vm.accesses(address(registry));
+        assertLe(reads.length, 16, "membership read more than a binary search would");
+    }
+
+    /// @notice An event the claimant could never have appended cannot be used to slash them.
+    /// @dev A scope whose metric reads past the end of an event's data rejects that event on append.
+    ///      `refute` runs the same metric so such an event is equally useless for refuting. Without
+    ///      it, an honest claimant would lose their bond for omitting something the registry would
+    ///      not have let them include. No test offered one, and gambit deleted the check unnoticed.
+    function test_anEventTheClaimantCouldNotHaveAppendedDoesNotRefute() public {
+        EventScope.Scope memory scope = _volumeScope();
+        scope.metricArg = 5; // the fixture's data is one word
+        uint256 claimId = _open(scope, VOL_FROM, VOL_TO);
+        vm.prank(payer);
+        vm.expectRevert(EventScope.DataWordOutOfRange.selector);
+        registry.appendBatch(claimId, _batch(_one(VOL_FROM + 10, 0)), _continuity());
+        vm.prank(payer);
+        registry.seal(claimId);
+
+        vm.prank(WATCHER);
+        vm.expectRevert(EventScope.DataWordOutOfRange.selector);
+        registry.refute(claimId, _proofAt(VOL_FROM + 10, 0), _continuity());
+        assertEq(uint8(registry.claim(claimId).status), uint8(UtuhRegistry.Status.Sealed));
     }
 
     /// @notice And an event in the gap between two members.

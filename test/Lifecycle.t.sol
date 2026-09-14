@@ -69,6 +69,11 @@ contract LifecycleTest is LifecycleFixture {
 
         _finalize(claimId);
         assertEq(uint8(registry.claim(claimId).status), uint8(UtuhRegistry.Status.Finalized));
+        // Credited for withdrawal is not also still escrowed, and what stood behind the claim during
+        // its window stays on record. gambit left the bond standing; see test/MUTATION.md.
+        assertEq(registry.claim(claimId).bond, 0, "moved out of escrow");
+        assertEq(registry.claim(claimId).bondPosted, BOND, "what was at stake is still on record");
+        assertEq(registry.withdrawable(payer), BOND, "and credited to the claimant");
 
         uint256 before = payer.balance;
         vm.prank(payer);
@@ -95,6 +100,9 @@ contract LifecycleTest is LifecycleFixture {
         assertEq(uint8(registry.claim(claimId).status), uint8(UtuhRegistry.Status.Refuted));
         assertEq(WATCHER.balance - before, BOND / 2, "the refuter took half");
         assertEq(registry.burned(), BOND / 2, "and the other half is gone");
+        // Paid out and burned is not also still escrowed. gambit left the bond standing, and nothing
+        // read it back; see test/MUTATION.md.
+        assertEq(registry.claim(claimId).bond, 0, "nothing left in escrow");
         assertEq(registry.enforceableLoss(claimId), 0, "a broken claim guarantees nothing");
     }
 
@@ -178,6 +186,10 @@ contract LifecycleTest is LifecycleFixture {
         registry.abandon(claimId);
 
         assertEq(payer.balance - before, BOND, "the whole bond, immediately");
+        // The books have to say so too: a refunded bond left standing in `claim.bond` is escrow the
+        // registry no longer holds. gambit deleted, then altered, the write; see test/MUTATION.md.
+        assertEq(registry.claim(claimId).bond, 0, "nothing left in escrow");
+        assertEq(registry.claim(claimId).bondPosted, BOND, "what was at stake is still on record");
         assertEq(uint8(registry.claim(claimId).status), uint8(UtuhRegistry.Status.None));
         assertEq(registry.enforceableLoss(claimId), 0, "an abandoned claim guarantees nothing");
 
