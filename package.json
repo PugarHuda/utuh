@@ -68,10 +68,10 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
-    "@playwright/test": "^1.62.1",
-    "@types/node": "^26.4.1",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.0",
     "esbuild": "^0.28.2",
-    "knip": "^6.34.0",
+    "knip": "^6.35.1",
     "prettier": "^3.9.6",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
